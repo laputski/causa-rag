@@ -31,6 +31,7 @@ const REGISTRY = [
 
 beforeEach(() => { list.mockReset(); collections.mockReset() })
 
+// @lat: [[design-language#Экраны выбора: суждения, реальные запросы, ресурсы, граница#Корпус по умолчанию]]
 describe('the corpus a screen opens on', () => {
   it('takes the corpus of the last ingest that indexed something', async () => {
     list.mockResolvedValue([

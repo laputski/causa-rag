@@ -41,6 +41,7 @@ def test_runner_returns_result():
     assert len(result.question_results) == 3
 
 
+# @lat: [[experiment-config#Async job-model — progress callback for backgrounded runs]]
 def test_on_progress_called_once_per_question_with_running_total():
     reg = _make_registry()
     runner = ExperimentRunner(registry=reg)
@@ -99,6 +100,7 @@ def test_should_stop_checked_before_first_question_stops_immediately():
     assert result.finished_at != ""
 
 
+# @lat: [[experiment-config#Per-stage latency persisted for the pipeline diagram]]
 def test_stage_trace_persisted_per_question_and_averaged():
     reg = _make_registry()
     runner = ExperimentRunner(registry=reg)

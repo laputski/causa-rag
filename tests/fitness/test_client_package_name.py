@@ -38,6 +38,7 @@ MENTIONS = [
 OLD_NAMES = ("rag-platform-client", "rag_platform_client")
 
 
+# @lat: [[connector-client#Connector client library#One name, checked]]
 def test_the_distribution_name_matches_the_module_directory():
     with (CLIENT_ROOT / "pyproject.toml").open("rb") as fh:
         declared = tomllib.load(fh)["project"]["name"]
@@ -48,6 +49,7 @@ def test_the_distribution_name_matches_the_module_directory():
     )
 
 
+# @lat: [[connector-client#Connector client library#One name, checked]]
 def test_no_file_still_carries_the_old_name():
     offenders: list[str] = []
     for rel in MENTIONS + ["clients/python/pyproject.toml"]:
@@ -66,6 +68,7 @@ def test_no_file_still_carries_the_old_name():
     assert not offenders, f"the old package name survives in: {offenders}"
 
 
+# @lat: [[connector-client#Connector client library#One name, checked]]
 def test_the_documented_import_is_the_one_that_works():
     """Both guides show `from causa_rag_client import …`. If the module were
     renamed again without the docs, that line would be the first thing a reader
@@ -80,6 +83,7 @@ def test_the_documented_import_is_the_one_that_works():
         )
 
 
+# @lat: [[connector-client#Connector client library#One name, checked]]
 def test_the_guide_offers_an_install_that_works_before_the_first_release():
     """`pip install causa-rag-client` resolves nothing until the package is on
     PyPI. Documenting only that line would fail every reader up to the first

@@ -144,6 +144,7 @@ def _resolve_pipeline(pipeline_id: str, corpus_id: str, reranker_id: str | None 
     return rebound
 
 
+# @lat: [[external-rag#Tier 1 — native contract]]
 class ExternalRagRequest(BaseModel):
     query: str
     top_k: int = 5

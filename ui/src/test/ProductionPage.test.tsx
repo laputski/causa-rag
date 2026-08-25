@@ -54,12 +54,14 @@ describe('ProductionPage', () => {
     promoteMock.mockResolvedValue({ question_id: 'q123', dataset: 'Cosmos 1', count: 51 })
   })
 
+  // @lat: [[production-loop#Closing the loop with production#Reviewer-facing surface#A corpus scopes the page]]
   it('says why the list is empty before a corpus is chosen', async () => {
     renderPage()
     await waitFor(() => expect(screen.getByText('Choose a corpus')).toBeInTheDocument())
     expect(listMock).not.toHaveBeenCalled()
   })
 
+  // @lat: [[production-loop#Closing the loop with production#Reviewer-facing surface#A trace with no sources says so on the row]]
   it('lists collected queries with the source count visible on the row', async () => {
     renderPage()
     await selectCorpus()
@@ -69,6 +71,7 @@ describe('ProductionPage', () => {
     expect(screen.getByText('sources: 0')).toBeInTheDocument()
   })
 
+  // @lat: [[production-loop#Closing the loop with production#Reviewer-facing surface#Recording switched off is not the same as no traffic]]
   it('distinguishes recording switched off from an empty result', async () => {
     collectMock.mockResolvedValue({ collected: 0, stored: 0, recording_enabled: false })
     renderPage()
@@ -84,6 +87,7 @@ describe('ProductionPage', () => {
     await waitFor(() => expect(screen.getByText(/its logging is switched off/)).toBeInTheDocument())
   })
 
+  // @lat: [[production-loop#Closing the loop with production#Reviewer-facing surface#Promotion demands a reference answer and refuses a second time]]
   it('will not promote without a reference answer typed by a reviewer', async () => {
     renderPage()
     await selectCorpus()
@@ -118,6 +122,7 @@ describe('ProductionPage', () => {
     expect(screen.queryByRole('button', { name: 'Add to the set' })).not.toBeInTheDocument()
   })
 
+  // @lat: [[production-loop#Closing the loop with production#Reviewer-facing surface#A promotion that no longer points at anything]]
   it('offers promotion again when the question it became was deleted', async () => {
     // Found on the platform's own data: a question removed after verification
     // left its trace refusing forever, with no way back short of editing the
@@ -134,6 +139,7 @@ describe('ProductionPage', () => {
     expect(screen.getByText('question deleted')).toBeInTheDocument()
   })
 
+  // @lat: [[production-loop#Closing the loop with production#Reviewer-facing surface#Coverage reports the shape beside the share]]
   it('reports the share and the distribution, not one without the other', async () => {
     coverageMock.mockResolvedValue({
       threshold: 0.6, n_production: 4, n_golden: 50,

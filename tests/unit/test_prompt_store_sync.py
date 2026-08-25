@@ -23,12 +23,14 @@ DOC = {
 }
 
 
+# @lat: [[prompts#Prompt store#Файл отражает базу, а не наоборот]]
 def test_a_prompt_only_in_mongo_gets_its_file(tmp_path) -> None:
     store = PromptStore(tmp_path)
     assert store.sync_from([DOC]) == ["prompt_v1"]
     assert json.loads((tmp_path / "prompt_v1.json").read_text(encoding="utf-8")) == DOC
 
 
+# @lat: [[prompts#Prompt store#Файл отражает базу, а не наоборот]]
 def test_after_the_sync_the_realm_gets_its_own_prompt_not_a_stranger_s(tmp_path) -> None:
     store = PromptStore(tmp_path)
     other = {**DOC, "id": "demo_prompt_v1", "realm_id": "demo", "name": "Demo"}
@@ -43,12 +45,14 @@ def test_after_the_sync_the_realm_gets_its_own_prompt_not_a_stranger_s(tmp_path)
     assert store.get_active("demo").id == "demo_prompt_v1"
 
 
+# @lat: [[prompts#Prompt store#Файл отражает базу, а не наоборот]]
 def test_an_unchanged_file_is_not_rewritten(tmp_path) -> None:
     store = PromptStore(tmp_path)
     store.sync_from([DOC])
     assert store.sync_from([DOC]) == []
 
 
+# @lat: [[prompts#Prompt store#Файл отражает базу, а не наоборот]]
 def test_an_existing_file_is_left_alone(tmp_path) -> None:
     # Creates what is missing and leaves what exists alone: demo_prompt_v1.json
     # is in the repository, and overwriting would mean the gateway edits the
@@ -59,6 +63,7 @@ def test_an_existing_file_is_left_alone(tmp_path) -> None:
     assert "other" not in store.get("prompt_v1").template
 
 
+# @lat: [[prompts#Prompt store#Файл отражает базу, а не наоборот]]
 def test_mongo_s_own_key_does_not_travel_into_the_file(tmp_path) -> None:
     # `_id` is a storage detail. Nobody needs it in the file, and it breaks the
     # "the file already matches" comparison.

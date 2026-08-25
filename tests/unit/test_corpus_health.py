@@ -3,6 +3,7 @@
 A corpus mean does not tell an even corpus from one half made of headings: both
 pictures give the same number.
 """
+# @lat: [[design-language#Здоровье корпуса#Распределение длин]]
 def test_length_deciles_show_two_clumps_not_one_mean():
     """The mean does not tell an even corpus from one of headings and walls."""
     from core.eval.corpus_health import analyze
@@ -19,6 +20,7 @@ def test_length_deciles_show_two_clumps_not_one_mean():
     assert sum(health.length_deciles[1:-1]) == 0
 
 
+# @lat: [[design-language#Здоровье корпуса#Распределение длин]]
 def test_root_path_counts_as_missing():
     """`root` is what the chunker marks a treeless document with, not a path."""
     from core.eval.corpus_health import analyze

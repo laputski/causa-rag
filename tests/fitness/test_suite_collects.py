@@ -21,6 +21,7 @@ import pytest
 _ROOT = Path(__file__).resolve().parents[2]
 
 
+# @lat: [[fitness#Fitness Functions#Дерево тестов собирается целиком]]
 @pytest.mark.fitness
 def test_every_test_file_imports() -> None:
     result = subprocess.run(

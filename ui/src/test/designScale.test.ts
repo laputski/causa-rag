@@ -21,6 +21,7 @@ function rule(selector: string): string {
   return m ? m[2] : ''
 }
 
+// @lat: [[design-language#Named blocks#Шкала и плотность]]
 describe('the scale and density against the design', () => {
   it('a field label is smaller than its value', () => {
     // The design: 9.5px against the field's 12px. On the scale that is --fs-3xs

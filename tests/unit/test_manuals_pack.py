@@ -25,6 +25,7 @@ MANUAL = """4 Обслуживание
 """
 
 
+# @lat: [[domain-packs#Пример, совпадающий с демонстрацией]]
 def test_the_section_number_is_the_structural_path() -> None:
     tree = parse_manual_section(MANUAL)
     top = [c.node_id for c in tree.children]
@@ -35,12 +36,14 @@ def test_the_section_number_is_the_structural_path() -> None:
     assert [c.node_id for c in tree.children[0].children[0].children] == ["4.2.1"]
 
 
+# @lat: [[domain-packs#Пример, совпадающий с демонстрацией]]
 def test_text_under_a_heading_belongs_to_it() -> None:
     tree = parse_manual_section(MANUAL)
     assert "Отключите питание" in tree.children[0].children[0].children[0].content
     assert "Не открывайте кожух" in tree.children[1].content
 
 
+# @lat: [[domain-packs#Пример, совпадающий с демонстрацией]]
 def test_a_file_without_headings_yields_a_tree_rather_than_an_exception() -> None:
     # Ingestion has to survive a document that keeps no numbering: an exception
     # here would stop a whole corpus over one file.
@@ -49,11 +52,13 @@ def test_a_file_without_headings_yields_a_tree_rather_than_an_exception() -> Non
     assert tree.children == []
 
 
+# @lat: [[domain-packs#Пример, совпадающий с демонстрацией]]
 def test_a_lettered_appendix_is_a_heading_too() -> None:
     tree = parse_manual_section("A.1 Приложение\nСодержимое.")
     assert [c.node_id for c in tree.children] == ["A.1"]
 
 
+# @lat: [[domain-packs#Пример, совпадающий с демонстрацией]]
 def test_the_refusal_names_what_was_missing() -> None:
     from core.models import GroundingResult
 
@@ -67,6 +72,7 @@ def test_the_refusal_names_what_was_missing() -> None:
     assert "корпус" in text
 
 
+# @lat: [[domain-packs#Пример, совпадающий с демонстрацией]]
 def test_registering_the_pack_puts_all_four_kinds_in_the_registry() -> None:
     reg = ComponentRegistry()
     load_pack("manuals", reg, {})
@@ -82,6 +88,7 @@ def test_registering_the_pack_puts_all_four_kinds_in_the_registry() -> None:
     }
 
 
+# @lat: [[domain-packs#Пример, совпадающий с демонстрацией#Ключевые слова были только русскими]]
 def test_the_question_type_classifies_the_demo_realms_own_questions() -> None:
     """This pack is the example the demo realm switches on, so it has to work on
     that realm's questions. Its keyword lists were Russian only while the demo
@@ -102,6 +109,7 @@ def test_the_question_type_classifies_the_demo_realms_own_questions() -> None:
     assert len(types) > 1, f"every demo question classified as {types}"
 
 
+# @lat: [[domain-packs#Пример, совпадающий с демонстрацией#Ключевые слова были только русскими]]
 def test_the_question_type_still_classifies_russian() -> None:
     """Adding English must not cost the language the pack was written for."""
     assert classify_question_type("Как заменить детектор?") == "procedure"

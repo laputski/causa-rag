@@ -35,6 +35,7 @@ beforeEach(() => {
   })))
 })
 
+// @lat: [[design-language#Новый прогон — the form's two halves#Разделы формы]]
 describe('the new-run form layout', () => {
   it('divides the form into three ruled sections', async () => {
     renderWithRealm(<NewExperimentPage />, '/new', 'demo')

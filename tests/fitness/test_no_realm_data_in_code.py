@@ -153,6 +153,7 @@ def _violations(field_prefix: str, allowed: set[str]) -> list[str]:
     return found
 
 
+# @lat: [[publication#Preparing the repository for public release#The publication guard runs before any copy, not after#The guard can only catch names somebody wrote a pattern for]]
 def test_no_unlisted_realm_id_appears_in_code() -> None:
     """A Realm id in code is a Realm that somebody hardcoded.
 
@@ -164,6 +165,7 @@ def test_no_unlisted_realm_id_appears_in_code() -> None:
     assert not bad, "Realm ids not on the allow-list:\n  " + "\n  ".join(bad)
 
 
+# @lat: [[publication#Preparing the repository for public release#The publication guard runs before any copy, not after#The guard can only catch names somebody wrote a pattern for]]
 def test_no_unlisted_corpus_id_appears_in_code() -> None:
     """A corpus id names a body of documents somebody actually holds.
 

@@ -21,6 +21,7 @@ from jsonpath_ng import parse as _parse_jsonpath
 _PLACEHOLDERS = ("{{query}}", "{{top_k}}", "{{filters}}", "{{trace_id}}", "{{corpus_id}}", "{{pipeline_id}}")
 
 
+# @lat: [[external-rag#Tier 2 — declarative JSONPath mapping]]
 def render_request_template(
     template: dict[str, Any],
     query: str,
@@ -77,6 +78,7 @@ def _extract_one(expr: str | None, data: Any) -> Any:
     return matches[0].value if matches else None
 
 
+# @lat: [[external-rag#Tier 2 — declarative JSONPath mapping]]
 def apply_response_mapping(raw: dict[str, Any], mapping: dict[str, str]) -> dict[str, Any]:
     """Extract this platform's canonical {"answer", "sources", "generator_model"}
     shape out of `raw` (the RAG's own native response body) using JSONPath

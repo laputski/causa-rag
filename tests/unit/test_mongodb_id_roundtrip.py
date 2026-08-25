@@ -16,12 +16,14 @@ from bson import ObjectId
 from adapters.mongodb import _match_id
 
 
+# @lat: [[data-backends#MongoDB — то, что адаптер выдаёт, он же и принимает#Идентификатор, выданный адаптером]]
 def test_a_stringified_object_id_matches_the_real_one() -> None:
     oid = ObjectId()
     q = _match_id({"_id": str(oid)})
     assert q["_id"] == {"$in": [oid, str(oid)]}
 
 
+# @lat: [[data-backends#MongoDB — то, что адаптер выдаёт, он же и принимает#Идентификатор, выданный адаптером]]
 def test_a_real_string_id_still_matches_itself() -> None:
     # `settings` stores a realm id in `_id`, a genuine string. Converting it to
     # an ObjectId would break it, so the match is tried against both
@@ -30,18 +32,21 @@ def test_a_real_string_id_still_matches_itself() -> None:
     assert _match_id({"_id": str(oid)})["_id"]["$in"][1] == str(oid)
 
 
+# @lat: [[data-backends#MongoDB — то, что адаптер выдаёт, он же и принимает#Идентификатор, выданный адаптером]]
 def test_an_id_that_is_not_an_object_id_is_left_exactly_as_it_is() -> None:
     assert _match_id({"_id": "acme"}) == {"_id": "acme"}
     assert _match_id({"realm_id": "acme"}) == {"realm_id": "acme"}
     assert _match_id({}) == {}
 
 
+# @lat: [[data-backends#MongoDB — то, что адаптер выдаёт, он же и принимает#Идентификатор, выданный адаптером]]
 def test_the_rest_of_the_query_survives() -> None:
     oid = ObjectId()
     q = _match_id({"_id": str(oid), "realm_id": "acme"})
     assert q["realm_id"] == "acme"
 
 
+# @lat: [[data-backends#MongoDB — то, что адаптер выдаёт, он же и принимает#Идентификатор, выданный адаптером]]
 def test_an_object_id_passed_as_itself_is_untouched() -> None:
     # A caller working with a real ObjectId loses nothing.
     oid = ObjectId()

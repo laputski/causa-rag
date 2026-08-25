@@ -107,6 +107,7 @@ def classify_answerability(
     return AnswerabilityVerdict(answerability="answerable", coverage_checked=not any_unknown)
 
 
+# @lat: [[external-rag#Generic answerability gating]]
 def resolve_answerability_verdict(
     question: dict, resolver: RefResolver | None
 ) -> AnswerabilityVerdict:

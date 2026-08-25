@@ -152,6 +152,7 @@ const Q = (id: string, question: string, layer?: string) => ({
   ...(layer ? { funnel: { layer } } : {}),
 })
 
+// @lat: [[design-language#Сверка с макетом, второй заход#Экран прогона — шапка и порядок разделов]]
 describe('filtering questions by failure layer', () => {
   beforeEach(() => { vi.clearAllMocks(); localStorage.clear() })
 

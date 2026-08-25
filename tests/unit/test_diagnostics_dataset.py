@@ -22,6 +22,7 @@ DOC = {
 }
 
 
+# @lat: [[data-backends#Набор для диагностики — из базы, потом из файла]]
 @pytest.mark.asyncio
 async def test_a_realm_s_own_dataset_is_found_in_mongo() -> None:
     with patch("adapters.mongodb.find_one", AsyncMock(return_value=DOC)):
@@ -30,6 +31,7 @@ async def test_a_realm_s_own_dataset_is_found_in_mongo() -> None:
     assert len(ds.questions) == 1
 
 
+# @lat: [[data-backends#Набор для диагностики — из базы, потом из файла]]
 @pytest.mark.asyncio
 async def test_the_realm_is_part_of_the_lookup() -> None:
     seen: list[dict] = []
@@ -46,6 +48,7 @@ async def test_the_realm_is_part_of_the_lookup() -> None:
     assert seen[0] == {"filename": "Cosmos 1.v0.full.jsonl", "realm_id": "acme"}
 
 
+# @lat: [[data-backends#Набор для диагностики — из базы, потом из файла]]
 @pytest.mark.asyncio
 async def test_a_dataset_in_neither_place_is_a_404_and_not_a_silent_substitution() -> None:
     from fastapi import HTTPException

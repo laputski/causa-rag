@@ -53,6 +53,7 @@ function resolves(tree: Tree, dotted: string): boolean {
 }
 
 describe('i18n coverage', () => {
+  // @lat: [[i18n#Full professional English localization#Test coverage#ru/en key parity]]
   it('ru.json and en.json declare exactly the same set of keys', () => {
     // Plural forms are compared by their stem: Russian has three
     // (`one`/`few`/`many`) and English two (`one`/`other`), so demanding the
@@ -67,6 +68,7 @@ describe('i18n coverage', () => {
     expect(missingInRu).toEqual([])
   })
 
+  // @lat: [[i18n#Full professional English localization#Test coverage#Язык попадает в список, когда переведён]]
   it('the switcher lists only languages that are translated through', async () => {
     // Five files (be/de/es/fr/zh) cover 176 keys of 2012, which is nine per
     // cent: the sidebar and little else. They used to stand in the switcher, so
@@ -81,6 +83,7 @@ describe('i18n coverage', () => {
     }
   })
 
+  // @lat: [[i18n#Full professional English localization#Test coverage#Английский файл написан по-английски]]
   it('the English file carries no untranslated Russian', () => {
     // Found live while counting the guide's sections: two of them, `realm` and
     // `shell`, sat in en.json entirely in Russian — twenty values. The key-parity
@@ -95,6 +98,7 @@ describe('i18n coverage', () => {
     expect(offenders).toEqual([])
   })
 
+  // @lat: [[i18n#Full professional English localization#Test coverage#Каждая форма числа существует в своём языке]]
   it("every plural stem carries its own language's forms", () => {
     // Found live: `datasetsPage.questionsCount` was defined as
     // `_one`/`_few`/`_many` in both files. English selects none of
@@ -133,6 +137,7 @@ describe('i18n coverage', () => {
     expect(empties(en as Tree)).toEqual([])
   })
 
+  // @lat: [[i18n#Full professional English localization#Test coverage#Every referenced key resolves]]
   it('every i18n-key-shaped string literal in ui/src resolves in both locales', () => {
     const keys = [...referencedKeys()].sort()
     expect(keys.length).toBeGreaterThan(100) // sanity check the scan itself is working

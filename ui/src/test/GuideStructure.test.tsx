@@ -22,6 +22,7 @@ function navButtons(): HTMLElement[] {
   return [...document.querySelectorAll('.guide-nav-item')] as HTMLElement[]
 }
 
+// @lat: [[guide#Стадия 12 — переработка руководства#Каждый раздел открывается и начинается абзацем]]
 describe('the guide: sections', () => {
   it('every section opens and begins with a leading paragraph', () => {
     renderGuide()
@@ -100,6 +101,7 @@ describe('the guide: sections', () => {
   })
 })
 
+// @lat: [[guide#Стадия 12 — переработка руководства#Диаграммы держатся в своей рамке]]
 describe('the guide: diagrams', () => {
   it('carries no colour literals, only palette variables', () => {
     const hex = source.match(/#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?\b/g) ?? []

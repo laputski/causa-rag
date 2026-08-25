@@ -32,6 +32,7 @@ _INDEXED = IndexRefResolver(
 
 # ── Core classification ──────────────────────────────────────────────────
 
+# @lat: [[external-rag#Generic answerability gating]]
 def test_no_refs_is_out_of_scope() -> None:
     verdict = classify_answerability([], _INDEXED)
     assert verdict.answerability == "out_of_scope"

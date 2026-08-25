@@ -102,6 +102,12 @@ SUFFIXES = {".py", ".ts", ".tsx", ".js", ".css", ".md", ".yml", ".yaml", ".sh", 
 # Its own pattern table names every construction it forbids.
 SELF_EXEMPT = {"tools/check_style.py"}
 
+# A `@lat:` marker quotes a heading from the design graph verbatim, because that
+# string is how the reference resolves. The words in it were written somewhere
+# else and cannot be edited here without breaking the link, so counting them
+# would move this total for reasons no pass over this tree could fix.
+LAT_MARKER = re.compile(r"(#|//)\s*@lat:")
+
 
 def _skip(path: Path, root: Path) -> bool:
     rel = path.relative_to(root)
@@ -126,6 +132,8 @@ def scan(root: Path) -> dict:
             continue
         rel = str(path.relative_to(root))
         for line_no, line in enumerate(text.splitlines(), start=1):
+            if LAT_MARKER.search(line):
+                continue
             n = _em_dashes(line)
             if n:
                 per_file[rel]["em_dash"] += n

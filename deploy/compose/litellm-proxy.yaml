@@ -1,3 +1,4 @@
+# @lat: [[data-backends#GraphRAG indexing — LiteLLM proxy works around a host↔container Ollama stall]]
 # LiteLLM proxy config (mounted into the `litellm` compose service).
 #
 # Sits between graphrag (fnllm, runs on the host) and the `ollama` compose

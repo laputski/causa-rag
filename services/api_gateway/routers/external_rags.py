@@ -23,6 +23,7 @@ spec_router = APIRouter(tags=["external-rags"])
 _COLLECTION = "external_rags"
 
 
+# @lat: [[external-rag#External RAG registry]]
 class ExternalRagCreateRequest(BaseModel):
     name: str
     url: str

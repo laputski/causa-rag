@@ -51,6 +51,7 @@ describe('RunPrescription', () => {
     prescriptionMock.mockResolvedValue(PRESCRIPTION)
   })
 
+  // @lat: [[prescription#Prescription — a document for someone who cannot see the platform#Reviewer-facing surface#Both renderings come from one response]]
   it('shows each fix as a cause and the lever it points at', async () => {
     renderPanel()
     await waitFor(() => expect(screen.getByText('manual_07')).toBeInTheDocument())
@@ -60,6 +61,7 @@ describe('RunPrescription', () => {
     expect(screen.getByText(/Raise the selection size/)).toBeInTheDocument()
   })
 
+  // @lat: [[prescription#Prescription — a document for someone who cannot see the platform#Reviewer-facing surface#The acceptance set is named on the fix]]
   it('names how many questions the fix will be judged on', async () => {
     renderPanel()
     await waitFor(() => expect(screen.getByText('manual_07')).toBeInTheDocument())
@@ -68,6 +70,7 @@ describe('RunPrescription', () => {
     expect(screen.getByText(/verified on 3 question/)).toBeInTheDocument()
   })
 
+  // @lat: [[prescription#Prescription — a document for someone who cannot see the platform#Reviewer-facing surface#A gap is stated with its remedy]]
   it('states what the run could not establish, and what would make it establishable', async () => {
     renderPanel()
     await waitFor(() => expect(screen.getByText('stage_trace')).toBeInTheDocument())

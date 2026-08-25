@@ -64,6 +64,7 @@ def _module_level_imports(path: pathlib.Path) -> set[str]:
     return names
 
 
+# @lat: [[publication#Preparing the repository for public release#The reader-facing surface: README, licence, and the two guards in CI#The judges became their own extra#The extras stay separated]]
 def test_judges_are_not_in_the_integration_extra():
     extras = _extras()
     integration = {_dist_name(r) for r in extras["integration"]}
@@ -75,6 +76,7 @@ def test_judges_are_not_in_the_integration_extra():
     )
 
 
+# @lat: [[publication#Preparing the repository for public release#The reader-facing surface: README, licence, and the two guards in CI#The judges became their own extra#The extras stay separated]]
 def test_the_judges_extra_exists_and_holds_all_three():
     extras = _extras()
     assert "judges" in extras, "the `judges` extra is gone"
@@ -84,6 +86,7 @@ def test_the_judges_extra_exists_and_holds_all_three():
     assert any(n.startswith("trulens") for n in judges), "trulens is missing from `judges`"
 
 
+# @lat: [[publication#Preparing the repository for public release#The reader-facing surface: README, licence, and the two guards in CI#The judges became their own extra#Nothing imports a judge at module level]]
 @pytest.mark.parametrize("rel", sorted(JUDGE_RUNNERS))
 def test_a_judge_runner_imports_its_framework_lazily(rel: str):
     """A module-level import here would break `import eval.ragas_runner` for
@@ -101,6 +104,7 @@ def test_a_judge_runner_imports_its_framework_lazily(rel: str):
     )
 
 
+# @lat: [[publication#Preparing the repository for public release#The reader-facing surface: README, licence, and the two guards in CI#The judges became their own extra#Nothing imports a judge at module level]]
 def test_no_other_module_reaches_for_a_judge():
     """Outside the runners, nothing may touch a judge even lazily: a judge
     reached from a request path would turn a missing optional extra into a

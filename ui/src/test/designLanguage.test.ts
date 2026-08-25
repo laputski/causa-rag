@@ -37,6 +37,7 @@ function violations(re: RegExp, skip: (path: string) => boolean = () => false): 
   return out
 }
 
+// @lat: [[design-language#Фитнес-функция языка оформления#Кегль только со шкалы]]
 describe('the design language', () => {
   it('font size comes from the scale rather than a literal', () => {
     // 13px against 12px reads as a different size but not as a different step;
@@ -44,6 +45,7 @@ describe('the design language', () => {
     expect(violations(/fontSize:\s*\d+/g)).toEqual([])
   })
 
+  // @lat: [[design-language#Фитнес-функция языка оформления#Цвет только из токенов]]
   it('colour comes from a token rather than a literal', () => {
     // The single exception is themeTokens.ts, where the literals are fallbacks
     // for when no document exists, and that is written down there.
@@ -53,6 +55,7 @@ describe('the design language', () => {
     expect(found).toEqual([])
   })
 
+  // @lat: [[design-language#Фитнес-функция языка оформления#Токен, которого нет]]
   it('every token the markup references is defined in the styles', () => {
     // Found live: `--color-text-secondary` and `--color-bg-secondary` are
     // defined in no theme at all. An unresolvable variable inherits the parent's
@@ -71,6 +74,7 @@ describe('the design language', () => {
     expect([...missing].sort()).toEqual([])
   })
 
+  // @lat: [[design-language#Фитнес-функция языка оформления#Заголовок не заворачивается в карточку]]
   it('a section heading is not wrapped in a card', () => {
     // A card still belongs around a self-contained object: a resource, a pack,
     // a judgment. That object's own name inside the frame is legitimate and
@@ -83,6 +87,7 @@ describe('the design language', () => {
     expect(found).toEqual([])
   })
 
+  // @lat: [[design-language#Фитнес-функция языка оформления#Снятые классы не возвращаются]]
   it('retired classes do not come back into the markup', () => {
     expect(violations(/className=["'`][^"'`]*\b(?:stats-row|stat-card)\b/g)).toEqual([])
     // Their rules are gone from the styles too: a rule that outlived its markup
@@ -91,6 +96,7 @@ describe('the design language', () => {
     expect(cssRaw).not.toMatch(/^\.stats-row[\s{,]/m)
   })
 
+  // @lat: [[design-language#Фитнес-функция языка оформления#Периwinkle снятого оформления]]
   it('no periwinkle from the retired design is left in the styles', () => {
     // It coloured the hover and active states of the whole shell: the highlight
     // followed no palette and looked identical under all five.
@@ -98,6 +104,7 @@ describe('the design language', () => {
     expect(cssRaw).not.toContain('rgba(108, 142, 245')
   })
 
+  // @lat: [[design-language#Фитнес-функция языка оформления#Храповик по инлайновым стилям]]
   it('inline styles do not increase', () => {
     // A ratchet rather than a ban: an inline style is legitimate where the value
     // is computed from data (a bar's width, a colour chosen by threshold). The

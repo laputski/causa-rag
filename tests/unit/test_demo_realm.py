@@ -49,6 +49,7 @@ class _EmptyMongo:
         pass
 
 
+# @lat: [[overview#Overview — the realm's own page, and the first screen of all#First run: three doors, not a dimmed interface]]
 def test_demo_bundle_imports_cleanly(bundle, monkeypatch):
     """The demo travels the same route as any installation-to-installation
     transfer. If the format drifts from what `import_realm` accepts, the very

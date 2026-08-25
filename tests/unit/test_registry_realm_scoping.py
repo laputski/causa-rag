@@ -38,6 +38,7 @@ def registry_with_two_packs():
     loader.PACK_COMPONENTS.clear()
 
 
+# @lat: [[data-backends#Реестр, суженный до реалма]]
 def test_a_realm_sees_its_own_pack_and_the_platform_s_own_components(registry_with_two_packs) -> None:
     out = loader.components_outside_packs(registry_with_two_packs, ["pack_a"])
     assert out["route_policy"] == ["naive", "pack_a_question_type"]
@@ -48,6 +49,7 @@ def test_a_realm_sees_its_own_pack_and_the_platform_s_own_components(registry_wi
     assert out.get("structure_parser") == []
 
 
+# @lat: [[data-backends#Реестр, суженный до реалма]]
 def test_a_realm_with_no_packs_sees_only_the_platform_s_own(registry_with_two_packs) -> None:
     out = loader.components_outside_packs(registry_with_two_packs, [])
     assert out["route_policy"] == ["naive"]
@@ -56,6 +58,7 @@ def test_a_realm_with_no_packs_sees_only_the_platform_s_own(registry_with_two_pa
     assert out["reranker"] == ["cross_encoder"]
 
 
+# @lat: [[data-backends#Реестр, суженный до реалма]]
 def test_a_pack_that_never_loaded_hides_nothing(registry_with_two_packs) -> None:
     # A pack absent from PACK_COMPONENTS was never loaded, so there is nothing
     # to subtract, and silently dropping components by name would be a guess.
@@ -64,6 +67,7 @@ def test_a_pack_that_never_loaded_hides_nothing(registry_with_two_packs) -> None
     assert out["structure_parser"] == ["pack_b_section"]
 
 
+# @lat: [[data-backends#Реестр, суженный до реалма]]
 def test_loading_a_pack_records_exactly_what_it_added() -> None:
     reg = ComponentRegistry()
     reg.register("route_policy", "naive", object())

@@ -29,6 +29,7 @@ _needs_neo4j = pytest.mark.skipif(
 )
 
 
+# @lat: [[shell#Проверка ресурсов#is_available отвечает не на тот вопрос]]
 @_needs_neo4j
 def test_is_available_says_nothing_about_the_server():
     """The distinction the rewrite exists for: the package is always installed,
@@ -40,6 +41,7 @@ def test_is_available_says_nothing_about_the_server():
     assert graph.verify() is False
 
 
+# @lat: [[shell#Проверка ресурсов#Проверка на закрытом порту возвращает ошибку]]
 @pytest.mark.asyncio
 @_needs_neo4j
 async def test_ping_neo4j_on_closed_port_reports_error():
@@ -51,6 +53,7 @@ async def test_ping_neo4j_on_closed_port_reports_error():
     assert "unreachable" in str(exc.value).lower()
 
 
+# @lat: [[shell#Проверка ресурсов#Проверка укладывается в отведённое время]]
 @pytest.mark.asyncio
 async def test_ping_neo4j_is_bounded_in_time():
     """The driver's own timeout is thirty seconds, which turns "check everything"

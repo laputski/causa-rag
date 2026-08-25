@@ -11,6 +11,7 @@ present, not None, for answerable questions) and "attribution parity" (a
 synthetic rerank-drop scenario must produce the same funnel.py verdict via
 both paths).
 """
+# @lat: [[connector-client#Golden-parity E2E — the regression test for "the platform silently loses/distorts a metric"]]
 from __future__ import annotations
 
 import re

@@ -62,6 +62,7 @@ def fake(monkeypatch):
     return store
 
 
+# @lat: [[realm#Realm#Выгрузка и загрузка реалма#Секреты маскируются по умолчанию]]
 @pytest.mark.asyncio
 async def test_export_masks_secrets_by_default(fake):
     """An export file is something people email. A password inside it is a
@@ -75,6 +76,7 @@ async def test_export_masks_secrets_by_default(fake):
     assert bundle["masked_fields"] == ["neo4j.password"]
 
 
+# @lat: [[realm#Realm#Выгрузка и загрузка реалма#Корпус переносится ссылкой]]
 @pytest.mark.asyncio
 async def test_export_carries_corpora_by_reference_only(fake):
     """A corpus's contents live in Qdrant and OpenSearch and do not fit in a file
@@ -84,6 +86,7 @@ async def test_export_carries_corpora_by_reference_only(fake):
     assert "chunks" not in str(bundle["corpora"])
 
 
+# @lat: [[realm#Realm#Выгрузка и загрузка реалма#Круговой перенос]]
 @pytest.mark.asyncio
 async def test_round_trip_creates_a_separate_realm(fake):
     """Export and import back onto the same installation is the commonest way to
@@ -100,6 +103,7 @@ async def test_round_trip_creates_a_separate_realm(fake):
     assert len(await mdb.find_many("datasets", {"realm_id": "demo-2"})) == 1
 
 
+# @lat: [[realm#Realm#Выгрузка и загрузка реалма#Сверка ничего не пишет]]
 @pytest.mark.asyncio
 async def test_dry_run_writes_nothing(fake):
     """A preview that leaves something written is not a preview."""
@@ -111,6 +115,7 @@ async def test_dry_run_writes_nothing(fake):
     assert {k: len(v) for k, v in fake.data.items()} == before
 
 
+# @lat: [[realm#Realm#Выгрузка и загрузка реалма#Совпадение без указания отказывает]]
 @pytest.mark.asyncio
 async def test_conflict_fails_loudly_by_default(fake):
     """By default the import refuses rather than renaming silently: a quiet
@@ -123,6 +128,7 @@ async def test_conflict_fails_loudly_by_default(fake):
     assert exc.value.status_code == 409
 
 
+# @lat: [[realm#Realm#Выгрузка и загрузка реалма#Чужой формат отклоняется]]
 @pytest.mark.asyncio
 async def test_unknown_format_is_rejected(fake):
     from fastapi import HTTPException

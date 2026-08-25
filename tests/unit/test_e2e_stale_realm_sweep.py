@@ -52,6 +52,7 @@ class FakeMongo:
         return len(self.docs[collection]) < before
 
 
+# @lat: [[realm#Уборка за прерванным прогоном]]
 def test_sweep_removes_leftovers_but_never_the_running_session_s_own(cleanup_module) -> None:
     mongo = FakeMongo({
         "realms": [
@@ -70,6 +71,7 @@ def test_sweep_removes_leftovers_but_never_the_running_session_s_own(cleanup_mod
     assert {r["id"] for r in mongo.docs["realms"]} == {"acme", "e2e-current", "demo"}
 
 
+# @lat: [[realm#Уборка за прерванным прогоном]]
 def test_sweep_leaves_real_realms_alone_when_nothing_is_stale(cleanup_module) -> None:
     # The name is the only signal: a real realm's name means something, a
     # temporary one is a prefix plus a uuid, and the two cannot collide.

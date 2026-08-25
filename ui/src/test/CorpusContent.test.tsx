@@ -62,6 +62,7 @@ beforeEach(() => {
   })))
 })
 
+// @lat: [[design-language#Содержимое корпуса]]
 describe('the corpus fragment table', () => {
   it('keeps the text on one line and expands it on click', async () => {
     renderContent()

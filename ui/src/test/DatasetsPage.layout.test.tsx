@@ -46,6 +46,7 @@ beforeEach(() => {
   })))
 })
 
+// @lat: [[design-language#Контрольные вопросы — a table, not a feed#Фильтры и таблица]]
 describe('the control-questions layout', () => {
   it('opens the largest set on its own and shows the questions as a table', async () => {
     renderWithRealm(<DatasetsPage />, '/data/qa', 'demo')

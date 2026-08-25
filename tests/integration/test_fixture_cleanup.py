@@ -9,6 +9,7 @@ deleted the derived one.
 """
 
 
+# @lat: [[navigation#Navigation and the patterns shared across pages#Fixtures clean up by prefix, not by exact name]]
 def test_qdrant_fixture_removes_derived_collections(qdrant_client):
     """A derived collection is created inside the fixture, exactly as
     `QdrantRetriever` does when handed the fixture's name as `strategy_id`. Once

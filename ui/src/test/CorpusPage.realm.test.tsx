@@ -61,6 +61,7 @@ describe('CorpusPage tab bar', () => {
     expect(tabs.map(el => el.textContent?.trim())).toEqual(['Upload', 'Content', 'Health', 'Graph'])
   })
 
+  // @lat: [[navigation#Navigation and the patterns shared across pages#The sidebar — four sections, at most five items each#One entry for four views of one corpus]]
   it('marks the tab matching the address, not always the first one', async () => {
     stubRealmFetch('acme')
     // Through a real route, because the tab is read from the address rather

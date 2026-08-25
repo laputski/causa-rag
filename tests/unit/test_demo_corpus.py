@@ -40,6 +40,7 @@ def corpus_files() -> list[Path]:
     return sorted(CORPUS_DIR.glob("*.md"))
 
 
+# @lat: [[publication#The demo corpus is ingested by the CLI so that ref ids stay stable]]
 def test_every_corpus_filename_yields_an_article_no(corpus_files):
     assert corpus_files, f"demo corpus is empty: {CORPUS_DIR}"
     for path in corpus_files:

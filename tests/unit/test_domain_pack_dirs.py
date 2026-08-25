@@ -40,6 +40,7 @@ def clean_env(monkeypatch):
     yield monkeypatch
 
 
+# @lat: [[domain-packs#Каталог пакетов — не один]]
 def test_a_pack_outside_the_repository_is_discovered(tmp_path, clean_env) -> None:
     _write_pack(tmp_path, "acme_support")
     clean_env.setenv(loader._PACKS_DIR_ENV, str(tmp_path))
@@ -50,6 +51,7 @@ def test_a_pack_outside_the_repository_is_discovered(tmp_path, clean_env) -> Non
     assert "manuals" in ids
 
 
+# @lat: [[domain-packs#Каталог пакетов — не один]]
 def test_a_pack_outside_the_repository_loads_and_registers(tmp_path, clean_env) -> None:
     _write_pack(tmp_path, "acme_support")
     clean_env.setenv(loader._PACKS_DIR_ENV, str(tmp_path))
@@ -59,6 +61,7 @@ def test_a_pack_outside_the_repository_loads_and_registers(tmp_path, clean_env) 
     sys.modules.pop("acme_support", None)
 
 
+# @lat: [[domain-packs#Каталог пакетов — не один]]
 def test_several_directories_are_read_in_order(tmp_path, clean_env) -> None:
     a, b = tmp_path / "a", tmp_path / "b"
     _write_pack(a, "one")
@@ -68,6 +71,7 @@ def test_several_directories_are_read_in_order(tmp_path, clean_env) -> None:
     assert {"one", "two"} <= ids
 
 
+# @lat: [[domain-packs#Каталог пакетов — не один]]
 def test_the_installation_s_pack_wins_a_name_collision(tmp_path, clean_env) -> None:
     # An installation that named its own pack `manuals` gets its own, and not
     # the example.
@@ -79,6 +83,7 @@ def test_the_installation_s_pack_wins_a_name_collision(tmp_path, clean_env) -> N
     assert found["manuals"].path == tmp_path / "manuals"
 
 
+# @lat: [[domain-packs#Каталог пакетов — не один]]
 def test_a_pack_named_nowhere_says_where_it_looked(clean_env) -> None:
     with pytest.raises(ModuleNotFoundError) as exc:
         loader.load_pack("no_such_pack", ComponentRegistry(), {})
@@ -87,6 +92,7 @@ def test_a_pack_named_nowhere_says_where_it_looked(clean_env) -> None:
     assert "domain_packs" in str(exc.value)
 
 
+# @lat: [[domain-packs#Каталог пакетов — не один]]
 def test_an_explicit_directory_overrides_everything(tmp_path, clean_env) -> None:
     # A directory passed directly means "look here and nowhere else": tests and
     # tools bypass both the repository and the environment variable.

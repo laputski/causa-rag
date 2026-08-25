@@ -25,6 +25,7 @@ def _fresh_registry() -> ComponentRegistry:
     return reg
 
 
+# @lat: [[domain-packs#Пример, совпадающий с демонстрацией]]
 def test_every_kind_resolves_to_the_real_thing() -> None:
     reg = _fresh_registry()
     assert isinstance(reg.resolve("route_policy", "manual_question_type"), ManualsRoutePolicy)
@@ -33,6 +34,7 @@ def test_every_kind_resolves_to_the_real_thing() -> None:
     assert callable(reg.resolve("structure_parser", "manual_section"))
 
 
+# @lat: [[domain-packs#Пример, совпадающий с демонстрацией]]
 def test_domain_hooks_bundles_the_components_for_a_pack_agnostic_lookup() -> None:
     # Generic code (the /query handler, feedback triage) asks "what does this
     # pack contribute" by a single pack id and knows none of its components'
@@ -42,6 +44,7 @@ def test_domain_hooks_bundles_the_components_for_a_pack_agnostic_lookup() -> Non
     assert isinstance(hooks["refusal_policy"], ManualsRefusalPolicy)
 
 
+# @lat: [[domain-packs#Манифест сверяется с тем, что пакет регистрирует]]
 def test_the_manifest_says_what_the_pack_actually_registers() -> None:
     # The manifest was decorative: one pack registered an `error_taxonomy`
     # without declaring it and nothing stopped it. The list of kinds is a
@@ -61,6 +64,7 @@ def test_the_manifest_says_what_the_pack_actually_registers() -> None:
         )
 
 
+# @lat: [[domain-packs#Пример, совпадающий с демонстрацией]]
 def test_runner_resolves_a_pack_refusal_policy_under_the_kind_it_was_registered_as() -> None:
     """Regression: ExperimentRunner._build_pipeline has to resolve
     ExperimentConfig.refusal_policy under the same kind the pack registered it

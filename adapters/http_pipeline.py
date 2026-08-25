@@ -30,6 +30,7 @@ def _allowlist_from_env() -> list[str]:
     return [p.strip() for p in raw.split(",") if p.strip()]
 
 
+# @lat: [[external-rag#Tier 2 — declarative JSONPath mapping]]
 class HttpPipeline:
     """Pipeline backed by an external HTTP RAG service (model C)."""
 

@@ -47,6 +47,7 @@ describe('FrontierPage', () => {
     frontierMock.mockResolvedValue(GROUPED)
   })
 
+  // @lat: [[frontier#Choosing a configuration, and checking the metric that chooses#Reviewer-facing surface#Groups stay separate, never merged]]
   it('keeps the two pipeline sources in separate groups', async () => {
     renderPage()
     await waitFor(() => expect(screen.getByText('Built-in pipeline')).toBeInTheDocument())
@@ -57,6 +58,7 @@ describe('FrontierPage', () => {
     expect(screen.getByText('built-in')).toBeInTheDocument()
   })
 
+  // @lat: [[navigation#Navigation and the patterns shared across pages#The latency caveat travels with the number]]
   it('marks the external group as measuring the handover only', async () => {
     renderPage()
     await waitFor(() => expect(screen.getByText('External system')).toBeInTheDocument())
@@ -66,6 +68,7 @@ describe('FrontierPage', () => {
     expect(screen.getByText(/factor of 160,000/)).toBeInTheDocument()
   })
 
+  // @lat: [[frontier#Choosing a configuration, and checking the metric that chooses#Reviewer-facing surface#The quality measure is chosen from what was actually measured]]
   it('offers only quality measures the Realm has actually recorded', async () => {
     renderPage()
     await waitFor(() => expect(screen.getByText('Built-in pipeline')).toBeInTheDocument())
@@ -85,6 +88,7 @@ describe('FrontierPage', () => {
   // A run missing either number is excluded server-side, which leaves this
   // page with zero considered runs — a state that has to explain itself
   // rather than look like "no runs exist".
+  // @lat: [[frontier#Choosing a configuration, and checking the metric that chooses#Reviewer-facing surface#An empty frontier explains itself]]
   it('explains why a run can be missing instead of showing an empty table', async () => {
     frontierMock.mockResolvedValue({
       quality_metric: 'retrieval_recall_at_k', considered: 0,
@@ -95,6 +99,7 @@ describe('FrontierPage', () => {
     expect(screen.getByText(/a measured response time/)).toBeInTheDocument()
   })
 
+  // @lat: [[frontier#Choosing a configuration, and checking the metric that chooses#Reviewer-facing surface#The beaten configurations stay reachable]]
   it('keeps the beaten configurations behind a toggle rather than dropping them', async () => {
     frontierMock.mockResolvedValue({
       ...GROUPED,
