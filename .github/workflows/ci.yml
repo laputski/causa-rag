@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The job that protects the README's first promise. A clean checkout, the
+  # `dev` extra alone, no services running, no heavy machine learning
+  # dependencies: `pytest` must still be green. Nothing guarded this before,
+  # and it broke twice without anyone noticing, because every developer
+  # machine already had the missing pieces installed by hand.
+  fresh-clone:
+    name: fresh clone (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 -m venv .venv
+      - run: .venv/bin/pip install -e ".[dev]"
+      - run: .venv/bin/pytest -q
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: mypy core/ adapters/ services/ --ignore-missing-imports
+        continue-on-error: true
+      - name: Layer isolation
+        run: lint-imports
+      - name: Architecture invariants
+        run: pytest tests/fitness/ -q -m ""
+
+  # `unit`, `integration` and `e2e` used to run here.
+  #
+  # `unit` ran `pytest tests/unit/ tests/contract/`, which is what `fresh-clone`
+  # above already runs by default; its only addition was a JUnit artifact
+  # nothing consumed.
+  #
+  # `integration` and `e2e` need live Qdrant, OpenSearch and MongoDB, and `e2e`
+  # additionally pulls 2.3 GB of embedder weights and runs without Ollama, so
+  # generation falls back to the stub and every step judging answer quality
+  # skips itself. They are run by hand instead, against a real stack, where
+  # their results mean what they say:
+  #
+  #     make infra      # Qdrant, OpenSearch, MongoDB, Redis, Langfuse
+  #     make test-int   # pytest -m integration
+  #     make test-e2e   # the full walkthrough over the demo realm
+  #
+  # CONTRIBUTING.md's table of test layers says which is which.
+
+  # One guard over what the repository says about itself: no prose in the styles
+  # this project removed on purpose.
+  #
+  # The client-identifier guard used to run here too. It cannot: its pattern
+  # table names every identifier it forbids, so publishing it would publish the
+  # list. It belongs to the private tree, where it gates the export before any
+  # file is copied, and by the time a file reaches this repository the question
+  # it answers has already been settled.
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # A ratchet, and not a gate. Both constructions are habits, and neither is
+      # mechanically fixable: a regex finds them, only a person restructures the
+      # sentence. The budget is today's count, so the number can come down
+      # deliberately and can never drift up unnoticed. Lower these when a pass
+      # lands; never raise them.
+      #
+      # The numbers are measured on THIS tree, the public one. The first budget
+      # was taken from the private tree it is exported from and was therefore
+      # wrong in both directions at once: hundreds of em dashes too generous,
+      # and three contrastive constructions too tight, so it would have failed
+      # on its first run here.
+      #
+      # These cover a wider scope than that first pair did, because `.css` had
+      # been missing from the counted suffixes and `ui/src/styles.css` alone is
+      # three thousand lines of authored rationale. Both numbers still came down
+      # against it.
+      #
+      # The em-dash figure then fell by another 363 on its own: nearly a
+      # thousand references to development-stage numbers were removed, and a
+      # great many of them were written with a dash after the number.
+      - name: Prose style
+        run: python3 -m tools.check_style --max-em 1778 --max-contrastive 512
+
+  ui:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build

@@ -1,0 +1,30 @@
+# LiteLLM proxy config (mounted into the `litellm` compose service).
+#
+# Sits between graphrag (fnllm, runs on the host) and the `ollama` compose
+# service. graphrag talks to http://localhost:4000/v1; the proxy owns a stable
+# connection pool / retry / timeout and fans out to Ollama over the compose
+# network (http://ollama:11434). This avoids graphrag's reproducible
+# fnllm↔Ollama stall after N extract_graph chunks. All loopback/local —
+# air-gap preserved (no traffic leaves the host).
+#
+# No master_key / db: loopback proxy, anonymous calls (graphrag sends no
+# Authorization header). Spend-tracking would require a database we don't need.
+# The generation model graphrag asks for. Both lines have to name a model that
+# exists in your Ollama (`ollama list`); the proxy does no aliasing of its own.
+# `graphrag-llm` is a deliberately neutral name: this file used to carry one
+# installation's own model name, which named that installation's realm.
+model_list:
+  - model_name: graphrag-llm                # name graphrag sends
+    litellm_params:
+      model: ollama/graphrag-llm            # provider/model the proxy routes to
+      api_base: http://host.docker.internal:11434   # native ollama on the host (has GPU)
+  - model_name: bge-m3
+    litellm_params:
+      model: ollama/bge-m3
+      api_base: http://host.docker.internal:11434
+
+litellm_settings:
+  # Ollama serialises inference; let the proxy pace graphrag's burst.
+  num_workers: 1
+  request_timeout: 1800
+  drop_params: true

@@ -1,0 +1,12 @@
+id: manuals
+version: "1.0.0"
+display_name: "Technical manuals"
+description: >
+  Technical documentation: numbered sections, procedure steps and warnings.
+  A structure parser for numbered headings, answer masks by question type, and
+  a refusal that names what was missing instead of apologising.
+exported_kinds:
+  - structure_parser
+  - route_policy
+  - mask_engine
+  - refusal

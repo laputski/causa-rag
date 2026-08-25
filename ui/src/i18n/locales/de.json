@@ -1,0 +1,244 @@
+{
+  "view": {
+    "label": "Appearance",
+    "theme": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "palette": "Palette",
+    "language": "Language"
+  },
+  "shell": {
+    "resize": "Sidebar width"
+  },
+  "commands": {
+    "title": "Commands",
+    "placeholder": "Go to or run",
+    "nothing": "Nothing matches “{{query}}”",
+    "groups": {
+      "nav": "Go to",
+      "action": "Actions",
+      "view": "Appearance"
+    },
+    "newRun": "New run",
+    "searchOnPage": "Search on this page",
+    "toggleSidebar": "Collapse sidebar",
+    "shortcuts": "Keyboard shortcuts",
+    "exportRealm": "Export realm as JSON",
+    "palette": "Palette: {{name}}",
+    "language": "Language: {{name}}"
+  },
+  "shortcuts": {
+    "title": "Keyboard shortcuts",
+    "everywhere": "Everywhere",
+    "inLists": "In lists",
+    "goTo": "Go to — G then…",
+    "listMove": "Down / up",
+    "listOpen": "Open",
+    "close": "Close dialog",
+    "foot": "The same actions live in the command palette, which shows each shortcut beside its command — that is where people learn them."
+  },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "Nothing has happened yet",
+    "clear": "Clear",
+    "dismiss": "Dismiss",
+    "open": "Open",
+    "compare": "Compare with baseline",
+    "justNow": "just now",
+    "minutesAgo": "{{n}} min ago",
+    "foot": "Only what you were waiting for pops up; everything else collects here.",
+    "runDone": "Run finished — {{name}}",
+    "runFailed": "Run failed — {{name}}",
+    "runStopped": "Run stopped — {{name}}",
+    "runBody": "{{id}} · {{n}} questions",
+    "regression": "Regression against baseline — {{name}}",
+    "regressionBody": "Metrics below threshold: {{count}} ({{metrics}})"
+  },
+  "overview": {
+    "noDescription": "No description",
+    "exportRealm": "Export JSON",
+    "newRun": "New run",
+    "setup": "Realm setup",
+    "setupCount": "{{done}} of {{total}}",
+    "stepGo": "Go",
+    "stepLater": "Later",
+    "health": "Status",
+    "checkAll": "Check everything",
+    "noResources": "No resources connected",
+    "openStatus": "Open full status",
+    "recentRuns": "Recent runs",
+    "allRuns": "All {{count}} →",
+    "noRuns": "No runs yet",
+    "band": {
+      "health": "Status",
+      "healthSub": "checks healthy",
+      "corpus": "Corpora",
+      "corpusSub": "data sets",
+      "questions": "Question sets",
+      "questionsSub": "control sets",
+      "prompts": "Prompts",
+      "promptsSub": "answer templates",
+      "runs": "Runs",
+      "runsSub": "in this realm"
+    },
+    "state": {
+      "ok": "up",
+      "warn": "no framing",
+      "down": "not responding",
+      "unknown": "unchecked"
+    },
+    "steps": {
+      "corpus": "Corpus loaded",
+      "dataset": "Control questions entered",
+      "prompt": "System prompt created",
+      "preset": "Question generation preset",
+      "firstRun": "First run and baseline"
+    },
+    "setupDone": "All five steps are done.",
+    "showSteps": "show",
+    "hideSteps": "hide",
+    "checking": "Checking…"
+  },
+  "welcome": {
+    "title": "Where to start",
+    "lead": "A realm is a project of its own: its own corpus, its own questions, its own run history. Until one exists, the rest of the interface has nothing to talk about.",
+    "create": "Create a realm",
+    "createDesc": "A name and a description. The platform then walks you through five setup steps.",
+    "createTitle": "New realm",
+    "creating": "Creating…",
+    "createError": "Could not create the realm",
+    "import": "Load from JSON",
+    "importDesc": "An export file from another installation: resources, prompts, presets, question sets.",
+    "importError": "Could not load the file: {{detail}}",
+    "demo": "Open the demo realm",
+    "demoDesc": "A ready example with a small corpus and question set, to look around.",
+    "demoMissing": "No demo realm found beside the build",
+    "foot": "The corpus and run history are not part of an export file — they live in the stores and move separately."
+  },
+  "nav": {
+    "overview": "Overview",
+    "dataQa": "Control questions",
+    "domainPacks": "Domain packs",
+    "realms": "Realms",
+    "guide": "Guide",
+    "experiments": "Runs",
+    "resources": "Resources and panels",
+    "prompts": "Prompts and presets"
+  },
+  "realmResourcesPage": {
+    "testAll": "Check everything",
+    "testingAll": "Checking…",
+    "resourcesNote": "this realm's infrastructure",
+    "panelsNote": "the platform's third-party tools"
+  },
+  "experimentsPage": {
+    "subtitle": "showing {{shown}} of {{total}}",
+    "searchPlaceholder": "Search by name, id, dataset",
+    "clearSearch": "Clear search",
+    "allDatasets": "All datasets",
+    "noMatches": "No run matches the filters",
+    "baseline": "baseline",
+    "filter": {
+      "all": "All",
+      "running": "Running",
+      "baseline": "Baseline"
+    },
+    "columns": {
+      "pick": "Columns",
+      "keyMetrics": "Realm key metrics",
+      "widthsNote": "Column widths",
+      "resetWidths": "Reset column widths"
+    },
+    "stats": {
+      "shown": "showing {{n}}",
+      "noBaseline": "not set",
+      "best": "Best {{metric}}"
+    }
+  },
+  "realmsPage": {
+    "importRealm": "Load from JSON",
+    "exportTitle": "Export realm as JSON",
+    "importPreview": "What the file will add",
+    "importPreviewLead": "The realm will be created as {{id}}.",
+    "importConfirm": "Load",
+    "notTransferred": "not transferred ({{count}})",
+    "entry": {
+      "external_rags": "RAG endpoints",
+      "prompts": "Prompts",
+      "generation_presets": "Generation presets",
+      "datasets": "Question sets",
+      "corpora": "Corpora"
+    }
+  },
+  "guidePage": {
+    "onThisPage": "On this page",
+    "sectionOf": "Section {{n}} of {{total}} · group “{{group}}”"
+  },
+  "confirm": {
+    "yes": "Confirm",
+    "no": "Cancel"
+  },
+  "runPage": {
+    "metrics": {
+      "shown": "{{n}} of 10",
+      "noBaseline": "no baseline set",
+      "verdict": {
+        "improved": "+{{pct}} % · up",
+        "regressed": "{{pct}} % · down",
+        "noise": "{{pct}} % · noise"
+      }
+    },
+    "funnel": {
+      "heading": "Where the answer is lost",
+      "search": "Retrieval",
+      "rerank": "Reranker",
+      "generation": "Generation",
+      "cause": "Main cause",
+      "foundOf": "found of {{total}}",
+      "droppedBelow": "{{n}} dropped below top-k",
+      "noSupport": "{{n}} unsupported",
+      "questions": "{{n}} questions",
+      "none": "no cause resolved"
+    },
+    "config": {
+      "showPrompt": "show text",
+      "hidePrompt": "hide"
+    }
+  },
+  "promptsPage": {
+    "tabPrompts": "System prompts",
+    "tabPresets": "Generation presets"
+  },
+  "graphCommunityView": {
+    "communityTitle": "Community #{{id}}",
+    "communities": "Communities",
+    "modularityHint": "above 0.4 — topics exist",
+    "nonTrivialHint": "more than one node"
+  },
+  "runDiagnostics": {
+    "unsetBaseline": "Unset baseline",
+    "more": "More actions"
+  },
+  "comparisonPage": {
+    "changedFields": "{{count}} fields differ",
+    "pairedDiff": {
+      "bandFixed": "Fixed",
+      "bandFlips": "Broken",
+      "bandUnchanged": "Unchanged",
+      "bandNoise": "Filtered as noise",
+      "noiseHint": "within the 5% threshold"
+    }
+  },
+  "newExperimentPage": {
+    "submit": "Start run",
+    "submitting": "Starting…",
+    "whatRuns": "What we run",
+    "whatRunsHint": "the question set and what against",
+    "pipeline": "Pipeline",
+    "pipelineHint": "every field changes the result",
+    "hashHint": "The same fields and the same seed give the same result: the configuration is hashed, and a rerun with the same hash is marked as a repeat rather than a new measurement.",
+    "presets": {
+      "count": "{{n}} presets"
+    }
+  }
+}

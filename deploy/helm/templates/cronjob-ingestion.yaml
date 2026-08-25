@@ -1,0 +1,51 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-ingestion
+  labels:
+    app: rag-ingestion
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+spec:
+  schedule: "0 2 * * *"   # daily at 02:00 UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: ingestion
+              image: "{{ .Values.ingestion.image.repository }}:{{ .Values.ingestion.image.tag }}"
+              imagePullPolicy: {{ .Values.ingestion.image.pullPolicy | default "IfNotPresent" }}
+              command:
+                - python
+                - -m
+                - services.ingestion.cli
+                - ingest
+                - /data/corpus
+                - --strategy
+                - structure_aware
+                - --incremental
+              env:
+                - name: QDRANT_HOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: rag-secrets
+                      key: qdrant-host
+                - name: OPENSEARCH_HOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: rag-secrets
+                      key: opensearch-host
+              volumeMounts:
+                - name: corpus
+                  mountPath: /data/corpus
+                  readOnly: true
+          volumes:
+            - name: corpus
+              persistentVolumeClaim:
+                claimName: {{ .Values.ingestion.corpusPvc | default "rag-corpus-pvc" }}
+          imagePullSecrets:
+            - name: {{ .Values.global.imagePullSecret | default "registry-secret" }}

@@ -1,0 +1,62 @@
+name: Bug report
+description: Something behaves differently from what the documentation says
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, run `make doctor`. It checks every service, the models,
+        the embedder weights and whether the gateway fell back to stub
+        components, and it names the fix for each failure. Many reports are
+        answered by its output alone.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+      placeholder: |
+        I ran a golden set against the demo realm and every retrieval metric
+        came back 0.0, while answer similarity scored normally.
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: make doctor
+      description: >
+        Paste the output of `python3 -m tools.doctor --json`. This answers the
+        environment questions a maintainer would otherwise have to ask.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: run-id
+    attributes:
+      label: Run id and dataset
+      description: >
+        If this involves an experiment run, its id and the dataset name are
+        usually enough to reproduce against the demo corpus.
+      placeholder: "run 82f48d27, handbook.v1.fast.jsonl"
+
+  - type: dropdown
+    id: install-path
+    attributes:
+      label: How it was installed
+      options:
+        - ./install.sh
+        - manually, following the README
+        - something else (describe above)
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log lines
+      description: >
+        From `.run/api.log`, or from `docker compose logs <service>`. Paste the
+        lines around the failure rather than the whole file.
+      render: shell

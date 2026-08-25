@@ -1,0 +1,26 @@
+[importlinter]
+root_packages =
+    core
+    services
+    adapters
+
+[importlinter:contract:core-isolation]
+name = core must not import from services or adapters at module level
+type = forbidden
+source_modules =
+    core
+forbidden_modules =
+    services
+    adapters
+# Every entry here is an import written inside a function body, which is the
+# mechanism that keeps `core` importable without the adapters installed.
+# import-linter does not distinguish a lazy import from a module-level one, so
+# each has to be named. `tests/fitness/test_optional_dependencies.py` is the
+# check that does make the distinction, and it is what stops one of these
+# becoming a real top-level import behind the exemption.
+ignore_imports =
+    core.pipeline -> adapters.langfuse_tracer
+    core.experiment.runner -> adapters.qdrant
+    core.experiment.runner -> adapters.opensearch
+    core.experiment.runner -> adapters.http_pipeline
+    core.experiment.runner -> adapters.ollama_generator

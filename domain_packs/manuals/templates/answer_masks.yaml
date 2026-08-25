@@ -1,0 +1,52 @@
+# Answer masks by question type. The key is question_type.
+#
+# The wording is Russian on purpose: this is answer text, not interface text.
+# See the pack's __init__ docstring for what that means when the pack is
+# enabled over the English demo corpus.
+
+procedure:
+  template: |
+    {answer}
+
+    Источник:
+    {sources}
+
+    {disclaimer}
+  disclaimer: >
+    Порядок действий приведён по документации; сверяйтесь с редакцией
+    руководства, действующей для вашей версии оборудования.
+  sources_format: numbered
+
+safety:
+  template: |
+    {answer}
+
+    {disclaimer}
+
+    Источник:
+    {sources}
+  disclaimer: >
+    Требования безопасности приведены по документации и не заменяют
+    инструктаж на рабочем месте.
+  sources_format: numbered
+
+closed:
+  template: |
+    {answer}
+
+    Источник:
+    {sources}
+  disclaimer: ""
+  sources_format: numbered
+
+open:
+  template: |
+    {answer}
+
+    Источник:
+    {sources}
+
+    {disclaimer}
+  disclaimer: >
+    Ответ собран из загруженной документации.
+  sources_format: numbered

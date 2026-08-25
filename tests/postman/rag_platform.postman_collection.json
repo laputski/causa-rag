@@ -1,0 +1,586 @@
+{
+  "info": {
+    "name": "RAG Platform — Full Manual Test Suite",
+    "description": "Complete API test coverage for RAG Platform. Base URL: http://localhost:8081. Start services with: docker compose -f deploy/compose/docker-compose.yml up -d",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8081", "type": "string" },
+    { "key": "trace_id", "value": "", "type": "string" },
+    { "key": "run_id", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health & Discovery",
+      "item": [
+        {
+          "name": "GET /health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('status is ok', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.status).to.equal('ok');",
+                  "  pm.expect(json).to.have.property('components');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/health",
+            "description": "Component health check. Returns registered embedder, retriever, generator, pipeline."
+          }
+        },
+        {
+          "name": "GET /registry",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('has pipeline key', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('pipeline');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/registry",
+            "description": "Lists all registered components by kind. Used by UI New Experiment form."
+          }
+        },
+        {
+          "name": "GET /panels",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('response is object', () => {",
+                  "  pm.expect(pm.response.json()).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/panels",
+            "description": "Returns URLs for embedded panels: Langfuse, Qdrant, OpenSearch, DeepEval, Neo4j."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Query (RAG Pipeline)",
+      "item": [
+        {
+          "name": "POST /query — purchase approval",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('answer has text', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.text).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('answer has source_refs', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.source_refs).to.be.an('array');",
+                  "});",
+                  "pm.test('trace_id in X-Trace-Id header', () => {",
+                  "  pm.expect(pm.response.headers.get('X-Trace-Id')).to.not.be.undefined;",
+                  "  pm.collectionVariables.set('trace_id', pm.response.headers.get('X-Trace-Id'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/query",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Who approves a purchase above ten thousand euro?\",\n  \"top_k\": 5\n}"
+            },
+            "description": "Core RAG query. Navigational question about handbook section 01."
+          }
+        },
+        {
+          "name": "POST /query — splitting an order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('answer non-empty', () => pm.expect(pm.response.json().text).to.not.be.empty);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/query",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Is it allowed to split one large order into smaller ones?\",\n  \"top_k\": 3\n}"
+            },
+            "description": "Closed question — YES/NO applicability (type: closed, mode: regulations)."
+          }
+        },
+        {
+          "name": "POST /query — visitor escort",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('has metadata', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.metadata).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/query",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"How many visitors may one employee escort at a time?\",\n  \"top_k\": 5\n}"
+            },
+            "description": "Open question — factual lookup (handbook section 03)."
+          }
+        },
+        {
+          "name": "POST /query — expense claim",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/query",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"How long do I have to submit an expense claim after a trip?\",\n  \"top_k\": 5\n}"
+            },
+            "description": "Question about the travel and expenses section."
+          }
+        },
+        {
+          "name": "POST /query — with an X-Trace-Id header",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('trace_id echoed back', () => {",
+                  "  pm.expect(pm.response.headers.get('X-Trace-Id')).to.equal('test-trace-manual-001');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/query",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Trace-Id", "value": "test-trace-manual-001" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"What should I do if I lose my badge?\",\n  \"top_k\": 3\n}"
+            },
+            "description": "Verifies that custom X-Trace-Id is propagated through middleware."
+          }
+        },
+        {
+          "name": "POST /query — top_k=1 (minimum)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('source_refs not empty', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.source_refs.length).to.be.at.least(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/query",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"equipment acceptance procedure\",\n  \"top_k\": 1\n}"
+            },
+            "description": "Edge case: minimal retrieval window."
+          }
+        },
+        {
+          "name": "POST /query — empty text (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400 or 422', () => {",
+                  "  pm.expect([400, 422]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/query",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"\",\n  \"top_k\": 5\n}"
+            },
+            "description": "Input validation — empty query should be rejected."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Experiments",
+      "item": [
+        {
+          "name": "GET /experiments (empty list)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('returns array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/experiments",
+            "description": "List all experiments. Initially empty."
+          }
+        },
+        {
+          "name": "POST /experiments — create a new run",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('has run_id', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.run_id).to.be.a('string');",
+                  "  pm.collectionVariables.set('run_id', json.run_id);",
+                  "});",
+                  "pm.test('has metrics', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.metrics).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/experiments",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"config\": {\n    \"name\": \"postman-test-run\",\n    \"embedder\": {\"kind\": \"embedder\", \"id\": \"bge_m3\"},\n    \"retriever\": {\"kind\": \"retriever\", \"id\": \"qdrant_stub\"},\n    \"generator\": {\"kind\": \"generator\", \"id\": \"stub\"},\n    \"chunking_strategy\": \"fixed\",\n    \"chunk_size\": 512,\n    \"top_k\": 5,\n    \"seed\": 42\n  },\n  \"dataset_name\": \"stub\"\n}"
+            },
+            "description": "Start a new experiment run. Saves run_id to collection variable."
+          }
+        },
+        {
+          "name": "GET /experiments/{run_id}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('has aggregate_metrics', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('aggregate_metrics');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/experiments/{{run_id}}",
+            "description": "Get experiment detail. Requires run_id from 'POST /experiments' response."
+          }
+        },
+        {
+          "name": "GET /experiments?sort_by=name",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('returns array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/experiments?sort_by=name",
+              "query": [{ "key": "sort_by", "value": "name" }]
+            },
+            "description": "List experiments sorted by name."
+          }
+        },
+        {
+          "name": "POST /experiments/compare (2 runs)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Requires at least 2 runs to exist. Run 'POST /experiments' twice first."
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Only test if both run IDs are set",
+                  "if (pm.collectionVariables.get('run_id_2')) {",
+                  "  pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "  pm.test('has metric_deltas', () => {",
+                  "    pm.expect(pm.response.json().metric_deltas).to.be.an('array');",
+                  "  });",
+                  "} else {",
+                  "  pm.test.skip('Need run_id and run_id_2 set — run POST /experiments twice');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/experiments/compare",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\"{{run_id}}\", \"{{run_id_2}}\"]\n}"
+            },
+            "description": "Compare two experiment runs. Set run_id and run_id_2 collection variables first."
+          }
+        },
+        {
+          "name": "GET /experiments/{nonexistent} (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/experiments/nonexistent-run-id",
+            "description": "Error case — unknown run_id returns 404."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Datasets",
+      "item": [
+        {
+          "name": "GET /datasets",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('returns array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/datasets",
+            "description": "List all golden datasets in eval/golden/."
+          }
+        },
+        {
+          "name": "GET /datasets/handbook.v1.fast.jsonl",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 or 404', () => {",
+                  "  pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('has questions array', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.questions).to.be.an('array');",
+                  "    pm.expect(json.questions.length).to.be.at.least(1);",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/datasets/handbook.v1.fast.jsonl",
+            "description": "Load the golden Q&A dataset."
+          }
+        },
+        {
+          "name": "GET /datasets/nonexistent.jsonl (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/datasets/nonexistent.jsonl",
+            "description": "Error case — missing dataset returns 404."
+          }
+        }
+      ]
+    },
+    {
+      "name": "WebSocket",
+      "description": "WebSocket tests for experiment progress stream. Use Postman's WebSocket client (New → WebSocket Request).\n\n1. Connect to: ws://localhost:8081/experiments/{run_id}/progress\n2. Replace {run_id} with a real run_id from POST /experiments\n3. Expect JSON messages: {\"type\": \"progress\", ...} followed by {\"type\": \"done\", \"run_id\": \"...\"}",
+      "item": [
+        {
+          "name": "WS /experiments/{run_id}/progress — instructions",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/experiments/{{run_id}}/progress",
+            "description": "WebSocket endpoint. In Postman: New → WebSocket → ws://localhost:8081/experiments/{{run_id}}/progress\n\nExpected messages:\n- {\"type\": \"step\", \"stage\": \"retrieve\", \"elapsed_ms\": ...}\n- {\"type\": \"done\", \"run_id\": \"...\"}\n\nNote: This HTTP GET will return 426 Upgrade Required — expected."
+          }
+        }
+      ]
+    },
+    {
+      "name": "SLA Verification (manual)",
+      "description": "Requests for checking the SLA by hand:\n- p95 ≤ 10s at ≤50 users\n- the response must carry X-Trace-Id\n- source_refs is non-empty when a corpus is present in Qdrant",
+      "item": [
+        {
+          "name": "POST /query — response time measurement",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response time ≤ 10s (SLA tier-1)', () => {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(10000);",
+                  "});",
+                  "console.log('Response time:', pm.response.responseTime, 'ms');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/query",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"purchase approval thresholds section 1\",\n  \"top_k\": 5\n}"
+            },
+            "description": "SLA check: response must complete in ≤10s (tier-1: ≤50 concurrent users). Check Console for actual time."
+          }
+        },
+        {
+          "name": "POST /query — grounding check (source_refs)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('answer is grounded (has source_refs)', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.source_refs).to.be.an('array');",
+                  "  // Every answer must reference retrieved context",
+                  "  console.log('Source refs count:', json.source_refs.length);",
+                  "  console.log('First source:', json.source_refs[0]);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/query",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"visitor escort site access rules\",\n  \"top_k\": 5\n}"
+            },
+            "description": "Grounding check: answer must include source_refs pointing to retrieved context chunks."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "id": "demo_prompt_v1",
+  "name": "Grounded handbook QA",
+  "version": 1,
+  "description": "Answers from the given context only, citing a section for every statement. This is the file fallback used before prompts are migrated into MongoDB; tools/seed_demo.py writes the same template into the demo realm.",
+  "is_active": false,
+  "created_at": "2026-01-01T00:00:00+00:00",
+  "template": "You answer questions about an organisation's internal handbook using ONLY the context below. When the context does not contain the answer, say so instead of filling the gap.\n\nSupport every statement with a section reference in the form [section N]. Keep statements drawn from different documents in separate sentences.\n\nContext:\n{context}\n\nQuestion: {question}",
+  "realm_id": "demo"
+}

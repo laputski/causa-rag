@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "causa-rag-client"
+# This version number IS the contract version this
+# client speaks (see causa_rag_client/client.py:CONTRACT_VERSION). A
+# breaking change to the platform's external-RAG contract (core/models.py)
+# bumps both together; run_experiment()/register_rag() refuse to proceed
+# against a platform whose /external-rag-spec reports a different version,
+# rather than silently sending a request the platform can't parse.
+version = "1.0.0"
+description = "Thin HTTP client for the RAG debugging/eval platform — register an external RAG, upload datasets, run experiments, fetch results."
+requires-python = ">=3.9"
+dependencies = [
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+]
+# Only needed for serve()/run_server(); register_rag/
+# run_experiment/get_results never import fastapi/uvicorn at all.
+serve = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.29",
+]
+
+[tool.setuptools.packages.find]
+include = ["causa_rag_client*"]

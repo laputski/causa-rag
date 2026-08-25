@@ -1,0 +1,10 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or discussion
+    url: https://github.com/laputski/causa-rag/discussions
+    about: >
+      For "how do I", "is this supposed to", and anything open-ended. Issues
+      are for defects and concrete proposals.
+  - name: Security report
+    url: https://github.com/laputski/causa-rag/security/advisories/new
+    about: Report privately rather than as a public issue. See SECURITY.md.

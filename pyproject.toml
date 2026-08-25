@@ -1,0 +1,154 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "causa-rag"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.29",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.2",
+    "qdrant-client>=1.9",
+    "httpx>=0.27",
+    "structlog>=24.1",
+    "redis>=5.0",
+    "pyyaml>=6.0",
+    "requests>=2.31",
+    "beautifulsoup4>=4.12",
+    "langfuse>=2.0,<3.0",
+    "opensearch-py>=2.6",
+    "motor>=3.4",
+    "razdel>=0.5",
+    "langdetect>=1.0.9",
+    "jsonpath-ng>=1.6",
+    # FastAPI raises at import time, not at request time, when an endpoint
+    # declares File()/Form() and this is absent — so the corpus upload endpoint
+    # takes the whole app down with it, and with it every test that imports the
+    # app. It was in no dependency group at all and arrived transitively through
+    # a judge framework, which is why it only ever failed on a machine that had
+    # not installed the judges. `fresh-clone` found it on its first real run.
+    "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "import-linter>=2.1",
+    "xenon>=0.9",
+]
+# What the platform needs to run for real rather than on stubs. Without
+# sentence-transformers the embedder returns hash vectors and every similarity
+# number is noise, which is the failure this platform exists to catch.
+integration = [
+    "sentence-transformers>=2.7",
+    "langchain-ollama>=0.2",
+]
+# The three LLM judges, split out from `integration` because resolving them
+# together is the slow half of a first install: over twenty minutes, and the
+# solver rather than the network is the bottleneck. Only `make test-eval` and
+# the two on-demand diagnostics endpoints need them, and every import of them is
+# lazy and guarded, so an install without this extra degrades to a clear error
+# rather than an ImportError at startup.
+judges = [
+    "deepeval>=0.21",
+    "ragas>=0.2",
+    "trulens-eval>=1.0",
+    "trulens-providers-litellm>=1.0",
+]
+# Heavy and optional. Absence does not
+# break startup; the corresponding component is simply unavailable in the registry.
+reranker = [
+    "sentence-transformers>=2.7",
+]
+graph = [
+    "neo4j>=5.0",
+]
+# HTML test reports. Kept out of `dev` deliberately: a plugin named in pytest's
+# addopts becomes a hard requirement for running any test at all, and the point
+# of `dev` is that `pytest` works right after installing it.
+report = [
+    "pytest-html>=4.1",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core*", "adapters*", "services*", "domain_packs*", "eval*", "tools*"]
+
+[tool.ruff]
+target-version = "py312"
+# Not an enforced limit — E501 is ignored below. This is the width isort wraps
+# import blocks to, and dropping it moved every import block to ruff's default
+# of 88 and produced twenty findings that were only churn.
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+# Every entry here states a rule this codebase does not hold, with the reason.
+# The list was written after making the gate pass for real: 815 findings, of
+# which 164 were mechanical and fixed, 22 were genuine defects and fixed, and
+# these are what remained. A gate that has never been green is not a gate, and
+# a limit nobody enforces is not a rule.
+ignore = [
+    # No column discipline exists and never has. The declared limit was 100
+    # while the 99th percentile line is 106, the 99.5th is 111 and the longest
+    # is 367: 601 findings, none of them a defect. Picking a number that passes
+    # today would state a rule just as fictional, only quieter.
+    "E501",   # line-too-long
+    # `File(...)`, `Form(...)` and `Depends(...)` in a signature default is how
+    # FastAPI declares a parameter. The rule is right about Python and wrong
+    # about this framework, and all five findings are route signatures.
+    "B008",   # function-call-in-argument-default
+    # `try: … except Exception: pass` around tracing and cleanup, where the
+    # explicit form carries a comment saying why the failure is ignored.
+    # `contextlib.suppress` reads shorter and drops the place to put that.
+    "SIM105",
+    # Nested `with` blocks joined by a backslash, which is how every `patch()`
+    # stack in the tests is written. The suggested parenthesised form is a
+    # formatting preference, and switching fourteen sites to it changes nothing
+    # about what they do.
+    "SIM117",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# A one-off screenshot script, excluded from the published tree, written in the
+# terse style a script gets. Holding it to the same statement layout as the
+# platform buys nothing.
+"tools/audit_screens.py" = ["E701", "E702", "B905"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+# A bare `pytest` on a fresh clone must pass with nothing running and no extras
+# installed. Two rules follow from that.
+#
+# First, no reporting plugins here. `--html` used to live in addopts while
+# pytest-html appeared in no dependency group, so `pytest` died with
+# "unrecognized arguments" on any machine where it had not been installed by
+# hand. Reporting now lives on the `make test-all` command line and behind the
+# `report` extra.
+#
+# Second, deselect the marked suites by default. `testpaths` walks
+# tests/integration/ and tests/eval/ too, and those only appear to pass because
+# their fixtures skip. Naming the exclusion makes the default honest. A `-m` on
+# the command line overrides this one (last -m wins), so `make test-int` and
+# `make test-eval` keep working unchanged.
+addopts = ["-m", "not integration and not deepeval and not e2e"]
+markers = [
+    "deepeval: tests against real pipeline + Ollama LLM judge (slow, needs Ollama+Qdrant)",
+    "integration: tests requiring live external services (Qdrant/Ollama/MongoDB/etc.)",
+    "fitness: evolutionary architecture invariant tests (layer isolation, API surface, data integrity)",
+    "e2e: full-platform walkthrough over the demo realm (needs the whole stack up)",
+]

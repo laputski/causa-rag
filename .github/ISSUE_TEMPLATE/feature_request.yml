@@ -1,0 +1,40 @@
+name: Feature request
+description: Something the platform should be able to do and cannot
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: >
+        What you were trying to find out about your RAG system, and where the
+        platform stopped being able to tell you. Describe the situation rather
+        than the feature; the same problem often has a cheaper solution than
+        the one that comes to mind first.
+      placeholder: |
+        I want to know whether a chunk-size change helped, but I can only see
+        that the average moved. I cannot tell whether it fixed ten questions
+        and broke eight, or fixed two and broke none.
+    validations:
+      required: true
+
+  - type: textarea
+    id: today
+    attributes:
+      label: What you do today instead
+      description: The workaround, if there is one, and where it falls short.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part
+      multiple: true
+      options:
+        - Metrics and evaluation
+        - Diagnostics and root cause
+        - Comparing runs
+        - Corpus and ingestion
+        - External RAG contract
+        - Web interface
+        - Installation and operation
+        - Something else

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 48" width="260" height="48" role="img" aria-label="Causa RAG">
+  <title>Causa RAG</title>
+  <style>
+    .fg { fill: #1f2328; }
+    .accent { fill: #6b7280; }
+    @media (prefers-color-scheme: dark) {
+      .fg { fill: #e6edf3; }
+      .accent { fill: #8b949e; }
+    }
+    text { font-family: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  </style>
+
+  <!-- The mark: the funnel the platform measures, as three narrowing steps.
+       Everything retrieved, what survived reranking, what reached the answer. -->
+  <g transform="translate(2, 6) scale(1.5)">
+    <rect x="2.5" y="4"  width="19" height="4" rx="1.4" class="fg"/>
+    <rect x="5.5" y="10" width="13" height="4" rx="1.4" class="fg" opacity=".62"/>
+    <rect x="9"   y="16" width="6"  height="4" rx="1.4" class="fg" opacity=".34"/>
+  </g>
+
+  <text x="46" y="33" font-size="25" font-weight="640" letter-spacing="-0.4" class="fg">Causa</text>
+  <text x="128" y="33" font-size="25" font-weight="420" letter-spacing="0.6" class="accent">RAG</text>
+</svg>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="Causa RAG">
+  <title>Causa RAG</title>
+  <!-- The funnel the platform measures, drawn as three narrowing steps:
+       everything retrieved, what survived reranking, what reached the answer. -->
+  <rect x="2.5" y="4"  width="19" height="4" rx="1.4" fill="#1f2328"/>
+  <rect x="5.5" y="10" width="13" height="4" rx="1.4" fill="#1f2328" opacity=".62"/>
+  <rect x="9"   y="16" width="6"  height="4" rx="1.4" fill="#1f2328" opacity=".34"/>
+</svg>

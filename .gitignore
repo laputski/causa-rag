@@ -1,0 +1,92 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+.env
+.env.*
+!.env.example
+*.log
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+node_modules/
+ui/dist/
+ui/.vite/
+*.DS_Store
+
+# Qdrant local storage
+qdrant_storage/
+
+# OpenSearch data
+opensearch-data/
+
+# Model weights: large files that belong in weights storage, not in git
+*.bin
+*.safetensors
+*.gguf
+models/
+
+# Eval datasets with PII / sensitive content
+eval/golden/private/
+domain_packs/*/golden/private/
+
+# Scraped corpus (large, re-downloadable via tools/corpus/download.py)
+corpus/*/
+!corpus/demo_handbook/
+
+# DeepEval run results
+eval/results/
+
+# Reviewer judgments: one file per realm-and-corpus pair, filled in on a live installation
+eval/judgments/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+!*.tfvars.example
+
+# Helm secrets
+deploy/helm/**/secrets.yaml
+deploy/helm/**/secret-values.yaml
+
+# Generated docs
+docs/_build/
+
+# Generated per-environment compose overrides (tools/generate_realm_neo4j_compose.py)
+deploy/compose/neo4j-realms.generated.yml
+
+# OS
+Thumbs.db
+.idea/
+.mcp.json
+
+
+# pytest reports, overwritten by every test run
+test-reports/
+ui/test-reports/
+
+# DeepEval run caches + machine-bound telemetry id
+.deepeval/
+
+# Logs and pid files for the processes install.sh starts
+.run/
+
+# Prompts are a Mongo cache and not repository content: the gateway writes what
+# is in the database here, because the pipeline reads them synchronously. On a
+# working installation these are that installation's own prompts and do not
+# belong in the tree. The demo prompt is in the repository and travels with the
+# demo realm.
+prompts/*.json
+!prompts/demo_prompt_v1.json
+
+packs.local/
