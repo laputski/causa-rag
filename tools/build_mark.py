@@ -30,16 +30,26 @@ HEAD = """  <!-- The funnel the platform measures, with the thread that came thr
        palette, so each mark keeps its own colour and still reads as family. -->"""
 
 
-def rects(indent: int = 2, thread_class: str | None = "thread",
-          thread_fill: str | None = None, ink: str | None = None) -> str:
+def rects(indent: int = 2, thread_class: str = "thread", ink_class: str | None = None,
+          thread_fill: str | None = None, ink_fill: str | None = None) -> str:
+    """Every module as a rect, with exactly one colour attribute each.
+
+    The attribute is chosen here rather than appended afterwards. Appending is
+    what produced a duplicate `class` once already: the thread's class name
+    changed and the guard in the post-processing step still tested the old one,
+    so every rect took a second class and the file stopped being valid XML.
+    """
     pad = " " * indent
     out = []
     for x, y, is_thread in cells():
-        attr = ""
         if is_thread:
-            attr = f' class="{thread_class}"' if thread_fill is None else f' fill="{thread_fill}"'
-        elif ink is not None:
-            attr = f' fill="{ink}"'
+            attr = f' fill="{thread_fill}"' if thread_fill else f' class="{thread_class}"'
+        elif ink_fill:
+            attr = f' fill="{ink_fill}"'
+        elif ink_class:
+            attr = f' class="{ink_class}"'
+        else:
+            attr = ""
         out.append(f'{pad}<rect x="{x}" y="{y}" width="{MODULE}" height="{MODULE}"{attr}/>')
     return "\n".join(out)
 
@@ -75,7 +85,7 @@ def write_logo() -> None:
   <title>Causa RAG</title>
 {HEAD}
   <g>
-{rects(thread_fill=ACCENT_DARK, ink=INK_DARK)}
+{rects(thread_fill=ACCENT_DARK, ink_fill=INK_DARK)}
   </g>
 </svg>
 """, encoding="utf-8")
@@ -88,10 +98,7 @@ def write_wordmark() -> None:
     block = re.search(r'  <g transform="translate\(2, 6\) scale\(1\.5\)">.*?\n  </g>', s, re.S)
     if not block:
         raise SystemExit("wordmark.svg: mark group not found")
-    body = rects(indent=4, thread_class="thread").replace('<rect', '<rect class="fg"' , 0)
-    body = "\n".join(
-        line if 'class="accent"' in line else line.replace("/>", ' class="fg"/>')
-        for line in body.splitlines())
+    body = rects(indent=4, thread_class="thread", ink_class="fg")
     s = s.replace(block.group(0),
                   '  <g transform="translate(2, 6) scale(1.5)">\n' + body + "\n  </g>")
     path.write_text(s, encoding="utf-8")
