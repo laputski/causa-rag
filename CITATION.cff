@@ -8,6 +8,10 @@ type: software
 authors:
   - family-names: Laputski
     given-names: Alexander
+# The concept identifier: it always resolves to the newest version.
+# A paper citing one particular state should use that release's own
+# identifier, which the release page on the deposit gives.
+doi: "10.5281/zenodo.22117626"
 repository-code: "https://github.com/laputski/causa-rag"
 abstract: >-
   A diagnostic bench for retrieval-augmented generation. It scores every

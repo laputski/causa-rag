@@ -12,6 +12,7 @@ assumed. Everything runs on your own machine.
 [![License](https://img.shields.io/badge/license-Apache--2.0-2f81f7?style=flat-square)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776ab?style=flat-square&logo=python&logoColor=white)](pyproject.toml)
 [![CI](https://img.shields.io/github/actions/workflow/status/laputski/causa-rag/ci.yml?branch=main&style=flat-square&label=ci)](https://github.com/laputski/causa-rag/actions/workflows/ci.yml)
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.22117626-1682D4?style=flat-square&logo=doi&logoColor=white)](https://doi.org/10.5281/zenodo.22117626)
 [![Runs locally](https://img.shields.io/badge/data-never%20leaves%20your%20machine-1a7f37?style=flat-square)](#runs-entirely-on-your-machine)
 [![Ollama](https://img.shields.io/badge/llm-ollama-white?style=flat-square&logo=ollama&logoColor=black)](https://ollama.com)
 [![Qdrant](https://img.shields.io/badge/vectors-qdrant-dc244c?style=flat-square)](https://qdrant.tech)
@@ -287,6 +288,9 @@ what your last change broke, which is what you need after choosing.
 
 A map, and an instrument. Both are built on the same principle: a claim is worth
 what its evidence is worth, and a number without provenance is worse than none.
+Both are citable: this one at
+[DOI 10.5281/zenodo.22117626](https://doi.org/10.5281/zenodo.22117626), the registry at
+[DOI 10.5281/zenodo.21943978](https://doi.org/10.5281/zenodo.21943978).
 
 ## Licence and author
 
