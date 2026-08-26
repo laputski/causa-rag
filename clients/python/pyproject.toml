@@ -1,6 +1,6 @@
 [build-system]
-# 77 — не прихоть: строковая форма `license` и `license-files`
-# появились в PEP 639, а его поддержка пришла в setuptools 77.
+# 77 is not arbitrary: the string form of `license` and `license-files`
+# come from PEP 639, and support for it landed in setuptools 77.
 requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
@@ -16,13 +16,14 @@ version = "1.0.0"
 description = "Thin HTTP client for the RAG debugging/eval platform — register an external RAG, upload datasets, run experiments, fetch results."
 readme = "README.md"
 license = "Apache-2.0"
-# Лицензия лежит копией рядом: сборка не выходит за корень пакета.
+# The licence sits here as a copy: a build does not reach outside the
+# package root.
 license-files = ["LICENSE"]
 requires-python = ">=3.9"
 keywords = ["rag", "retrieval-augmented-generation", "evaluation", "llm", "information-retrieval"]
 authors = [{ name = "Alexander Laputski" }]
-# Классификаторы определяют, найдут ли пакет фильтрами на PyPI.
-# Без них страница есть, а в поиске по теме пакета нет.
+# Classifiers decide whether the package is found by the filters on the
+# index. Without them the page exists and the search does not reach it.
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -35,7 +36,8 @@ classifiers = [
     "Typing :: Typed",
 ]
 
-# Ссылки — единственное, что уводит со страницы пакета в проект.
+# Links are the only thing that carries a reader from the package page
+# to the project.
 [project.urls]
 Homepage = "https://github.com/laputski/causa-rag"
 Repository = "https://github.com/laputski/causa-rag"

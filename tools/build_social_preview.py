@@ -1,72 +1,74 @@
-"""Картинка социального превью: 1280×640, как требует GitHub.
+#!/usr/bin/env python3
+"""The social preview card, 1280x640, the size code hosting expects.
 
-**Шрифт подменён и это надо знать.** Гарнитуры проекта лежат в woff2,
-а PIL их не читает; конвертера в системе нет. Набрано Georgia — тот же
-класс серифа, что Source Serif 4, и на кегле превью разница не бросается.
-Когда появится конвертер, набор повторяется настоящей гарнитурой.
+**The typeface is a substitute and that has to be known.** The project's own
+faces ship as woff2, PIL cannot read them, and no converter is installed here.
+Georgia stands in: the same class of text serif as Source Serif 4, and at this
+size the difference does not carry. When a converter is available, this script
+is the place to swap the face.
 
-Марка рисуется теми же модулями, что docs/assets/logo.svg: одна раскладка,
-два вывода.
+The mark comes from `mark_layout.py`, so the card cannot drift from the mark.
 """
-# Раскладка марки — одна на все выводы: docs/assets/logo.svg, вордмарк,
-# компонент интерфейса и эта картинка рисуют одни и те же девять модулей.
-PITCH, MODULE = 4.8, 3.84          # то же отношение, что у знака ragworld
-ROWS = (5, 3, 1)                   # найдено, пережило реранкер, дошло до ответа
 
+from __future__ import annotations
 
-def modules(box=24.0):
-    w = (max(ROWS) - 1) * PITCH + MODULE
-    h = (len(ROWS) - 1) * PITCH + MODULE
-    ox, oy = (box - w) / 2, (box - h) / 2
-    out = []
-    for r, n in enumerate(ROWS):
-        start = ox + (max(ROWS) - n) / 2 * PITCH
-        for c in range(n):
-            out.append((round(start + c * PITCH, 2), round(oy + r * PITCH, 2)))
-    return out
-
+import sys
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from mark_layout import ACCENT_DARK, BOX, MODULE, cells  # noqa: E402
+
 W, H = 1280, 640
 BG, INK, MUTED = (14, 16, 19), (232, 234, 237), (155, 161, 172)
-G = "/System/Library/Fonts/Supplemental/Georgia"
+GEORGIA = "/System/Library/Fonts/Supplemental/Georgia"
+MARK_PX = 190
 
-img = Image.new("RGB", (W, H), BG)
-d = ImageDraw.Draw(img)
 
-# Марка: те же девять модулей, масштаб от 24 к 190.
-scale = 190 / 24
-# Композиция выравнивается по центру: превью обрезают по-разному, и блок,
-# прижатый к левому краю, теряет половину при обрезке справа.
-CONTENT_W = 190 + 64 + 640          # марка, зазор, самая длинная строка
-mx = (W - CONTENT_W) // 2
-my = 168
-for x, y in modules():
-    d.rectangle([mx + x*scale, my + y*scale,
-                 mx + (x + MODULE)*scale - 1, my + (y + MODULE)*scale - 1], fill=INK)
+def rgb(value: str) -> tuple[int, int, int]:
+    return tuple(int(value[i:i + 2], 16) for i in (1, 3, 5))
 
-title = ImageFont.truetype(f"{G} Bold.ttf", 82)
-lead  = ImageFont.truetype(f"{G}.ttf", 38)
-small = ImageFont.truetype(f"{G}.ttf", 26)
 
-tx = mx + 24*scale + 64
-d.text((tx, 214), "Causa RAG", font=title, fill=INK)
-# Строка из README: она же и обещание платформы.
-d.text((tx, 318), "Shows which questions a change fixed,", font=lead, fill=MUTED)
-d.text((tx, 366), "and which it broke.", font=lead, fill=MUTED)
-d.text((tx, 442), "A diagnostic bench for retrieval-augmented generation.",
-       font=small, fill=MUTED)
-d.text((tx, 476), "Runs entirely on your own machine.", font=small, fill=MUTED)
+def draw_card() -> Image.Image:
+    image = Image.new("RGB", (W, H), BG)
+    canvas = ImageDraw.Draw(image)
 
-# Полоска акцентов Okabe-Ito понизу: та же палитра, что у диаграмм платформы.
-# Полоска встаёт под текстом, а не в углу: одинокий элемент у края читается
-# обрезком чего-то, а не частью композиции.
-for i, c in enumerate(("#0072B2", "#009E73", "#D55E00", "#CC79A7", "#E69F00")):
-    d.rectangle([tx + i*40, 534, tx + i*40 + 28, 542],
-                fill=tuple(int(c[j:j+2], 16) for j in (1, 3, 5)))
+    title = ImageFont.truetype(f"{GEORGIA} Bold.ttf", 82)
+    lead = ImageFont.truetype(f"{GEORGIA}.ttf", 38)
+    small = ImageFont.truetype(f"{GEORGIA}.ttf", 26)
 
-out = Path(__file__).resolve().parent.parent / "docs/assets/social-preview.png"
-img.save(out)
-print(out.relative_to(Path.cwd()) if out.is_relative_to(Path.cwd()) else out, img.size)
+    # Centred rather than flush left: previews are cropped differently in
+    # different places, and a block against the edge loses half of itself.
+    content = MARK_PX + 64 + 640
+    left, top = (W - content) // 2, 168
+
+    scale = MARK_PX / BOX
+    for x, y, is_thread in cells():
+        canvas.rectangle(
+            [left + x * scale, top + y * scale,
+             left + (x + MODULE) * scale - 1, top + (y + MODULE) * scale - 1],
+            fill=rgb(ACCENT_DARK) if is_thread else INK)
+
+    text_x = left + MARK_PX + 64
+    canvas.text((text_x, 214), "Causa RAG", font=title, fill=INK)
+    # The line from the README: it is the promise as well as the description.
+    canvas.text((text_x, 318), "Shows which questions a change fixed,", font=lead, fill=MUTED)
+    canvas.text((text_x, 366), "and which it broke.", font=lead, fill=MUTED)
+    canvas.text((text_x, 442), "A diagnostic bench for retrieval-augmented generation.",
+                font=small, fill=MUTED)
+    canvas.text((text_x, 476), "Runs entirely on your own machine.", font=small, fill=MUTED)
+
+    # The Okabe-Ito row, the palette the platform's own diagrams use. It sits
+    # under the text rather than in a corner: a lone element at the edge reads
+    # as the offcut of something, not as part of the composition.
+    for i, colour in enumerate(("#0072B2", "#009E73", "#D55E00", "#CC79A7", "#E69F00")):
+        canvas.rectangle([text_x + i * 40, 534, text_x + i * 40 + 28, 542], fill=rgb(colour))
+
+    return image
+
+
+if __name__ == "__main__":
+    out = Path(__file__).resolve().parent.parent / "docs/assets/social-preview.png"
+    draw_card().save(out)
+    print(out.name, draw_card().size)

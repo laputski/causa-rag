@@ -1,26 +1,34 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"
      class="cr-mark" role="img" aria-label="Causa RAG">
   <title>Causa RAG</title>
-  <!-- The funnel the platform measures, drawn as square modules on the grid the
-       sibling registry is built from: everything retrieved, what survived
-       reranking, what reached the answer. The narrowing carries the meaning,
-       so the mark holds at 16 px in one colour.
+  <!-- The funnel the platform measures, with the thread that came through it:
+       everything retrieved, what survived reranking, what reached the answer.
+       The middle column in the accent colour is the part that made it all the
+       way, and it is what makes the narrowing read as a funnel rather than as
+       a tree.
 
-       The selector is a class rather than `:root`: inlined into markup, `:root`
-       reaches the containing document and colours far more than the mark. -->
+       The module and the grid are the sibling registry's, module to pitch as
+       0.8: the kinship is carried by the unit of measure, not by a shared
+       palette, so each mark keeps its own colour and still reads as family. -->
+  <!-- A class, not `:root`: inlined into markup, `:root` reaches the
+       containing document and colours far more than the mark. -->
   <style>
     .cr-mark { color: #1f2328 }
+    .cr-mark .thread { fill: #0072B2 }
     @media (prefers-color-scheme: dark) {
       .cr-mark { color: #e6edf3 }
+      .cr-mark .thread { fill: #4EA3DC }
     }
   </style>
-  <rect x="0.48" y="5.28" width="3.84" height="3.84" fill="currentColor"/>
-  <rect x="5.28" y="5.28" width="3.84" height="3.84" fill="currentColor"/>
-  <rect x="10.08" y="5.28" width="3.84" height="3.84" fill="currentColor"/>
-  <rect x="14.88" y="5.28" width="3.84" height="3.84" fill="currentColor"/>
-  <rect x="19.68" y="5.28" width="3.84" height="3.84" fill="currentColor"/>
-  <rect x="5.28" y="10.08" width="3.84" height="3.84" fill="currentColor"/>
-  <rect x="10.08" y="10.08" width="3.84" height="3.84" fill="currentColor"/>
-  <rect x="14.88" y="10.08" width="3.84" height="3.84" fill="currentColor"/>
-  <rect x="10.08" y="14.88" width="3.84" height="3.84" fill="currentColor"/>
+  <g fill="currentColor">
+  <rect x="0.48" y="5.28" width="3.84" height="3.84"/>
+  <rect x="5.28" y="5.28" width="3.84" height="3.84"/>
+  <rect x="14.88" y="5.28" width="3.84" height="3.84"/>
+  <rect x="19.68" y="5.28" width="3.84" height="3.84"/>
+  <rect x="10.08" y="5.28" width="3.84" height="3.84" class="thread"/>
+  <rect x="5.28" y="10.08" width="3.84" height="3.84"/>
+  <rect x="14.88" y="10.08" width="3.84" height="3.84"/>
+  <rect x="10.08" y="10.08" width="3.84" height="3.84" class="thread"/>
+  <rect x="10.08" y="14.88" width="3.84" height="3.84" class="thread"/>
+  </g>
 </svg>
