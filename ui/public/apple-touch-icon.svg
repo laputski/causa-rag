@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180"
+     width="180" height="180" role="img" aria-label="Causa RAG">
+  <title>Causa RAG</title>
+  <rect width="180" height="180" rx="40" fill="#0e1013"/>
+  <rect x="26.6" y="53.0" width="21.1" height="21.1" fill="#e6edf3"/>
+  <rect x="53.0" y="53.0" width="21.1" height="21.1" fill="#e6edf3"/>
+  <rect x="105.8" y="53.0" width="21.1" height="21.1" fill="#e6edf3"/>
+  <rect x="132.2" y="53.0" width="21.1" height="21.1" fill="#e6edf3"/>
+  <rect x="79.4" y="53.0" width="21.1" height="21.1" fill="#4EA3DC"/>
+  <rect x="53.0" y="79.4" width="21.1" height="21.1" fill="#e6edf3"/>
+  <rect x="105.8" y="79.4" width="21.1" height="21.1" fill="#e6edf3"/>
+  <rect x="79.4" y="79.4" width="21.1" height="21.1" fill="#4EA3DC"/>
+  <rect x="79.4" y="105.8" width="21.1" height="21.1" fill="#4EA3DC"/>
+</svg>

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"
+     class="cr-mark" role="img" aria-label="Causa RAG">
+  <title>Causa RAG</title>
+  <style>
+    .cr-mark { color: #1f2328 }
+    .cr-mark .thread { fill: #0072B2 }
+    @media (prefers-color-scheme: dark) {
+      .cr-mark { color: #e6edf3 }
+      .cr-mark .thread { fill: #4EA3DC }
+    }
+  </style>
+  <g fill="currentColor">
+  <rect x="0.48" y="5.28" width="3.84" height="3.84"/>
+  <rect x="5.28" y="5.28" width="3.84" height="3.84"/>
+  <rect x="14.88" y="5.28" width="3.84" height="3.84"/>
+  <rect x="19.68" y="5.28" width="3.84" height="3.84"/>
+  <rect x="10.08" y="5.28" width="3.84" height="3.84" class="thread"/>
+  <rect x="5.28" y="10.08" width="3.84" height="3.84"/>
+  <rect x="14.88" y="10.08" width="3.84" height="3.84"/>
+  <rect x="10.08" y="10.08" width="3.84" height="3.84" class="thread"/>
+  <rect x="10.08" y="14.88" width="3.84" height="3.84" class="thread"/>
+  </g>
+</svg>

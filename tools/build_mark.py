@@ -13,10 +13,11 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from mark_layout import ACCENT, ACCENT_DARK, INK, INK_DARK, MODULE, cells  # noqa: E402
+from mark_layout import ACCENT, ACCENT_DARK, BOX, INK, INK_DARK, MODULE, cells  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "docs/assets"
+PUBLIC = ROOT / "ui/public"
 
 HEAD = """  <!-- The funnel the platform measures, with the thread that came through it:
        everything retrieved, what survived reranking, what reached the answer.
@@ -97,6 +98,77 @@ def write_wordmark() -> None:
     print("docs/assets/wordmark.svg")
 
 
+def write_favicon() -> None:
+    """The tab icon, and the touch icon that cannot be transparent.
+
+    The interface had no icon at all: the tab showed the browser's default
+    globe. That was reasonable while there was nothing to put there.
+
+    The tab icon follows the theme, because the browser paints the tab in it.
+    The touch icon does not: a home screen gives it no ground, so its colours
+    are fixed and it carries a plate of its own.
+    """
+    PUBLIC.mkdir(parents=True, exist_ok=True)
+    (PUBLIC / "favicon.svg").write_text(
+        f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"
+     class="cr-mark" role="img" aria-label="Causa RAG">
+  <title>Causa RAG</title>
+  <style>
+    .cr-mark {{ color: {INK} }}
+    .cr-mark .thread {{ fill: {ACCENT} }}
+    @media (prefers-color-scheme: dark) {{
+      .cr-mark {{ color: {INK_DARK} }}
+      .cr-mark .thread {{ fill: {ACCENT_DARK} }}
+    }}
+  </style>
+  <g fill="currentColor">
+{rects()}
+  </g>
+</svg>
+""", encoding="utf-8")
+
+    # A rounded plate with room around the mark: a home screen crops the corners
+    # and an icon drawn to the edge loses them.
+    pad, box = 24, 180
+    inner = box - pad * 2
+    scale = inner / BOX
+    body = "\n".join(
+        f'  <rect x="{pad + x * scale:.1f}" y="{pad + y * scale:.1f}"'
+        f' width="{MODULE * scale:.1f}" height="{MODULE * scale:.1f}"'
+        f' fill="{ACCENT_DARK if t else INK_DARK}"/>'
+        for x, y, t in cells())
+    (PUBLIC / "apple-touch-icon.svg").write_text(
+        f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {box} {box}"
+     width="{box}" height="{box}" role="img" aria-label="Causa RAG">
+  <title>Causa RAG</title>
+  <rect width="{box}" height="{box}" rx="{box * 0.22:.0f}" fill="#0e1013"/>
+{body}
+</svg>
+""", encoding="utf-8")
+    # Safari takes the touch icon reliably only as a raster, so the same
+    # geometry is drawn twice rather than relied on to convert.
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        print("ui/public/favicon.svg, apple-touch-icon.svg (PIL missing, no PNG)")
+        return
+
+    def rgb(v: str) -> tuple[int, int, int]:
+        return tuple(int(v[i:i + 2], 16) for i in (1, 3, 5))
+
+    png = Image.new("RGB", (box, box), rgb("#0e1013"))
+    draw = ImageDraw.Draw(png)
+    radius = int(box * 0.22)
+    draw.rounded_rectangle([0, 0, box - 1, box - 1], radius=radius, fill=rgb("#0e1013"))
+    for x, y, t in cells():
+        draw.rectangle(
+            [pad + x * scale, pad + y * scale,
+             pad + (x + MODULE) * scale - 1, pad + (y + MODULE) * scale - 1],
+            fill=rgb(ACCENT_DARK if t else INK_DARK))
+    png.save(PUBLIC / "apple-touch-icon.png")
+    print("ui/public/favicon.svg, apple-touch-icon.svg, apple-touch-icon.png")
+
+
 def print_tsx() -> None:
     print("\n— paste into ui/src/components/Logo.tsx, Cascade() —")
     for x, y, is_thread in cells():
@@ -106,5 +178,6 @@ def print_tsx() -> None:
 
 if __name__ == "__main__":
     write_logo()
+    write_favicon()
     write_wordmark()
     print_tsx()
