@@ -25,6 +25,31 @@ that actually happened.
 
 > Русская версия: [docs/ru/external-rag-contract.md](ru/external-rag-contract.md).
 
+## Contract version 1, and what that promises
+
+This contract is **version 1**, and it is versioned separately from the platform.
+
+The reason is asymmetric cost. The platform can change freely: it is one
+codebase and its own tests catch the breakage. This contract is implemented in
+other people's services, by people who will not be watching this repository, and
+a change here breaks software the platform cannot see and cannot fix.
+
+**The promise, for as long as this is version 1:**
+
+- No field listed below is removed or renamed.
+- No optional field becomes required.
+- The meaning of an existing field does not change.
+- New fields are additive and optional, and an implementation that ignores them
+  keeps working.
+
+A change that cannot be made under those rules becomes version 2, served
+alongside version 1 rather than in place of it.
+
+**The client tracks this contract, not the platform.** `causa-rag-client` is at
+`1.x` because the contract is at version 1, and it will stay on `1.x` while this
+document does. The platform's own version moves independently and says nothing
+about your integration.
+
 ## Two endpoints
 
 The platform calls exactly two URLs, both given at registration.

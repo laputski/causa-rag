@@ -1,8 +1,26 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="Causa RAG">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"
+     class="cr-mark" role="img" aria-label="Causa RAG">
   <title>Causa RAG</title>
-  <!-- The funnel the platform measures, drawn as three narrowing steps:
-       everything retrieved, what survived reranking, what reached the answer. -->
-  <rect x="2.5" y="4"  width="19" height="4" rx="1.4" fill="#1f2328"/>
-  <rect x="5.5" y="10" width="13" height="4" rx="1.4" fill="#1f2328" opacity=".62"/>
-  <rect x="9"   y="16" width="6"  height="4" rx="1.4" fill="#1f2328" opacity=".34"/>
+  <!-- The funnel the platform measures, drawn as square modules on the grid the
+       sibling registry is built from: everything retrieved, what survived
+       reranking, what reached the answer. The narrowing carries the meaning,
+       so the mark holds at 16 px in one colour.
+
+       The selector is a class rather than `:root`: inlined into markup, `:root`
+       reaches the containing document and colours far more than the mark. -->
+  <style>
+    .cr-mark { color: #1f2328 }
+    @media (prefers-color-scheme: dark) {
+      .cr-mark { color: #e6edf3 }
+    }
+  </style>
+  <rect x="0.48" y="5.28" width="3.84" height="3.84" fill="currentColor"/>
+  <rect x="5.28" y="5.28" width="3.84" height="3.84" fill="currentColor"/>
+  <rect x="10.08" y="5.28" width="3.84" height="3.84" fill="currentColor"/>
+  <rect x="14.88" y="5.28" width="3.84" height="3.84" fill="currentColor"/>
+  <rect x="19.68" y="5.28" width="3.84" height="3.84" fill="currentColor"/>
+  <rect x="5.28" y="10.08" width="3.84" height="3.84" fill="currentColor"/>
+  <rect x="10.08" y="10.08" width="3.84" height="3.84" fill="currentColor"/>
+  <rect x="14.88" y="10.08" width="3.84" height="3.84" fill="currentColor"/>
+  <rect x="10.08" y="14.88" width="3.84" height="3.84" fill="currentColor"/>
 </svg>

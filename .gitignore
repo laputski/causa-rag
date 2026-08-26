@@ -14,6 +14,9 @@ build/
 htmlcov/
 .coverage
 node_modules/
+
+# Кэш инкрементальной сборки tsc: появляется от `tsc -b`, воспроизводим.
+*.tsbuildinfo
 ui/dist/
 ui/.vite/
 *.DS_Store

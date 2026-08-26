@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+title: "Causa RAG: a diagnostic bench for retrieval-augmented generation"
+message: >-
+  If this software helped your work, please cite it. Cite a released version
+  rather than the main branch: the branch moves and a citation to it cannot be
+  reproduced.
+type: software
+authors:
+  - family-names: Laputski
+    given-names: Alexander
+repository-code: "https://github.com/laputski/causa-rag"
+abstract: >-
+  A diagnostic bench for retrieval-augmented generation. It scores every
+  question in a golden set separately — retrieval recall and precision, answer
+  similarity, whether the answer is grounded in the source it cites, and whether
+  a question that should have been refused was — then names the pipeline stage
+  that failed, deciding retrieval, reranking or generation from the run's own
+  trace. Two runs are compared question by question, so the blast radius of a
+  configuration change is visible rather than assumed, and a reviewer's free-text
+  comment becomes a classified diagnosis and a reusable golden question. Any RAG
+  can connect over a versioned HTTP contract, and diagnostic depth follows what
+  that system reports about itself. No document, question or answer leaves the
+  host it runs on.
+keywords:
+  - retrieval-augmented generation
+  - evaluation
+  - regression testing
+  - information retrieval
+  - root cause analysis
+  - local-first
+license: Apache-2.0

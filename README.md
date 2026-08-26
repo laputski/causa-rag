@@ -272,12 +272,24 @@ an adapter, a domain pack or a locale.
 The natural extension points are the component registry (chunkers, embedders,
 retrievers, rerankers), domain packs, and the external-RAG HTTP contract.
 
+## The map and the instrument
+
+[**RAG World**](https://ragworld.org) is the sibling project: a self-updating
+registry of retrieval-augmented generation technologies, where every maturity
+level is derived from collected evidence by a deterministic rule and no language
+model takes part. Its data is open, versioned and citable
+([DOI 10.5281/zenodo.21943978](https://doi.org/10.5281/zenodo.21943978)).
+
+The two answer different questions and neither substitutes for the other.
+The registry says how mature a technique is and on what evidence, which is what
+you need before choosing one. Causa says what state your own system is in and
+what your last change broke, which is what you need after choosing.
+
+A map, and an instrument. Both are built on the same principle: a claim is worth
+what its evidence is worth, and a number without provenance is worse than none.
+
 ## Licence and author
 
 Licensed under the [Apache License 2.0](LICENSE).
 
 Copyright 2026 **Alexander Laputski**.
-
-Also by the same author: [ragworld.org](https://ragworld.org), a maturity map
-of RAG technologies. That map answers how mature a given technique is; Causa
-answers what state your own system is in and what changed after an edit.

@@ -23,13 +23,28 @@ export const LOGO_VARIANT: LogoVariant = 'cascade'
  * same shape the run page draws as `.funnel`, so the mark states what the
  * platform measures rather than alluding to it. The narrowing, not the
  * colour, carries the meaning — it survives being one colour at 16 px.
+ *
+ * The steps are square modules on the grid the sibling registry's mark is
+ * built from, module to pitch as 0.8. The kinship is carried by the unit of
+ * measure rather than by a shared palette, which is what lets this mark stay
+ * monochrome and keep the constraint above.
+ *
+ * The fading opacity the bars used to carry is gone. It doubled what the
+ * narrowing already said, and at 16 px on a light ground the last step at
+ * 0.34 was close to absent — against the very constraint it sat under.
  */
 function Cascade({ size }: { size: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect x="2.5" y="4"  width="19" height="4" rx="1.4" fill="currentColor" />
-      <rect x="5.5" y="10" width="13" height="4" rx="1.4" fill="currentColor" opacity=".62" />
-      <rect x="9"   y="16" width="6"  height="4" rx="1.4" fill="currentColor" opacity=".34" />
+      <rect x="0.48" y="5.28" width="3.84" height="3.84" fill="currentColor" />
+      <rect x="5.28" y="5.28" width="3.84" height="3.84" fill="currentColor" />
+      <rect x="10.08" y="5.28" width="3.84" height="3.84" fill="currentColor" />
+      <rect x="14.88" y="5.28" width="3.84" height="3.84" fill="currentColor" />
+      <rect x="19.68" y="5.28" width="3.84" height="3.84" fill="currentColor" />
+      <rect x="5.28" y="10.08" width="3.84" height="3.84" fill="currentColor" />
+      <rect x="10.08" y="10.08" width="3.84" height="3.84" fill="currentColor" />
+      <rect x="14.88" y="10.08" width="3.84" height="3.84" fill="currentColor" />
+      <rect x="10.08" y="14.88" width="3.84" height="3.84" fill="currentColor" />
     </svg>
   )
 }
