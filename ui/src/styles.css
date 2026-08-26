@@ -1468,7 +1468,12 @@ code, pre, kbd, samp,
    The mark takes its colour from currentColor, so it follows the palette and
    needs no separate version per palette. */
 .brand { display: flex; align-items: center; gap: 8px; min-width: 0 }
-.brand-mark { color: var(--color-primary); display: flex; flex-shrink: 0 }
+/* The mark takes the text colour, not the accent: the accent is what the
+   thread through the funnel is drawn in, and painting the whole mark with it
+   made the two indistinguishable — the mark came out uniformly blue and the
+   thread invisible. Ink for what was lost, accent for what came through, the
+   same way the mark is drawn everywhere else. */
+.brand-mark { color: var(--color-text); display: flex; flex-shrink: 0 }
 .brand-word {
   font-size: 15px; font-weight: 700; letter-spacing: -0.01em;
   color: var(--color-text); white-space: nowrap;
