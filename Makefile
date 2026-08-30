@@ -1,4 +1,4 @@
-.PHONY: help quickstart doctor stop demo up down infra api ui ingest install install-judges test test-unit test-int test-eval test-e2e load logs ps clean bootstrap publish-check publish-export
+.PHONY: help quickstart doctor stop demo up down infra api ui ingest install install-judges test test-unit test-int test-eval test-e2e load logs ps clean bootstrap publish-check publish-export miracl-fetch miracl-ingest miracl-report
 COMPOSE = docker compose -f deploy/compose/docker-compose.yml
 PORT    ?= 8081
 
@@ -135,6 +135,23 @@ open:           ## Open every web interface in a browser
 	open http://localhost:8081    # API Gateway
 	open http://localhost:3001    # Langfuse
 	open http://localhost:6333/dashboard  # Qdrant
+
+# ── Configuration Report on MIRACL ─────────────────────────────────────────────
+# Three steps, run in order, all on this machine. The grid needs Qdrant,
+# OpenSearch and the real BGE-M3, so none of it runs in CI.
+
+miracl-fetch:   ## Download the MIRACL dev slices (ar, ru, en) and lay them out
+	@for l in ar ru en; do python3 -m eval.miracl.fetch --lang $$l; done
+
+miracl-ingest:  ## Index the MIRACL corpora, one per language and analyser
+	@for l in ar ru en; do \
+	  USE_REAL_BGE_M3=true python3 -m services.ingestion.cli ingest corpus/miracl-$$l/ \
+	    --strategy fixed --chunk-size 3000 --overlap 0 \
+	    --corpus-id miracl-$$l --language $$l || exit 1; \
+	done
+
+miracl-report:  ## Run the configuration grid, retrieval only (LIMIT=200 for a smoke run)
+	USE_REAL_BGE_M3=true python3 -m eval.miracl.report $(if $(LIMIT),--limit $(LIMIT))
 
 # The publication workflow: targets that copy this tree into the public
 # repository and gate that copy. They call `tools/publish_export.py` and

@@ -42,7 +42,16 @@ corpus/*/
 !corpus/demo_handbook/
 
 # DeepEval run results
-eval/results/
+eval/results/*
+# The Configuration Report's own numbers are the exception: they carry the
+# per-row timings, failure counts and every metric the published table only
+# summarises, and a report whose numbers have to be recomputed to be checked
+# is a report nobody checks.
+!eval/results/miracl/
+# The reranker's remembered scores. Derived, hundreds of megabytes, and
+# rebuildable from the corpus; what it buys is a run that survives being
+# stopped, not something a reader of the report needs.
+eval/results/miracl/cache/
 
 # Reviewer judgments: one file per realm-and-corpus pair, filled in on a live installation
 eval/judgments/

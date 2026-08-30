@@ -1,0 +1,188 @@
+[
+  {
+    "language": "en",
+    "mode": "naive",
+    "top_k": 5,
+    "reranker": false,
+    "reranker_model": "",
+    "n_questions": 799,
+    "n_failed": 0,
+    "seconds": 19.7,
+    "metrics": {
+      "retrieval_recall_at_k": 0.7837,
+      "retrieval_precision_at_k": 0.4085,
+      "retrieval_average_precision": 0.6523
+    }
+  },
+  {
+    "language": "en",
+    "mode": "naive",
+    "top_k": 5,
+    "reranker": true,
+    "reranker_model": "BAAI/bge-reranker-v2-m3",
+    "n_questions": 799,
+    "n_failed": 0,
+    "seconds": 2838.1,
+    "metrics": {
+      "retrieval_recall_at_k": 0.8371,
+      "retrieval_precision_at_k": 0.4399,
+      "retrieval_average_precision": 0.7204,
+      "pre_rerank_recall_at_k": 0.7837
+    }
+  },
+  {
+    "language": "en",
+    "mode": "naive",
+    "top_k": 10,
+    "reranker": false,
+    "reranker_model": "",
+    "n_questions": 799,
+    "n_failed": 0,
+    "seconds": 5.5,
+    "metrics": {
+      "retrieval_recall_at_k": 0.9549,
+      "retrieval_precision_at_k": 0.273,
+      "retrieval_average_precision": 0.7304
+    }
+  },
+  {
+    "language": "en",
+    "mode": "naive",
+    "top_k": 10,
+    "reranker": true,
+    "reranker_model": "BAAI/bge-reranker-v2-m3",
+    "n_questions": 799,
+    "n_failed": 0,
+    "seconds": 6.8,
+    "metrics": {
+      "retrieval_recall_at_k": 0.9774,
+      "retrieval_precision_at_k": 0.2827,
+      "retrieval_average_precision": 0.7935,
+      "pre_rerank_recall_at_k": 0.9549
+    }
+  },
+  {
+    "language": "en",
+    "mode": "naive",
+    "top_k": 20,
+    "reranker": false,
+    "reranker_model": "",
+    "n_questions": 799,
+    "n_failed": 0,
+    "seconds": 5.3,
+    "metrics": {
+      "retrieval_recall_at_k": 0.992,
+      "retrieval_precision_at_k": 0.1445,
+      "retrieval_average_precision": 0.7419
+    }
+  },
+  {
+    "language": "en",
+    "mode": "naive",
+    "top_k": 20,
+    "reranker": true,
+    "reranker_model": "BAAI/bge-reranker-v2-m3",
+    "n_questions": 799,
+    "n_failed": 0,
+    "seconds": 5.2,
+    "metrics": {
+      "retrieval_recall_at_k": 0.996,
+      "retrieval_precision_at_k": 0.1452,
+      "retrieval_average_precision": 0.7993,
+      "pre_rerank_recall_at_k": 0.992
+    }
+  },
+  {
+    "language": "en",
+    "mode": "hybrid_rrf",
+    "top_k": 5,
+    "reranker": false,
+    "reranker_model": "",
+    "n_questions": 799,
+    "n_failed": 0,
+    "seconds": 9.9,
+    "metrics": {
+      "retrieval_recall_at_k": 0.7707,
+      "retrieval_precision_at_k": 0.3999,
+      "retrieval_average_precision": 0.6195
+    }
+  },
+  {
+    "language": "en",
+    "mode": "hybrid_rrf",
+    "top_k": 5,
+    "reranker": true,
+    "reranker_model": "BAAI/bge-reranker-v2-m3",
+    "n_questions": 799,
+    "n_failed": 0,
+    "seconds": 2366.8,
+    "metrics": {
+      "retrieval_recall_at_k": 0.8374,
+      "retrieval_precision_at_k": 0.4402,
+      "retrieval_average_precision": 0.7206,
+      "pre_rerank_recall_at_k": 0.7707
+    }
+  },
+  {
+    "language": "en",
+    "mode": "hybrid_rrf",
+    "top_k": 10,
+    "reranker": false,
+    "reranker_model": "",
+    "n_questions": 799,
+    "n_failed": 0,
+    "seconds": 10.0,
+    "metrics": {
+      "retrieval_recall_at_k": 0.9582,
+      "retrieval_precision_at_k": 0.2767,
+      "retrieval_average_precision": 0.7065
+    }
+  },
+  {
+    "language": "en",
+    "mode": "hybrid_rrf",
+    "top_k": 10,
+    "reranker": true,
+    "reranker_model": "BAAI/bge-reranker-v2-m3",
+    "n_questions": 799,
+    "n_failed": 0,
+    "seconds": 11.2,
+    "metrics": {
+      "retrieval_recall_at_k": 0.9777,
+      "retrieval_precision_at_k": 0.2829,
+      "retrieval_average_precision": 0.794,
+      "pre_rerank_recall_at_k": 0.9582
+    }
+  },
+  {
+    "language": "en",
+    "mode": "hybrid_rrf",
+    "top_k": 20,
+    "reranker": false,
+    "reranker_model": "",
+    "n_questions": 799,
+    "n_failed": 0,
+    "seconds": 9.9,
+    "metrics": {
+      "retrieval_recall_at_k": 0.9972,
+      "retrieval_precision_at_k": 0.1455,
+      "retrieval_average_precision": 0.718
+    }
+  },
+  {
+    "language": "en",
+    "mode": "hybrid_rrf",
+    "top_k": 20,
+    "reranker": true,
+    "reranker_model": "BAAI/bge-reranker-v2-m3",
+    "n_questions": 799,
+    "n_failed": 0,
+    "seconds": 11.1,
+    "metrics": {
+      "retrieval_recall_at_k": 0.9978,
+      "retrieval_precision_at_k": 0.1454,
+      "retrieval_average_precision": 0.8,
+      "pre_rerank_recall_at_k": 0.9972
+    }
+  }
+]
