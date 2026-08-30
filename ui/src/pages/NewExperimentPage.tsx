@@ -390,6 +390,9 @@ export default function NewExperimentPage() {
   // runs the identical, working lever instead of a second field shape.
   const { data: models = [] } = useQuery({ queryKey: ['models', 'completion'], queryFn: () => api.models(true) })
   const isHttp = form.pipeline_source === 'http'
+  // Only to warn that a chosen external RAG declared no retrieve_endpoint,
+  // in which case the platform quietly runs the full generation path.
+  const retrievalOnlyRag = externalRags.find(r => r.id === form.external_rag_id)
   // in_process runs need an explicit corpus_id — no realm-agnostic default
   // is safe to guess (see DEFAULT_FORM.corpus_id above). http pipelines are
   // exempt: corpus_id there is an opaque, optional hint for the external
@@ -706,7 +709,7 @@ export default function NewExperimentPage() {
             const selectedRag = externalRags.find(r => r.id === form.external_rag_id)
             const supportedParams = selectedRag?.capabilities?.supported_params ?? []
             return (
-              <div className="form-pair">
+              <div className="form-group">
                 <div className="form-group">
                   <label htmlFor="params">{t('newExperimentPage.form.paramsLabel')}</label>
                   <textarea id="params" value={form.params}
@@ -718,22 +721,6 @@ export default function NewExperimentPage() {
                       ? t('newExperimentPage.form.paramsSupported', { params: supportedParams.join(', ') })
                       : t('newExperimentPage.form.paramsNotDeclared')}
                     {' '}{t('newExperimentPage.form.paramsInvalidJson')}
-                  </p>
-                </div>
-                {/* no-op for in_process (there is no
-                    separate retrieval-only path there, see buildConfig()),
-                    so only offered here, not as a global checkbox. */}
-                <div className="form-group">
-                  <label className="check-label">
-                    <input type="checkbox" checked={form.retrievalOnly === 'true'}
-                      onChange={e => setForm(f => ({ ...f, retrievalOnly: e.target.checked ? 'true' : '' }))} />
-                    {t('newExperimentPage.form.retrievalOnlyLabel')}
-                  </label>
-                  <p className="field-hint">
-                    {t('newExperimentPage.form.retrievalOnlyHint')}
-                    {selectedRag && !selectedRag.capabilities?.supports_retrieval_only
-                      ? ` ${t('newExperimentPage.form.retrievalOnlyNoEndpoint')}`
-                      : ''}
                   </p>
                 </div>
               </div>
@@ -799,6 +786,24 @@ export default function NewExperimentPage() {
           {sel('scorer',     'scorer',      t('newExperimentPage.form.scorerLabel'), isHttp, true)}
           {sel('maskEngine', 'mask_engine', t('newExperimentPage.form.maskEngineLabel'), isHttp, true)}
           {sel('refusalPolicy', 'refusal', t('newExperimentPage.form.refusalPolicyLabel'), isHttp, true)}
+
+          {/* Offered for both pipeline sources. It used to sit inside the
+              external-RAG block because an in_process run ignored it
+              outright; NaivePipeline.retrieve() now stops before the
+              generator, so hiding it here would hide a working control. */}
+          <div className="form-group">
+            <label className="check-label">
+              <input type="checkbox" checked={form.retrievalOnly === 'true'}
+                onChange={e => setForm(f => ({ ...f, retrievalOnly: e.target.checked ? 'true' : '' }))} />
+              {t('newExperimentPage.form.retrievalOnlyLabel')}
+            </label>
+            <p className="field-hint">
+              {t('newExperimentPage.form.retrievalOnlyHint')}
+              {isHttp && retrievalOnlyRag && !retrievalOnlyRag.capabilities?.supports_retrieval_only
+                ? ` ${t('newExperimentPage.form.retrievalOnlyNoEndpoint')}`
+                : ''}
+            </p>
+          </div>
 
           {/* Where the three lists above come from, said once here rather than
               in a parenthesis on every label. */}

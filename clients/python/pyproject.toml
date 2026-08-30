@@ -24,16 +24,25 @@ keywords = ["rag", "retrieval-augmented-generation", "evaluation", "llm", "infor
 authors = [{ name = "Alexander Laputski" }]
 # Classifiers decide whether the package is found by the filters on the
 # index. Without them the page exists and the search does not reach it.
+# No licence classifier here: `license` above is the PEP 639 expression
+# form, and setuptools refuses a build that carries both.
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Text Processing :: Indexing",
     "Typing :: Typed",
+]
+# Inside [project], and it has to stay above the [project.urls] header:
+# everything after a table header belongs to that table, so this key sat in
+# project.urls for one release. setuptools refused the whole file over it
+# ("project.urls.dependencies must be string"), which meant the package did
+# not build at all, and had it built, httpx would not have been declared.
+dependencies = [
+    "httpx>=0.27",
 ]
 
 # Links are the only thing that carries a reader from the package page
@@ -44,9 +53,6 @@ Repository = "https://github.com/laputski/causa-rag"
 Documentation = "https://github.com/laputski/causa-rag/blob/main/docs/connector-guide.md"
 "Contract reference" = "https://github.com/laputski/causa-rag/blob/main/docs/external-rag-contract.md"
 Issues = "https://github.com/laputski/causa-rag/issues"
-dependencies = [
-    "httpx>=0.27",
-]
 
 [project.optional-dependencies]
 dev = [

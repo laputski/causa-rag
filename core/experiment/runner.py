@@ -106,6 +106,12 @@ def _rebind_corpus_id(
             host=(opensearch_cfg or {}).get("host", retriever._host),
             port=int((opensearch_cfg or {}).get("port", retriever._port)),
             strategy_id=retriever._strategy_id, corpus_id=corpus_id, realm_id=realm_id,
+            # Carried over like host/port/strategy_id above. Dropping it
+            # reverts the rebound copy to the default analyser, so an
+            # Arabic corpus ingested as Arabic would be queried through an
+            # index this copy insists is Russian: either the wrong stemmer
+            # or a refusal, and both arrive long after the choice was made.
+            language=retriever._language,
         )
     return retriever
 
@@ -600,9 +606,10 @@ class ExperimentRunner:
 
         # retrieval_only calls the cheaper retrieve() path
         # when the pipeline exposes one (HttpPipeline always does; it falls
-        # back to run() itself when no retrieve_endpoint was declared). Other
-        # pipeline types (in-process registry pipelines) have no separate
-        # retrieval-only path, so retrieval_only is a no-op for them.
+        # back to run() itself when no retrieve_endpoint was declared, and
+        # NaivePipeline stops before the generator — see core/pipeline.py).
+        # A pipeline without the method still generates, so the flag stays
+        # a silent no-op there; the hasattr is what makes that silent.
         use_retrieve_only = config.retrieval_only and hasattr(pipeline, "retrieve")
         total = len(dataset.questions)
 

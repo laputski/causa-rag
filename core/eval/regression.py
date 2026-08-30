@@ -51,11 +51,17 @@ class RegressionReport:
     passed: bool
     deltas: list[MetricDelta] = field(default_factory=list)
     violations: list[str] = field(default_factory=list)
+    # Metrics the baseline pins that this run did not produce. Not a
+    # violation: a metric can legitimately vanish, and a retrieval-only run
+    # has no answer to score. It is here so that a green report over a
+    # shorter list than the pinned one says so instead of looking whole.
+    unchecked: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
             "passed": self.passed,
             "violations": self.violations,
+            "unchecked": self.unchecked,
             "deltas": [
                 {
                     "metric": d.metric,
@@ -83,6 +89,7 @@ def compare(
     thresholds = thresholds or DEFAULT_THRESHOLDS
     deltas: list[MetricDelta] = []
     violations: list[str] = []
+    unchecked: list[str] = []
 
     common_metrics = set(current_metrics) & set(baseline_metrics)
     if baseline_metrics and current_metrics and not common_metrics:
@@ -102,6 +109,14 @@ def compare(
     for metric, baseline_val in baseline_metrics.items():
         current_val = current_metrics.get(metric)
         if current_val is None:
+            # The baseline pins this metric and the run did not produce it,
+            # so nothing here is comparing it any more. Skipping quietly is
+            # how a guard stops guarding without anyone noticing: the report
+            # comes back green over a shorter list than the one that was
+            # pinned. Recorded rather than raised, because a metric can
+            # legitimately vanish — a retrieval-only run has no answer to
+            # score — and deciding that is the caller's, not this module's.
+            unchecked.append(metric)
             continue
         threshold = thresholds.get(metric, 0.05)
         allowed_min = baseline_val * (1 - threshold)
@@ -128,7 +143,10 @@ def compare(
         if current_val is not None and current_val < floor:
             violations.append(f"{metric}: {current_val:.4f} < SLA floor {floor:.4f}")
 
-    return RegressionReport(passed=len(violations) == 0, deltas=deltas, violations=violations)
+    return RegressionReport(
+        passed=len(violations) == 0, deltas=deltas, violations=violations,
+        unchecked=unchecked,
+    )
 
 
 def check_gate(

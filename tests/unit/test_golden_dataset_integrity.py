@@ -35,10 +35,35 @@ def test_ids_are_unique(path: Path) -> None:
 
 
 @pytest.mark.parametrize("path", _GOLDEN_FILES, ids=lambda p: p.name)
-def test_every_question_has_ground_truth(path: Path) -> None:
+def test_ground_truth_is_never_present_but_empty(path: Path) -> None:
+    """An empty string is the dangerous state, not an absent key.
+
+    answer_similarity scores whatever it is handed, so a question carrying
+    "" as its reference answer reports a confident zero. A retrieval
+    benchmark has no reference answers at all and says so by omitting the
+    field, which the runner reads through a default and leaves unscored.
+    """
     rows = _load(path)
-    missing = [r["id"] for r in rows if not (r.get("ground_truth") or "").strip()]
-    assert not missing, f"{path.name} has questions with empty ground_truth: {missing}"
+    empty = [r["id"] for r in rows if "ground_truth" in r and not str(r["ground_truth"]).strip()]
+    assert not empty, f"{path.name} has questions with an empty ground_truth: {empty}"
+
+
+@pytest.mark.parametrize("path", _GOLDEN_FILES, ids=lambda p: p.name)
+def test_a_set_answers_every_question_or_none_of_them(path: Path) -> None:
+    """Half a set is worse than either whole.
+
+    The runner averages each metric over the questions that produced it, so
+    a set where only some questions carry a reference answer reports an
+    answer_similarity computed over an arbitrary subset and labels it with
+    the whole set's name. Either the set is scored for generation or it is
+    a retrieval set; there is no readable middle.
+    """
+    rows = _load(path)
+    answered = [r["id"] for r in rows if str(r.get("ground_truth") or "").strip()]
+    assert len(answered) in (0, len(rows)), (
+        f"{path.name} answers {len(answered)} of {len(rows)} questions; "
+        "a partly-answered set reports generation metrics over an arbitrary subset"
+    )
 
 
 @pytest.mark.parametrize("path", _GOLDEN_FILES, ids=lambda p: p.name)

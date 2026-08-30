@@ -37,11 +37,15 @@ _FakeQdrantRetriever.__name__ = "QdrantRetriever"
 
 
 class _FakeOpenSearchRetriever:
-    def __init__(self, corpus_id: str) -> None:
+    def __init__(self, corpus_id: str, language: str = "ru_be") -> None:
         self._host = "ohost"
         self._port = 2222
         self._strategy_id = "structure_aware"
         self._corpus_id = corpus_id
+        # The analyser the index carries for life. Real retrievers have
+        # always set it since it became selectable per corpus; the rebind
+        # reads it here the same way it reads host and port.
+        self._language = language
 
 
 _FakeOpenSearchRetriever.__name__ = "OpenSearchRetriever"
@@ -81,6 +85,9 @@ def test_rebinds_opensearch_retriever_to_new_corpus_id() -> None:
         assert result is sentinel
         mock_cls.assert_called_once_with(
             host="ohost", port=2222, strategy_id="structure_aware", corpus_id="handbook", realm_id=None,
+            # Carried over, or the rebound copy would query an Arabic index
+            # through the default Russian analyser.
+            language="ru_be",
         )
 
 

@@ -90,6 +90,9 @@ def ingest(
     corpus_id: str = "default",
     structure: str | None = None,
     realm_id: str | None = None,
+    # The analyser the sparse index is built with. Only matters at creation:
+    # an index carries its analyser for life and queries inherit it.
+    language: str = "ru_be",
 ) -> dict[str, Any]:
     files = _collect_files(source, exclude=exclude)
     if not files:
@@ -137,14 +140,21 @@ def ingest(
     opensearch = None
     if use_opensearch:
         try:
-            from adapters.opensearch import OpenSearchRetriever
+            from adapters.opensearch import AnalyzerMismatch, OpenSearchRetriever
             opensearch = OpenSearchRetriever(
                 host=opensearch_host,
                 port=opensearch_port,
                 strategy_id=strategy_id,
                 corpus_id=corpus_id,
                 realm_id=realm_id,
+                language=language,
             )
+        except AnalyzerMismatch:
+            # Let through deliberately. Everything else here is "OpenSearch is
+            # not up", which is a reason to go on without a sparse index; this
+            # one is "the index would stem the text by the wrong language's
+            # rules", and going on would produce numbers that mean nothing.
+            raise
         except Exception as exc:
             log.warning("ingest.opensearch_unavailable", error=str(exc))
 
@@ -241,6 +251,13 @@ def main() -> None:
     p.add_argument("--overlap", type=int, default=64)
     p.add_argument("--no-opensearch", action="store_true")
     p.add_argument("--corpus-id", default="default", help="Multi-corpus namespace")
+    p.add_argument("--language", default="ru_be", metavar="CODE",
+                   help="Analyser language for the sparse index. Takes an ISO 639-1 "
+                        "code (ar, de, it, pt, ...), a Lucene analyser name (arabic, "
+                        "italian, ...), 'standard' for no stemming, or 'ru_be' (the "
+                        "default: Russian stemming with Belarusian stop words). "
+                        "Applies only when the index is created; an existing one keeps "
+                        "what it was built with")
     p.add_argument("--realm-id", default=None, help="Realm namespace — isolates collection/index names when multiple Realms share one physical Qdrant/OpenSearch instance")
     p.add_argument("--exclude", nargs="*", default=["full.txt"], metavar="FILENAME",
                    help="Filenames to skip (default: full.txt)")
@@ -267,6 +284,7 @@ def main() -> None:
             exclude=set(args.exclude) if args.exclude else None,
             corpus_id=args.corpus_id,
             structure=args.structure,
+            language=args.language,
             realm_id=args.realm_id,
         )
         print(f"Ingested {result['chunks']} chunks | cache hit ratio: {result['hit_ratio']:.2%}")

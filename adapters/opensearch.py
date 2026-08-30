@@ -1,7 +1,18 @@
 """OpenSearch sparse (BM25) retriever adapter.
 
 Each (strategy_id) maps to its own OpenSearch index.
-Includes Russian and Belarusian morphology analyzers.
+
+**The analyser is chosen per corpus.** It used to be fixed: every index, in
+every language, was created with the Russian/Belarusian one, so an Arabic or
+English corpus was stemmed by Russian rules and filtered through Russian stop
+words. BM25 still returned something, which is what made it hard to notice —
+the numbers were not low, they were meaningless, and any hybrid merge inherited
+that.
+
+The language is only needed when the index is created: the analyser lives in
+the field mapping, so queries against an existing index inherit it. That leaves
+one hazard, and it is guarded below — an index created before ingestion, by a
+query that arrived first, freezes the wrong analyser and nothing says so.
 """
 from __future__ import annotations
 
@@ -32,28 +43,104 @@ RU_BE_ANALYZER = {
     },
 }
 
-_INDEX_SETTINGS = {
-    "settings": {
-        "analysis": RU_BE_ANALYZER,
+#: What each language name resolves to. `ru_be` is the custom analyser above and
+#: stays the default, so an existing corpus keeps the behaviour it was indexed
+#: with. The rest are OpenSearch's own language analysers: each normalises and
+#: stems by that language's rules, which is the whole point of choosing one.
+#:
+#: `standard` is the honest answer for a language not listed: it tokenises and
+#: lowercases and claims nothing more. A wrong stemmer is worse than none.
+# Every language analyser Lucene ships with OpenSearch, addressable by its
+# own name, plus ISO 639-1 codes for the ones this project uses by hand.
+# The set was nine entries and rejected italian, portuguese, hindi and the
+# rest with a ValueError, while the README promises "real language
+# analysers, which matters once documents stop being English". A limit
+# nobody chose is worse than one that is argued for.
+_BUILT_IN = (
+    "arabic", "armenian", "basque", "bengali", "brazilian", "bulgarian",
+    "catalan", "cjk", "czech", "danish", "dutch", "english", "estonian",
+    "finnish", "french", "galician", "german", "greek", "hindi", "hungarian",
+    "indonesian", "irish", "italian", "latvian", "lithuanian", "norwegian",
+    "persian", "portuguese", "romanian", "russian", "sorani", "spanish",
+    "swedish", "thai", "turkish",
+)
+
+# ISO 639-1 for the built-ins, so a corpus can be named the way its
+# documents are tagged rather than the way Lucene spells the language.
+_ISO_639_1 = {
+    "ar": "arabic", "bg": "bulgarian", "bn": "bengali", "ca": "catalan",
+    "cs": "czech", "da": "danish", "de": "german", "el": "greek",
+    "en": "english", "es": "spanish", "et": "estonian", "eu": "basque",
+    "fa": "persian", "fi": "finnish", "fr": "french", "ga": "irish",
+    "gl": "galician", "hi": "hindi", "hu": "hungarian", "hy": "armenian",
+    "id": "indonesian", "it": "italian", "lt": "lithuanian", "lv": "latvian",
+    "nl": "dutch", "no": "norwegian", "pt": "portuguese", "ro": "romanian",
+    "ru": "russian", "sv": "swedish", "th": "thai", "tr": "turkish",
+}
+
+LANGUAGE_ANALYZERS: dict[str, str] = {
+    # The one analyser this project defines itself: Russian stemming with
+    # Belarusian stop words, for corpora where that morphology matters.
+    "ru_be": "ru_be_analyzer",
+    # Tokenises and lowercases without claiming to stem, which is the
+    # honest choice for a language nothing here has an analyser for.
+    "standard": "standard",
+    **{name: name for name in _BUILT_IN},
+    **_ISO_639_1,
+}
+
+DEFAULT_LANGUAGE = "ru_be"
+
+
+class AnalyzerMismatch(RuntimeError):
+    """The index already exists and carries a different language's analyser.
+
+    A type of its own, not a bare RuntimeError, because the call site in
+    services/ingestion/cli.py wraps construction in a try/except that logs
+    "opensearch_unavailable" and carries on without the sparse index. A loud
+    refusal would arrive there as a quiet one, which is the failure this whole
+    guard exists to prevent. Named, it can be let through.
+    """
+
+
+def index_settings(language: str = DEFAULT_LANGUAGE) -> dict[str, Any]:
+    """Index settings with the analyser this corpus's language calls for."""
+    if language not in LANGUAGE_ANALYZERS:
+        raise ValueError(
+            f"unknown analyser language {language!r}; "
+            f"known: {', '.join(sorted(LANGUAGE_ANALYZERS))}"
+        )
+    analyzer = LANGUAGE_ANALYZERS[language]
+    settings: dict[str, Any] = {
         "number_of_shards": 1,
         "number_of_replicas": 0,
-    },
-    "mappings": {
-        "properties": {
-            "text": {
-                "type": "text",
-                "analyzer": "ru_be_analyzer",
-                "search_analyzer": "ru_be_analyzer",
-            },
-            "doc_id": {"type": "keyword"},
-            "chunk_id": {"type": "keyword"},
-            "strategy_id": {"type": "keyword"},
-            "structural_path": {"type": "keyword"},
-            "start_char": {"type": "integer"},
-            "end_char": {"type": "integer"},
-        }
-    },
-}
+    }
+    # The custom one has to be declared; a built-in is referred to by name.
+    if analyzer == "ru_be_analyzer":
+        settings["analysis"] = RU_BE_ANALYZER
+    return {
+        "settings": settings,
+        "mappings": {
+            "properties": {
+                "text": {
+                    "type": "text",
+                    "analyzer": analyzer,
+                    "search_analyzer": analyzer,
+                },
+                "doc_id": {"type": "keyword"},
+                "chunk_id": {"type": "keyword"},
+                "strategy_id": {"type": "keyword"},
+                "structural_path": {"type": "keyword"},
+                "start_char": {"type": "integer"},
+                "end_char": {"type": "integer"},
+            }
+        },
+    }
+
+
+#: Kept so existing callers that imported the constant keep working; it is the
+#: settings for the default language and nothing more.
+_INDEX_SETTINGS = index_settings()
 
 
 def _index_name(strategy_id: str, corpus_id: str = "default", realm_id: str | None = None) -> str:
@@ -82,6 +169,7 @@ class OpenSearchRetriever:
         http_auth: tuple[str, str] | None = None,
         corpus_id: str = "default",
         realm_id: str | None = None,
+        language: str = DEFAULT_LANGUAGE,
     ) -> None:
         from opensearchpy import OpenSearch
 
@@ -93,6 +181,7 @@ class OpenSearchRetriever:
         self._strategy_id = strategy_id
         self._corpus_id = corpus_id
         self._realm_id = realm_id
+        self._language = language
         self._index = _index_name(strategy_id, corpus_id, realm_id)
         self._client = OpenSearch(
             hosts=[{"host": host, "port": port}],
@@ -102,8 +191,52 @@ class OpenSearchRetriever:
         self._ensure_index()
 
     def _ensure_index(self) -> None:
+        """Create the index with this corpus's analyser, or refuse a mismatch.
+
+        The refusal is the point. An index carries its analyser for life: a
+        query that arrives before ingestion creates the index with whatever the
+        caller happened to ask for, and ingestion then finds it existing and
+        leaves it alone. Arabic text lands in an index that stems by Russian
+        rules, BM25 keeps returning results, and nothing anywhere says so.
+
+        That failure is exactly the kind this platform exists to catch, so it
+        is caught here rather than reported as a low score later.
+        """
         if not self._client.indices.exists(index=self._index):
-            self._client.indices.create(index=self._index, body=_INDEX_SETTINGS)
+            self._client.indices.create(
+                index=self._index, body=index_settings(self._language)
+            )
+            return
+
+        wanted = LANGUAGE_ANALYZERS[self._language]
+        found = self._existing_analyzer()
+        if found is not None and found != wanted:
+            raise AnalyzerMismatch(
+                f"index {self._index!r} was built with the {found!r} analyser "
+                f"and this corpus asks for {wanted!r} ({self._language}). "
+                "An index keeps its analyser for life, so the text would be "
+                "stemmed by the wrong language's rules and BM25 would return "
+                "results that mean nothing. Delete the index and ingest again."
+            )
+
+    def _existing_analyzer(self) -> str | None:
+        """The analyser the index actually carries, or None if it cannot be read.
+
+        None rather than a guess: an unreadable mapping is not evidence of a
+        mismatch, and refusing to start over one would be worse than the
+        problem. An index with no analyser named uses OpenSearch's default.
+        """
+        try:
+            mapping = self._client.indices.get_mapping(index=self._index)
+        except Exception:
+            return None
+        properties = (
+            mapping.get(self._index, {}).get("mappings", {}).get("properties", {})
+        )
+        text = properties.get("text")
+        if not isinstance(text, dict):
+            return None
+        return text.get("analyzer", "standard")
 
     def index_chunks(self, chunks: list[Chunk]) -> None:
         from opensearchpy.helpers import bulk

@@ -282,11 +282,24 @@ class _CompositeEvaluator:
         answer_text = answer.text or ""
         is_refusal = not answer_text.strip() or bool(_NOT_FOUND.search(answer_text))
 
-        metrics: dict[str, float] = {
-            "correct_refusal": (0.0 if is_refusal else 1.0)
-            if answerability == "answerable"
-            else (1.0 if is_refusal else 0.0)
-        }
+        # A retrieval-only run stops before the generator and returns an
+        # empty text on purpose (core/pipeline.py, adapters/http_pipeline.py,
+        # both marking it in metadata). Every metric derived from that text
+        # then scores it: correct_refusal reads the emptiness as a refusal
+        # and returns 0.0 for every answerable question, answer_relevance
+        # and context_support return 0.0 against an empty string. Averaged
+        # over a whole dataset those are three columns of confident zeros
+        # about something nobody measured, which is the exact failure this
+        # platform exists to catch.
+        retrieval_only = bool((getattr(answer, "metadata", None) or {}).get("retrieval_only"))
+
+        metrics: dict[str, float] = {}
+        if not retrieval_only:
+            metrics["correct_refusal"] = (
+                (0.0 if is_refusal else 1.0)
+                if answerability == "answerable"
+                else (1.0 if is_refusal else 0.0)
+            )
 
         if answerability != "answerable":
             return metrics
@@ -308,6 +321,9 @@ class _CompositeEvaluator:
         if pre_rerank_refs:
             pre_rerank_retrieved = extracted_refs([sr.model_dump() for sr in pre_rerank_refs])
             metrics["pre_rerank_recall_at_k"] = recall_at_k(article_refs, pre_rerank_retrieved, k=self._top_k)
+
+        if retrieval_only:
+            return metrics
 
         reference = question.get("ground_truth") or question.get("reference_answer", "")
         if reference:

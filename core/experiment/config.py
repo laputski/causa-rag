@@ -109,11 +109,12 @@ class ExperimentConfig(BaseModel):
     # against the same registered RAG".
     external_rag_name: str | None = None
 
-    # When true, the runner calls the external RAG's
-    # optional retrieve_endpoint instead of its generation endpoint, scoring
-    # only retrieval metrics without paying for LLM generation on every
-    # measurement. No-op for in_process pipelines (there is no separate
-    # retrieval-only path to take — the registry pipeline always generates).
+    # When true, the runner calls the retrieval-only path: an external RAG's
+    # optional retrieve_endpoint, or NaivePipeline.retrieve() for an
+    # in_process run. Either way it scores retrieval metrics without paying
+    # for LLM generation on every measurement. The switch is a hasattr in
+    # core/experiment/runner.py, so a pipeline type that grows no such
+    # method keeps generating and says nothing about it.
     retrieval_only: bool = False
 
     # Opt-in for the

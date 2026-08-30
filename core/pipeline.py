@@ -139,7 +139,13 @@ class NaivePipeline:
         # PromptStore.get_active).
         self._realm_id = realm_id
 
-    def run(self, request: QueryRequest) -> Answer:
+    def run(self, request: QueryRequest, *, _generate: bool = True) -> Answer:
+        # _generate=False is retrieve() below, not a public knob. It is a
+        # flag rather than a second method because the worth of a
+        # retrieval-only measurement rests entirely on it measuring the
+        # retrieval this pipeline actually performs; a parallel copy of
+        # the search half would drift from this one, and the report would
+        # then describe code no query ever takes.
         bound = log.bind(trace_id=request.trace_id, pipeline=self.pipeline_id)
         k = request.top_k or self._top_k
         # Never below k: a candidate window narrower than the context it
@@ -296,6 +302,35 @@ class NaivePipeline:
             source_refs = _to_source_refs(scored)
             trace.context_chars = sum(len(c) for c in context_chunks)
 
+            if not _generate:
+                # Everything the search produced is already in hand.
+                # Asking the model now would spend a generation nothing
+                # reads, and would let a generator failure fail a run that
+                # never depended on a generator.
+                trace.total_ms = round((time.perf_counter() - t_total_start) * 1000, 1)
+                lf_trace.set_output("")
+                embed_stats: dict[str, object] = {}
+                if hasattr(self._embedder, "cache_stats"):
+                    embed_stats = self._embedder.cache_stats()  # type: ignore[assignment]
+                return Answer(
+                    text="",
+                    source_refs=source_refs,
+                    pre_rerank_source_refs=pre_rerank_source_refs,
+                    candidate_source_refs=candidate_source_refs,
+                    stage_trace=trace,
+                    metadata={
+                        "pipeline": self.pipeline_id,
+                        "trace_id": request.trace_id,
+                        "retrieve_calls": self._retrieve_calls,
+                        # Named in the answer so a stored run cannot be
+                        # mistaken later for a generation run whose model
+                        # happened to return nothing.
+                        "retrieval_only": True,
+                        **{f"embed_{key}": val for key, val in embed_stats.items()},
+                        **route_meta,
+                    },
+                )
+
             prompt, prompt_id, prompt_version = _build_prompt(request.text, context_chunks, self._realm_id)
             bound.info("pipeline.generate.start", prompt_len=len(prompt), prompt_id=prompt_id, prompt_version=prompt_version)
             gen_model = getattr(self._generator, "_model", self._generator.generator_id)
@@ -396,6 +431,20 @@ class NaivePipeline:
                 **grounding_meta,
             },
         )
+
+    def retrieve(self, request: QueryRequest) -> Answer:
+        """Run the search and stop, returning sources with an empty text.
+
+        core/experiment/runner.py switches a run to retrieval-only by asking
+        whether its pipeline has this method, so its absence is what used to
+        make `retrieval_only: true` an accepted and silently ignored setting
+        on an in-process run: the config parsed, and every question still
+        went to the model. That cost most where the Configuration Report
+        needs the flag, because MIRACL ships relevance judgements and no
+        reference answers, leaving nothing for a generated answer to be
+        scored against.
+        """
+        return self.run(request, _generate=False)
 
 
 class ConfigurablePipeline(NaivePipeline):
