@@ -68,7 +68,13 @@ const render = () => renderWithRealm(<ComparisonPage />, '/compare?a=run-a&b=run
 /** The pre-flight state: a pair chosen in the picker, nothing compared yet. */
 async function pickPair() {
   renderWithRealm(<ComparisonPage />, '/compare', 'demo')
-  const a = await screen.findByLabelText('Run A (before)')
+  const a = await screen.findByLabelText('Run A (before)') as HTMLSelectElement
+  // The run options arrive from a separate query, and the select renders
+  // before it lands, holding only its placeholder. Firing a change to a value
+  // that is not an option yet is dropped by a controlled select in silence,
+  // so the wait is on the options and never on the element alone. Both
+  // selects are fed by the same query, so one wait covers the pair.
+  await waitFor(() => expect([...a.options].map(o => o.value)).toContain('run-a'))
   fireEvent.change(a, { target: { value: 'run-a' } })
   fireEvent.change(screen.getByLabelText('Run B (after)'), { target: { value: 'run-b' } })
 }
