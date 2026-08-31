@@ -48,6 +48,17 @@ _EM_DASH_EXEMPT = [
     re.compile(r"\|\s*—\s*\|"),        # alone in a table cell: "no value"
     re.compile(r"^\s*[-*>]?\s*—"),      # opening a line: a diagram or list label
     re.compile(r"\d\s*—\s*\d"),        # a numeric range
+    # The same "no value" as the table cell above, written in code: a quoted
+    # string whose whole content is a dash, which is how every table in the
+    # interface renders an empty cell (`{value ?? '—'}`). It joins nothing, and
+    # counting it charged the prose budget for a rendering convention. Backticks
+    # are deliberately not accepted here: in markdown they delimit code spans,
+    # so a dash between two of them is a connector.
+    # The lookbehind keeps a connector between two quoted terms
+    # (`'before' — 'after'`) counted: there the two quotes close and open
+    # two different literals, and only a quote that opens after a word
+    # boundary is the placeholder this exempts.
+    re.compile(r"(?<![\w'\"])(['\"])\s*—\s*\1"),
 ]
 
 
@@ -99,8 +110,10 @@ SKIP_FILES = {"docs/ui-redesign-plan.md"}
 # raising a budget, and the budget below is re-measured against the wider scope.
 SUFFIXES = {".py", ".ts", ".tsx", ".js", ".css", ".md", ".yml", ".yaml", ".sh", ".toml"}
 
-# Its own pattern table names every construction it forbids.
-SELF_EXEMPT = {"tools/check_style.py"}
+# Its own pattern table names every construction it forbids, and the test
+# beside it has to spell out each one to assert on it. Both would report
+# themselves forever.
+SELF_EXEMPT = {"tools/check_style.py", "tests/unit/test_check_style_exemptions.py"}
 
 # A `@lat:` marker quotes a heading from the design graph verbatim, because that
 # string is how the reference resolves. The words in it were written somewhere
