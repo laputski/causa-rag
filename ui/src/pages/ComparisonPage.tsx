@@ -6,7 +6,7 @@ import SelectBox from '../components/SelectBox'
 import { useTranslation, Trans } from 'react-i18next'
 import GuideLink from '../components/GuideLink'
 import type { TFunction } from 'i18next'
-import { api, type ExperimentItem, type PairedDiffResult } from '../api/client'
+import { api, type CompatWarning, type ExperimentItem, type PairedDiffResult } from '../api/client'
 import { metricLabel, classifyDelta, type DeltaVerdict } from '../lib/metricMeta'
 import { useRealm } from '../context/RealmContext'
 import { useProgress } from '../hooks/useProgress'
@@ -46,8 +46,8 @@ const VERDICT_META: Record<DeltaVerdict, { label: string; cls: string }> = {
 }
 
 // Same funnel-layer labels as RunPage.tsx#FUNNEL_BADGE (core/eval/funnel.py's
-// Layer values) — duplicated rather than shared because the two pages only
-// need the label text here, not RunPage's CSS badge class.
+// Layer values), duplicated instead of shared because the two pages only
+// need the label text here, without RunPage's CSS badge class.
 const FUNNEL_LAYER_LABEL: Record<string, string> = {
   not_applicable: 'runPage.funnel.notApplicable',
   suspected_ungrounded_answer: 'runPage.funnel.suspectedUngrounded',
@@ -57,10 +57,69 @@ const FUNNEL_LAYER_LABEL: Record<string, string> = {
   ok: 'runPage.funnel.ok',
 }
 
+// The findings that say whether this pair measures the same thing. Rendered
+// as the same finding block corpus health and the run diagnostics use, so one
+// kind of thing keeps one set of classes. The sentence comes from the id and
+// the parameters, with the server's English text as the fallback for an id
+// this build does not know yet.
+function CompatFindings({ items }: { items: CompatWarning[] }) {
+  const { t } = useTranslation()
+  if (!items.length) return null
+  const worst = items.some(w => w.severity === 'error')
+    ? 'error' : items.some(w => w.severity === 'warn') ? 'warn' : 'info'
+  const tone = worst === 'error' ? 'conn-status-err' : worst === 'warn' ? 'conn-status-warn' : 'conn-status-ok'
+  return (
+    <div className={`conn-status ${tone} cmp-compat`}>
+      <div className="conn-status-head">{t(`comparisonPage.compat.head.${worst}`)}</div>
+      {items.map(w => {
+        // An empty parameter would interpolate as nothing at all, so a run
+        // that never recorded its prompt read as "B: v0." with the name
+        // simply missing. Every blank gets the same word instead.
+        const params = Object.fromEntries(
+          Object.entries(w.params ?? {}).map(([k, v]) =>
+            [k, v === '' || v == null ? t('comparisonPage.compat.unknown') : v]),
+        )
+        return (
+          <div className="find-row" key={w.id}>
+            <span className={`find-dot find-${w.severity}`} aria-hidden="true" />
+            <div>
+              <div className="find-title">
+                {t(`comparisonPage.compat.${w.id}.title`, { ...params, defaultValue: w.title })}
+              </div>
+              <p className="find-detail">
+                {t(`comparisonPage.compat.${w.id}.detail`, { ...params, defaultValue: w.detail })}
+              </p>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function MetricRow({ metric, before, after, delta, delta_pct }: {
-  metric: string; before: number; after: number; delta: number; delta_pct: number | null
+  metric: string; before: number | null; after: number | null; delta: number | null; delta_pct: number | null
 }) {
   const { t } = useTranslation()
+  // A metric measured on one side only has no delta to state. It used to
+  // arrive as 0.0, and a move away from zero classifies as an improvement,
+  // so an unmeasured metric rendered as a green rise.
+  if (before == null || after == null) {
+    return (
+      <tr>
+        <td>{metricLabel(metric)}</td>
+        <td className="num num-dim">{before == null ? '—' : before.toFixed(3)}</td>
+        <td className="num num-dim">{after == null ? '—' : after.toFixed(3)}</td>
+        <td className="num num-dim">—</td>
+        <td><span className="badge badge-info">{t('comparisonPage.verdict.notMeasured')}</span></td>
+        <td className="cmp-means">
+          {/* The side named is the one that HAS the value. A null `before`
+              means the metric exists in B alone. */}
+          {t('comparisonPage.means.notMeasured', { side: before == null ? 'B' : 'A' })}
+        </td>
+      </tr>
+    )
+  }
   const verdict = classifyDelta(before, after, metric)
   const meta = VERDICT_META[verdict]
   const cls = verdict === 'improved' ? 'num-ok' : verdict === 'regressed' ? 'num-bad' : 'num-dim'
@@ -73,7 +132,7 @@ function MetricRow({ metric, before, after, delta, delta_pct }: {
       <td className={`num ${cls}`}>
         {delta_pct != null
           ? `${delta_pct >= 0 ? '+' : '\u2212'}${Math.abs(delta_pct).toFixed(1)} %`
-          : `${delta >= 0 ? '+' : '\u2212'}${Math.abs(delta).toFixed(3)}`}
+          : `${(delta ?? 0) >= 0 ? '+' : '\u2212'}${Math.abs(delta ?? 0).toFixed(3)}`}
       </td>
       <td><span className={`badge ${meta.cls}`}>{t(meta.label)}</span></td>
       {/* A column that did not exist: a number says what changed rather than
@@ -118,13 +177,18 @@ function PairedDiffCard({ diff }: { diff: PairedDiffResult }) {
   // are dozens and a count is enough. The table carries the ones there is
   // something to show about.
   const shown = diff[kind].filter(qid => diff.questions[qid] || kind !== 'unchanged').slice(0, 60)
+  const matched = diff.fixed.length + diff.flips.length + diff.unchanged.length
+  const onlyA = diff.only_in_before?.length ?? 0
+  const onlyB = diff.only_in_after?.length ?? 0
 
   return (
     <div className="section">
       <div className="section-rule flush">
         <h2 className="section-title">{t('comparisonPage.pairedDiff.heading')}</h2>
         <span className="section-meta">
-          {t('comparisonPage.pairedDiff.matched', { count: diff.fixed.length + diff.flips.length + diff.unchanged.length })}
+          {onlyA || onlyB
+            ? t('comparisonPage.pairedDiff.matchedWithDropped', { count: matched, onlyA, onlyB })
+            : t('comparisonPage.pairedDiff.matched', { count: matched })}
         </span>
       </div>
 
@@ -190,7 +254,14 @@ function PairedDiffCard({ diff }: { diff: PairedDiffResult }) {
       </div>
 
       {shown.length === 0 ? (
-        <p className="empty tight">{t('comparisonPage.pairedDiff.noChanges')}</p>
+        <p className="empty tight">
+          {/* An empty overlap and an unmoved question set look identical in
+              the numbers above, and only one of them means the change did
+              nothing. */}
+          {matched === 0
+            ? t('comparisonPage.pairedDiff.nothingToPair', { onlyA, onlyB })
+            : t('comparisonPage.pairedDiff.noChanges')}
+        </p>
       ) : (
         <table className="cmp-table">
           <thead>
@@ -242,7 +313,22 @@ export default function ComparisonPage() {
   })
   const { latest: progress } = useProgress(isLoading ? progressId : null)
 
+  // Asked as soon as a pair is chosen, so an incompatible pair is named
+  // before somebody waits minutes for a report that cannot mean anything.
+  // Keyed on the pair, because the answer only changes when the pair does.
+  const { data: preflight } = useQuery({
+    queryKey: ['preflight', idA, idB],
+    queryFn: () => api.experiments.comparePreflight(idA, idB),
+    enabled: !!idA && !!idB && idA !== idB,
+    staleTime: 60_000,
+  })
+
   const changedFieldsCount = result ? Object.keys(result.config_diff).length : 0
+  const facts = result?.compatibility
+  const sameShape = !facts || (
+    facts.before.dataset_name === facts.after.dataset_name
+    && facts.before.n_questions === facts.after.n_questions
+  )
   const runA = experiments?.find(e => e.run_id === compareIds?.[0])
   const runB = experiments?.find(e => e.run_id === compareIds?.[1])
 
@@ -266,8 +352,24 @@ export default function ComparisonPage() {
         {result && (
           <p className="page-sub">
             {compareIds?.[0]?.slice(0, 8)} ↔ {compareIds?.[1]?.slice(0, 8)}
-            {runA?.dataset_name && ` · ${runA.dataset_name}`}
-            {runA?.n_questions != null && ` · ${t('comparisonPage.questionsCount', { count: runA.n_questions })}`}
+            {/* Both sides get named whenever they differ. Printing run A's
+                dataset and question count alone labelled the pair with the
+                numbers of one half of it. */}
+            {facts && !sameShape ? (
+              <>
+                <span className="page-sub-line">
+                  {`A: ${facts.before.dataset_name || '—'} · ${t('comparisonPage.questionsCount', { count: facts.before.n_questions })}`}
+                </span>
+                <span className="page-sub-line">
+                  {`B: ${facts.after.dataset_name || '—'} · ${t('comparisonPage.questionsCount', { count: facts.after.n_questions })}`}
+                </span>
+              </>
+            ) : (
+              <>
+                {runA?.dataset_name && ` · ${runA.dataset_name}`}
+                {runA?.n_questions != null && ` · ${t('comparisonPage.questionsCount', { count: runA.n_questions })}`}
+              </>
+            )}
           </p>
         )}
         {result && (
@@ -305,6 +407,10 @@ export default function ComparisonPage() {
       </div>
       )}
 
+      {/* Above the fold. Inside the collapsed configuration block below, a
+          changed dataset sat as one more row of thirty. */}
+      {result?.compatibility && <CompatFindings items={result.compatibility.warnings} />}
+
       {/* Open until a pair is chosen: on an empty screen the choice is the
           only thing there is to do, and hiding it behind a row means making
           somebody hunt for the reason they opened the screen. Once a
@@ -331,6 +437,16 @@ export default function ComparisonPage() {
             {t('comparisonPage.compare')}
           </button>
         </div>
+        {/* The button stays enabled. Comparing runs that share a dataset only
+            in part is a legitimate thing to want, and the decision belongs to
+            the person who can see what is wrong with the pair.
+
+            Shown only while the selection differs from the report on screen.
+            Opening the picker over a report of the same pair would otherwise
+            repeat the findings already standing above it. */}
+        {preflight && (idA !== compareIds?.[0] || idB !== compareIds?.[1]) && (
+          <CompatFindings items={preflight.warnings} />
+        )}
         {/* The explanation lives here rather than above the comparison: it is
             needed once, and it pushed the page down every time. */}
         <p className="prose-p">

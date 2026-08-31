@@ -86,7 +86,28 @@ def test_to_dict_shape() -> None:
     assert report.to_dict() == {
         "fixed": ["q1"], "flips": [], "unchanged": [],
         "metric_deltas": {},
+        "only_in_before": [], "only_in_after": [],
     }
+
+
+def test_a_question_present_on_one_side_only_is_counted_not_lost() -> None:
+    # Skipping it stays right, and reporting nothing about it was wrong: a
+    # caller needs the number to tell "nothing moved" from "nothing paired".
+    before = [_qr("q1", "ok", retrieval_recall_at_k=0.9), _qr("gone", "ok")]
+    after = [_qr("q1", "ok", retrieval_recall_at_k=0.9), _qr("new", "ok")]
+    report = paired_diff(before, after)
+    assert report.unchanged == ["q1"]
+    assert report.only_in_before == ["gone"]
+    assert report.only_in_after == ["new"]
+
+
+def test_no_overlap_at_all_classifies_nothing_and_says_so() -> None:
+    before = [_qr("a1", "ok"), _qr("a2", "retrieval")]
+    after = [_qr("b1", "ok")]
+    report = paired_diff(before, after)
+    assert (report.fixed, report.flips, report.unchanged) == ([], [], [])
+    assert report.only_in_before == ["a1", "a2"]
+    assert report.only_in_after == ["b1"]
 
 
 class TestConfirmFlips:

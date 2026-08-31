@@ -320,3 +320,247 @@ class TestCompareProgress:
         assert resp.status_code == 200
         assert seen == [None]
         assert set(_progress) == before_keys
+
+
+class TestComparability:
+    """The pair may not be measuring the same thing, and the report says so.
+
+    Assertions are on the stable warning ids, never on the rendered sentence
+    (CONTRIBUTING: "Assert on the stable identifier a diagnostic carries").
+    """
+
+    def _ids(self, body: dict) -> set[str]:
+        return {w["id"] for w in body["compatibility"]["warnings"]}
+
+    def test_compare_reports_a_comparable_pair_with_no_warnings(
+        self, client: TestClient,
+    ) -> None:
+        before = ExperimentResult(
+            config=_cfg("before"), run_id="run-a", question_results=[_qr("q1", 0.1)],
+        )
+        after = ExperimentResult(
+            config=_cfg("after"), run_id="run-b", question_results=[_qr("q1", 0.9)],
+        )
+        with patch(
+            "services.api_gateway.routers.experiments._get_results",
+            AsyncMock(return_value={"run-a": before, "run-b": after}),
+        ):
+            resp = client.post("/experiments/compare", json={"ids": ["run-a", "run-b"]})
+
+        body = resp.json()
+        assert body["compatibility"]["comparable"] is True
+        assert body["compatibility"]["matched"] == 1
+        assert body["compatibility"]["warnings"] == []
+
+    def test_runs_with_no_shared_question_are_reported_as_incomparable(
+        self, client: TestClient,
+    ) -> None:
+        before = ExperimentResult(
+            config=_cfg("before"), run_id="run-a", question_results=[_qr("a1", 0.1)],
+        )
+        after = ExperimentResult(
+            config=_cfg("after"), run_id="run-b", question_results=[_qr("b1", 0.9)],
+        )
+        with patch(
+            "services.api_gateway.routers.experiments._get_results",
+            AsyncMock(return_value={"run-a": before, "run-b": after}),
+        ):
+            resp = client.post("/experiments/compare", json={"ids": ["run-a", "run-b"]})
+
+        body = resp.json()
+        assert body["compatibility"]["comparable"] is False
+        assert "no_overlap" in self._ids(body)
+        assert body["compatibility"]["matched"] == 0
+        assert body["compatibility"]["only_in_before"] == 1
+        assert body["compatibility"]["only_in_after"] == 1
+
+    def test_the_exported_summary_carries_the_warnings_too(
+        self, client: TestClient,
+    ) -> None:
+        # The .txt export is what gets pasted into tickets, so a caveat that
+        # lives only on screen is a caveat the ticket never sees.
+        before = ExperimentResult(
+            config=_cfg("before"), run_id="run-a", question_results=[_qr("a1", 0.1)],
+        )
+        after = ExperimentResult(
+            config=_cfg("after"), run_id="run-b", question_results=[_qr("b1", 0.9)],
+        )
+        with patch(
+            "services.api_gateway.routers.experiments._get_results",
+            AsyncMock(return_value={"run-a": before, "run-b": after}),
+        ):
+            resp = client.post("/experiments/compare", json={"ids": ["run-a", "run-b"]})
+
+        assert "Comparability" in resp.json()["summary"]
+
+    def test_run_facts_count_answered_questions_for_both_sides(
+        self, client: TestClient,
+    ) -> None:
+        before = ExperimentResult(
+            config=_cfg("before"), run_id="run-a",
+            question_results=[_qr("q1", 0.1)], n_questions=50, stopped=True,
+        )
+        after = ExperimentResult(
+            config=_cfg("after"), run_id="run-b",
+            question_results=[_qr("q1", 0.9), _qr("q2", 0.5)],
+        )
+        with patch(
+            "services.api_gateway.routers.experiments._get_results",
+            AsyncMock(return_value={"run-a": before, "run-b": after}),
+        ):
+            resp = client.post("/experiments/compare", json={"ids": ["run-a", "run-b"]})
+
+        compat = resp.json()["compatibility"]
+        assert compat["before"]["n_questions"] == 1
+        assert compat["after"]["n_questions"] == 2
+
+
+class TestRequestValidation:
+    """`ids` used to be an unbounded list, so one id raised IndexError and
+    surfaced as a 500 while a third id was dropped without a word."""
+
+    @pytest.mark.parametrize("ids", [[], ["only-one"], ["a", "b", "c"]])
+    def test_anything_other_than_two_ids_is_rejected_by_validation(
+        self, client: TestClient, ids: list[str],
+    ) -> None:
+        resp = client.post("/experiments/compare", json={"ids": ids})
+        assert resp.status_code == 422
+
+
+class TestPreflight:
+    """The same verdict, delivered while the pair is still being chosen."""
+
+    def test_preflight_names_what_is_incomparable_without_comparing(
+        self, client: TestClient,
+    ) -> None:
+        before = ExperimentResult(
+            config=_cfg("before"), run_id="run-a", question_results=[_qr("a1", 0.1)],
+        )
+        after = ExperimentResult(
+            config=_cfg("after"), run_id="run-b", question_results=[_qr("b1", 0.9)],
+        )
+        after.config.dataset_name = "other.jsonl"
+
+        async def _one(run_id: str):
+            return {"run-a": before, "run-b": after}.get(run_id)
+
+        with patch(
+            "services.api_gateway.routers.experiments._get_one_result", _one,
+        ), patch(
+            "services.api_gateway.routers.experiments._resample_flip_verdicts",
+            AsyncMock(side_effect=AssertionError("preflight must never resample")),
+        ):
+            resp = client.get("/experiments/compare/preflight?a=run-a&b=run-b")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["comparable"] is False
+        assert {"different_dataset", "no_overlap"} <= {w["id"] for w in body["warnings"]}
+
+    def test_preflight_reads_only_the_two_runs_it_was_asked_about(
+        self, client: TestClient,
+    ) -> None:
+        # Reading the whole store on every change of a selector would make
+        # choosing a pair cost more than comparing one.
+        asked: list[str] = []
+        run = ExperimentResult(
+            config=_cfg("r"), run_id="run-a", question_results=[_qr("q1", 0.1)],
+        )
+
+        async def _one(run_id: str):
+            asked.append(run_id)
+            return run
+
+        with patch(
+            "services.api_gateway.routers.experiments._get_one_result", _one,
+        ), patch(
+            "services.api_gateway.routers.experiments._get_results",
+            AsyncMock(side_effect=AssertionError("preflight must not read every run")),
+        ):
+            resp = client.get("/experiments/compare/preflight?a=run-a&b=run-b")
+
+        assert resp.status_code == 200
+        assert asked == ["run-a", "run-b"]
+
+    def test_an_unknown_run_is_a_404_naming_it(self, client: TestClient) -> None:
+        async def _one(run_id: str):
+            return None
+
+        with patch("services.api_gateway.routers.experiments._get_one_result", _one):
+            resp = client.get("/experiments/compare/preflight?a=nope&b=also-nope")
+
+        assert resp.status_code == 404
+        assert "nope" in resp.json()["detail"]
+
+    def test_the_preflight_route_is_not_swallowed_by_the_run_id_route(
+        self, client: TestClient,
+    ) -> None:
+        # `GET /experiments/{run_id}` is declared earlier in the router, and a
+        # two-segment path cannot match its single-segment pattern.
+        async def _one(run_id: str):
+            return None
+
+        with patch("services.api_gateway.routers.experiments._get_one_result", _one):
+            resp = client.get("/experiments/compare/preflight?a=x&b=y")
+
+        assert resp.json()["detail"].startswith("Runs not found")
+
+
+def test_the_compatibility_block_keeps_the_field_names_the_interface_reads(
+    client: TestClient,
+) -> None:
+    """The TypeScript interface is written from these names by hand.
+
+    Nothing else connects the two, so renaming a field here would leave the
+    interface type-checking cleanly against a shape that no longer arrives.
+    """
+    before = ExperimentResult(
+        config=_cfg("before"), run_id="run-a", question_results=[_qr("a1", 0.1)],
+    )
+    after = ExperimentResult(
+        config=_cfg("after"), run_id="run-b", question_results=[_qr("b1", 0.9)],
+    )
+    with patch(
+        "services.api_gateway.routers.experiments._get_results",
+        AsyncMock(return_value={"run-a": before, "run-b": after}),
+    ):
+        body = client.post(
+            "/experiments/compare", json={"ids": ["run-a", "run-b"]},
+        ).json()
+
+    compat = body["compatibility"]
+    assert set(compat) == {
+        "comparable", "matched", "only_in_before", "only_in_after",
+        "before", "after", "warnings",
+    }
+    assert set(compat["before"]) == {
+        "run_id", "dataset_name", "n_questions", "realm_id", "corpus_id", "stopped",
+    }
+    assert set(compat["warnings"][0]) == {
+        "id", "severity", "title", "detail", "params", "action",
+    }
+    assert set(body["paired_diff"]) >= {"only_in_before", "only_in_after"}
+
+
+def test_preflight_and_compare_agree_about_one_pair(client: TestClient) -> None:
+    """One rule set, so the picker and the report cannot say different things."""
+    before = ExperimentResult(
+        config=_cfg("before"), run_id="run-a", question_results=[_qr("a1", 0.1)],
+    )
+    after = ExperimentResult(
+        config=_cfg("after"), run_id="run-b", question_results=[_qr("b1", 0.9)],
+    )
+
+    async def _one(run_id: str):
+        return {"run-a": before, "run-b": after}.get(run_id)
+
+    with patch(
+        "services.api_gateway.routers.experiments._get_results",
+        AsyncMock(return_value={"run-a": before, "run-b": after}),
+    ), patch("services.api_gateway.routers.experiments._get_one_result", _one):
+        full = client.post(
+            "/experiments/compare", json={"ids": ["run-a", "run-b"]},
+        ).json()["compatibility"]
+        pre = client.get("/experiments/compare/preflight?a=run-a&b=run-b").json()
+
+    assert pre == full

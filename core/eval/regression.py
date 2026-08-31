@@ -182,6 +182,14 @@ class PairedDiffReport:
     flips: list[str] = field(default_factory=list)
     unchanged: list[str] = field(default_factory=list)
     metric_deltas: dict[str, dict[str, float]] = field(default_factory=dict)
+    # The questions the comparison could not speak to, because they exist on
+    # only one of the two sides. Skipping them is correct (see paired_diff
+    # below), and reporting zero of them was not: a comparison of two runs on
+    # different datasets classified nothing at all and rendered identically to
+    # one where the change genuinely moved no question. These two lists are
+    # what lets a reader tell those apart.
+    only_in_before: list[str] = field(default_factory=list)
+    only_in_after: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -189,6 +197,8 @@ class PairedDiffReport:
             "flips": self.flips,
             "unchanged": self.unchanged,
             "metric_deltas": self.metric_deltas,
+            "only_in_before": self.only_in_before,
+            "only_in_after": self.only_in_after,
         }
 
 
@@ -211,9 +221,11 @@ def paired_diff(
     display), so this function stays pure: no I/O, no funnel computation
     of its own.
 
-    A question present in only one of the two lists is skipped entirely —
-    it isn't a fix or a regression, it's a question the comparison can't
-    speak to (e.g. the dataset changed between runs). Pure / deterministic,
+    A question present in only one of the two lists is skipped entirely.
+    It is no fix and no regression, only a question the comparison can't
+    speak to (e.g. the dataset changed between runs). Those ids are still
+    counted, in ``only_in_before``/``only_in_after``, so a caller can tell an
+    empty verdict apart from an empty overlap. Pure / deterministic,
     no LLM — this function never re-runs anything; a caller that wants to
     rule out generation-metric noise before trusting a flip is expected to
     re-run that one question and compare again, not inside this function.
@@ -221,6 +233,8 @@ def paired_diff(
     before_by_id = {qr["question_id"]: qr for qr in before if qr.get("question_id")}
     after_by_id = {qr["question_id"]: qr for qr in after if qr.get("question_id")}
     common_ids = set(before_by_id) & set(after_by_id)
+    only_in_before = sorted(set(before_by_id) - set(after_by_id))
+    only_in_after = sorted(set(after_by_id) - set(before_by_id))
 
     fixed: list[str] = []
     flips: list[str] = []
@@ -250,6 +264,7 @@ def paired_diff(
 
     return PairedDiffReport(
         fixed=fixed, flips=flips, unchanged=unchanged, metric_deltas=metric_deltas,
+        only_in_before=only_in_before, only_in_after=only_in_after,
     )
 
 
