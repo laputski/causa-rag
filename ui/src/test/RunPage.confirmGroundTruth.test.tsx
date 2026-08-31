@@ -147,8 +147,9 @@ describe('RunPage — confirm ground truth', () => {
     await waitFor(() => expect(screen.getByText(/Does article 5 apply/)).toBeInTheDocument())
 
     const withinQ1 = within(getQ1Details())
-    await waitFor(() => expect(listDatasetsMock).toHaveBeenCalled())
-    expect(withinQ1.getByRole('combobox')).toBeInTheDocument()
+    // The picker is rendered from what the call returns, so waiting for the
+    // call itself stops one step short of what is being asserted.
+    expect(await withinQ1.findByRole('combobox')).toBeInTheDocument()
     expect(withinQ1.queryByText(/Dataset:/)).not.toBeInTheDocument()
     expect(withinQ1.getByRole('button', { name: 'Confirm' })).toBeDisabled()
   })
