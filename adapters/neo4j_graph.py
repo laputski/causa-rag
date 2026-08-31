@@ -42,7 +42,10 @@ class Neo4jGraphRetriever:
         password: str | None = None,
         connection_timeout: float | None = None,
     ) -> None:
-        self._uri = uri or os.getenv("NEO4J_URI", "bolt://localhost:7687")
+        # Annotated: os.getenv with a default never returns None, and the
+        # driver refuses anything else, but mypy widens the `or` to str | None
+        # and the resulting error hid behind an unread check for weeks.
+        self._uri: str = uri or os.getenv("NEO4J_URI", "bolt://localhost:7687")
         self._user = user or os.getenv("NEO4J_USER", "neo4j")
         self._password = password or os.getenv("NEO4J_PASSWORD", "ragplatform")
         # The driver's own default is 30s, which is right for a pipeline that

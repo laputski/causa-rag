@@ -41,8 +41,13 @@ jobs:
           cache: pip
       - run: pip install -e ".[dev]"
       - run: ruff check .
-      - run: mypy core/ adapters/ services/ --ignore-missing-imports
-        continue-on-error: true
+      # Was `mypy ... continue-on-error: true`, which printed sixty-six errors
+      # that nobody read, because a step that cannot fail is not a step. The
+      # count is now pinned per file in tools/mypy-baseline.json: existing
+      # errors are tolerated, a file that acquires a new one fails the build,
+      # and `--update` re-pins after a file improves.
+      - name: Type errors under budget
+        run: python3 -m tools.check_types
       - name: Layer isolation
         run: lint-imports
       - name: Architecture invariants

@@ -1,4 +1,4 @@
-.PHONY: help quickstart doctor stop demo up down infra api ui ingest install install-judges test test-unit test-int test-eval test-e2e load logs ps clean bootstrap publish-check publish-export miracl-fetch miracl-ingest miracl-report
+.PHONY: help types quickstart doctor stop demo up down infra api ui ingest install install-judges test test-unit test-int test-eval test-e2e load logs ps clean bootstrap publish-check publish-export miracl-fetch miracl-ingest miracl-report
 COMPOSE = docker compose -f deploy/compose/docker-compose.yml
 PORT    ?= 8081
 
@@ -55,6 +55,9 @@ ollama-pull:    ## Pull the LLM into Ollama
 	ollama pull qwen3:8b
 
 # ── Tests ──────────────────────────────────────────────────────────────────────
+
+types:          ## Type errors against the pinned per-file budget
+	python3 -m tools.check_types
 
 test:           ## Run the unit and contract tests
 	python3 -m pytest tests/unit/ tests/contract/ -q
