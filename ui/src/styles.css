@@ -2654,6 +2654,15 @@ td .btn-sm + .btn-sm { margin-left: 6px }
   font-family: var(--font-mono); font-size: var(--fs-2xs);
   color: var(--color-text-muted); margin: 0;
 }
+/* Each run on its own line, for the case where the pair disagrees about its
+   dataset or its question count. Run together on one line the two halves read
+   as one description of one thing. */
+.page-sub-line { display: block; }
+
+/* The comparability findings. The finding rows bring their own hairline, and
+   the last one would otherwise draw a rule against the panel's own edge. */
+.cmp-compat .find-row:last-child { border-bottom: none; padding-bottom: 0; }
+.cmp-compat .find-row:first-of-type { padding-top: 8px; }
 
 /* The page header: the heading and its explanatory caption share a baseline,
    with the actions on the right. A caption under the heading read as a second

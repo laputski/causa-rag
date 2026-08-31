@@ -9,13 +9,15 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # One definition of the refusal-phrase pattern, in core/eval/detectors.py. This
 # file used to keep its own copy, and the two had drifted: the copy here matched
 # four phrasings where the original matched eight, so the same answer counted as
 # a refusal in the diagnostics panel and not in the funnel diagnosis beside it.
 from core.eval.detectors import NOT_FOUND_RE as _NOT_FOUND
+from core.eval.regression import PairedDiffReport
+from core.experiment.compare import CompatWarning, check_comparability
 from core.experiment.compare import compare as do_compare
 from core.experiment.config import ExperimentConfig
 from core.experiment.runner import ExperimentResult, ExperimentRunner
@@ -130,6 +132,31 @@ async def _get_results() -> dict[str, ExperimentResult]:
         except Exception:
             pass
     return results
+
+
+async def _get_one_result(run_id: str) -> ExperimentResult | None:
+    """One run by id, without reading every other run to find it.
+
+    `_get_results` above loads and parses the whole store, which is the right
+    trade for the list and for a comparison that is about to resample. The
+    pre-flight check runs on every change of either selector, and a run
+    document carries all of its question results, so paying for the entire
+    store there would make choosing a pair slower than comparing one.
+    """
+    try:
+        import adapters.mongodb as mdb
+        doc = await mdb.find_one("experiment_runs", {"run_id": run_id})
+        if doc:
+            return _parse_result(doc, doc.get("run_id", run_id))
+    except Exception:
+        pass
+    path = _STORE_DIR / f"{run_id}.json"
+    if path.exists():
+        try:
+            return _parse_result(json.loads(path.read_text(encoding="utf-8")), run_id)
+        except Exception:
+            return None
+    return None
 
 
 # ── Dataset loader ────────────────────────────────────────────────────────────
@@ -396,7 +423,10 @@ class ExperimentListItem(BaseModel):
 
 
 class CompareRequest(BaseModel):
-    ids: list[str]
+    # Exactly two. The endpoint reads ids[0] and ids[1], so a single id used to
+    # raise IndexError and surface as a 500, and a third id was dropped in
+    # silence. Both now fail validation with a 422 that says which.
+    ids: list[str] = Field(..., min_length=2, max_length=2)
     # The comparison can spend minutes resampling flipped questions
     # (up to _MAX_RESAMPLE_FLIPS × _RESAMPLE_N pipeline runs) with nothing on
     # screen but a spinner. The client picks an id, listens on the existing
@@ -928,6 +958,77 @@ async def _resample_flip_verdicts(
     return await asyncio.to_thread(_sample_all)
 
 
+def _run_facts(result: ExperimentResult) -> dict[str, Any]:
+    """What a reader needs to see which two runs are on the table.
+
+    `n_questions` here is how many questions the run actually answered. The
+    stored field is the dataset's planned total, which a stopped run never
+    reaches, and comparing a planned total against an answered one would show
+    a short run as a different dataset.
+    """
+    return {
+        "run_id": result.run_id,
+        "dataset_name": result.config.dataset_name,
+        "n_questions": len(result.question_results),
+        "realm_id": result.realm_id,
+        "corpus_id": result.config.corpus_id,
+        "stopped": result.stopped,
+    }
+
+
+def _paired_between(
+    before: ExperimentResult, after: ExperimentResult,
+) -> tuple[PairedDiffReport, dict[str, Any], dict[str, Any]]:
+    """The per-question pairing plus both payloads it was computed from.
+
+    Pure and free of I/O, so the pre-flight check can run it as readily as the
+    full comparison does. Shared by both so the two can never disagree on how
+    many questions a pair has in common.
+    """
+    from core.eval.regression import paired_diff
+    before_payload = before.to_dict()
+    after_payload = after.to_dict()
+    _attach_funnel(before_payload["question_results"])
+    _attach_funnel(after_payload["question_results"])
+    paired = paired_diff(before_payload["question_results"], after_payload["question_results"])
+    return paired, before_payload, after_payload
+
+
+def _comparability(
+    before: ExperimentResult, after: ExperimentResult, paired: PairedDiffReport,
+    warnings: list[CompatWarning],
+) -> dict[str, Any]:
+    return {
+        "comparable": all(w.severity != "error" for w in warnings),
+        "matched": len(paired.fixed) + len(paired.flips) + len(paired.unchanged),
+        "only_in_before": len(paired.only_in_before),
+        "only_in_after": len(paired.only_in_after),
+        "before": _run_facts(before),
+        "after": _run_facts(after),
+        "warnings": [w.to_dict() for w in warnings],
+    }
+
+
+@router.get("/compare/preflight")
+async def compare_preflight(a: str, b: str) -> dict[str, Any]:
+    """Whether these two runs can be compared, before anyone compares them.
+
+    Answers the same question POST /experiments/compare answers on its way
+    past, through the same `check_comparability`, so the picker and the report
+    can never state different things about one pair. No resampling and no LLM
+    here: this reads two stored runs and intersects their question ids.
+    """
+    from fastapi import HTTPException
+    before = await _get_one_result(a)
+    after = await _get_one_result(b)
+    missing = [i for i, r in ((a, before), (b, after)) if r is None]
+    if missing:
+        raise HTTPException(status_code=404, detail=f"Runs not found: {missing}")
+    assert before is not None and after is not None
+    paired, _, _ = _paired_between(before, after)
+    return _comparability(before, after, paired, check_comparability(before, after, paired))
+
+
 @router.post("/compare")
 async def compare_experiments(body: CompareRequest) -> dict[str, Any]:
     # Everything the comparison does is arithmetic over two stored runs except
@@ -970,12 +1071,8 @@ async def _compare_experiments(
     # aggregate-only comparison above: an aggregate metric_delta can stay
     # within threshold while a fix that helped some questions broke others
     # (averaged away), which is exactly the regression this is meant to catch.
-    from core.eval.regression import confirm_flips, paired_diff
-    before_payload = before.to_dict()
-    after_payload = after.to_dict()
-    _attach_funnel(before_payload["question_results"])
-    _attach_funnel(after_payload["question_results"])
-    paired = paired_diff(before_payload["question_results"], after_payload["question_results"])
+    from core.eval.regression import confirm_flips
+    paired, before_payload, after_payload = _paired_between(before, after)
 
     # A flip reported from a single before/after sample can be
     # generation-metric noise rather than a real regression; resample each
@@ -1015,8 +1112,16 @@ async def _compare_experiments(
             "funnel_after": ((after_by_id.get(qid) or {}).get("funnel") or {}).get("layer", ""),
         }
 
+    # Computed after the resample pass, so the counts here and the counts on
+    # screen come from one object. Resampling moves ids between flips and
+    # unchanged and leaves the overlap itself alone, so no rule above changes
+    # its mind because of it.
+    report.compatibility = check_comparability(before, after, paired)
+    compatibility = _comparability(before, after, paired, report.compatibility)
+
     return {
         "config_diff": report.config_diff,
+        "compatibility": compatibility,
         "metric_deltas": [
             {
                 "metric": d.metric, "before": d.before, "after": d.after, "delta": d.delta,

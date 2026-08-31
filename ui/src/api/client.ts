@@ -402,20 +402,63 @@ export interface PairedDiffResult {
   // like "19349990" says nothing on its own; this is what lets the UI show
   // the actual question text and which funnel layer it moved between.
   questions: Record<string, { question: string; funnel_before: string; funnel_after: string }>
-  // Resample-based flip confirmation — a flip
+  // Resample-based flip confirmation. A flip
   // `confirm_flips` reclassifies as noise is already moved out of `flips`
   // into `unchanged` server-side; these two fields are transparency only,
   // so the UI can tell "no flips" apart from "resampling quietly absorbed
   // some" instead of both rendering identically.
   resample_attempted?: boolean
   noise_filtered?: string[]
+  // The questions that exist on one side only. Pairing skips them, which is
+  // right, and reporting nothing about them was not: with zero overlap every
+  // group came back empty and read as "the change moved no question".
+  // Optional so a stored response from before this field still types.
+  only_in_before?: string[]
+  only_in_after?: string[]
+}
+
+/** One reason the pair may not be measuring the same thing. Same shape as
+ *  DetectorItem plus `params`: the UI renders its own sentence from `id` and
+ *  `params`, and falls back to the server's English `title` for an id it does
+ *  not know yet. */
+export interface CompatWarning {
+  id: string
+  severity: 'ok' | 'info' | 'warn' | 'error'
+  title: string
+  detail: string
+  params?: Record<string, unknown>
+  action?: string
+}
+
+export interface RunFacts {
+  run_id: string
+  dataset_name: string
+  /** How many questions the run answered, which a stopped run leaves below
+   *  the dataset's planned total. */
+  n_questions: number
+  realm_id: string
+  corpus_id: string
+  stopped: boolean
+}
+
+export interface Comparability {
+  comparable: boolean
+  matched: number
+  only_in_before: number
+  only_in_after: number
+  before: RunFacts
+  after: RunFacts
+  warnings: CompatWarning[]
 }
 
 export interface CompareResult {
   config_diff: Record<string, { before: unknown; after: unknown }>
-  metric_deltas: { metric: string; before: number; after: number; delta: number; delta_pct: number | null }[]
+  // null where the metric was never measured on that side, which is a
+  // different statement from measuring zero.
+  metric_deltas: { metric: string; before: number | null; after: number | null; delta: number | null; delta_pct: number | null }[]
   summary: string
   paired_diff: PairedDiffResult
+  compatibility?: Comparability
 }
 
 export interface RegistryEntry {
@@ -658,9 +701,16 @@ export const api = {
       return req<ExperimentItem[]>('/experiments' + (q ? `?${q}` : ''))
     },
     get: (id: string) => req<ExperimentDetail>(`/experiments/${id}`),
-    // `progressId` is the client's own — it has to exist before the request
+    // `progressId` is the client's own, and it has to exist before the request
     // is sent, because the socket it names is what reports the comparison
     // while the request is still open (see ComparisonPage).
+    // Whether a pair can be compared at all, asked before comparing. Same
+    // rules as the report itself, so the picker and the report cannot
+    // disagree about one pair.
+    comparePreflight: (a: string, b: string) =>
+      req<Comparability>(
+        `/experiments/compare/preflight?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`,
+      ),
     compare: (ids: string[], progressId?: string) =>
       req<CompareResult>('/experiments/compare', {
         method: 'POST', body: JSON.stringify({ ids, progress_id: progressId }),

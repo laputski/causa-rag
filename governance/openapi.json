@@ -544,6 +544,60 @@
         }
       }
     },
+    "/experiments/compare/preflight": {
+      "get": {
+        "tags": [
+          "experiments"
+        ],
+        "summary": "Compare Preflight",
+        "description": "Whether these two runs can be compared, before anyone compares them.\n\nAnswers the same question POST /experiments/compare answers on its way\npast, through the same `check_comparability`, so the picker and the report\ncan never state different things about one pair. No resampling and no LLM\nhere: this reads two stored runs and intersects their question ids.",
+        "operationId": "compare_preflight_experiments_compare_preflight_get",
+        "parameters": [
+          {
+            "name": "a",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "A"
+            }
+          },
+          {
+            "name": "b",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "B"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Compare Preflight Experiments Compare Preflight Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/experiments/compare": {
       "post": {
         "tags": [
@@ -5831,6 +5885,8 @@
               "type": "string"
             },
             "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
             "title": "Ids"
           },
           "progress_id": {
