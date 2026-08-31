@@ -1,8 +1,8 @@
-"""Regression guard — baseline-vs-run comparison.
+"""Regression guard: baseline-vs-run comparison.
 
 Shared by the CI eval gate (`eval/gate.py`) and the interactive gateway so an
 engineer sees "this run regressed against your baseline" inside the debug loop,
-not only in CI. Pure / deterministic — no LLM, no I/O.
+not only in CI. Pure and deterministic: no LLM, no I/O.
 """
 from __future__ import annotations
 
@@ -113,7 +113,7 @@ def compare(
             # so nothing here is comparing it any more. Skipping quietly is
             # how a guard stops guarding without anyone noticing: the report
             # comes back green over a shorter list than the one that was
-            # pinned. Recorded rather than raised, because a metric can
+            # pinned. Recorded here and not raised, because a metric can
             # legitimately vanish — a retrieval-only run has no answer to
             # score — and deciding that is the caller's, not this module's.
             unchecked.append(metric)

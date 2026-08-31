@@ -3,7 +3,7 @@
 Until now every index in every language was created with the Russian and
 Belarusian analyser. Arabic text was stemmed by Russian rules and filtered
 through Russian stop words; English was too. BM25 kept returning results, which
-is what made it hard to see — the numbers were not low, they were meaningless,
+is what made it hard to see. The numbers were not low, they were meaningless,
 and every hybrid merge inherited that.
 
 The second half matters as much as the first. An index carries its analyser for

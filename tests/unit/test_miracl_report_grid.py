@@ -1,10 +1,10 @@
-"""eval/miracl/report.py — the grid's own settings, checked without infrastructure.
+"""eval/miracl/report.py: the grid's own settings, checked without infrastructure.
 
 The run itself needs Qdrant, OpenSearch and 25 GB of weights. What can be
 held here is everything that decides what the run measures: that no row
 generates, that the reranked and unreranked halves see the same candidate
 window, and that a metric nobody measured reaches the published table as a
-gap rather than as a zero.
+gap and never as a zero.
 """
 from __future__ import annotations
 
@@ -169,7 +169,7 @@ def _cands(n: int):
 
 def test_memoised_reranker_returns_exactly_what_the_inner_one_did():
     """The saving is only legitimate while the answer is identical, scores
-    and all — the pipeline cuts by position and the evaluator reads score."""
+    and all, because the pipeline cuts by position and the evaluator reads score."""
     inner = _CountingReranker()
     memo = report._MemoisingReranker(inner)
     cands = _cands(5)

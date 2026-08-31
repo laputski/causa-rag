@@ -1,7 +1,7 @@
 # Configuration Report: retrieval on MIRACL
 
 What changes when you change a RAG's retrieval, measured on a public
-multilingual benchmark rather than on a demo corpus. Languages: ar, en, ru.
+multilingual benchmark, not on a demo corpus. Languages: ar, en, ru.
 Questions: ar 2896, en 799, ru 1252, every question in the dev split.
 
 ## Why this replaced the demo corpus
@@ -12,7 +12,7 @@ anyone opened the file.
 
 Half of it was also wrong, and that surfaced only while preparing this
 report. **The demo corpus is English, and its sparse index was built with a
-Russian analyser** — the platform hardcoded one analyser for every corpus,
+Russian analyser**, because the platform hardcoded one analyser for every corpus,
 whatever language it held. Checked against the running index:
 `approving purchases requires evidence` tokenises to
 `approving · purchases · requires · evidence`, where an English analyser
@@ -21,7 +21,7 @@ did not match a document saying "approving purchases".
 
 Dense retrieval was unaffected, since the embedder does not consult an
 analyser. BM25 and every hybrid configuration on that corpus were measuring
-something broken. It is recorded here rather than quietly fixed because a
+something broken. It is recorded here, and was not quietly fixed, because a
 measurement platform that cannot say where its own numbers came from has
 nothing to offer anyone else's.
 
@@ -101,9 +101,9 @@ Identical for every row unless the row says otherwise.
 
 Numbers are means over the questions that produced them. A cell reading
 "not measured" is a metric this run had no basis to compute, left empty
-rather than filled with a zero. The last column counts questions the run
+and was not filled with a zero. The last column counts questions the run
 could not answer at all; a row with failures is an average over a subset,
-and the count is printed rather than folded into the mean.
+so the count is printed beside it and never folded into the mean.
 
 ## Reading
 
@@ -129,7 +129,7 @@ difference to erase, erased more completely.
 | ru | 0.041 to 0.055 | 0.000 |
 | ar | 0.024 to 0.031 | 0.001 to 0.002 |
 
-The mechanism is visible in the conditions rather than hidden in the model.
+The mechanism is visible in the conditions, and hides nowhere in the model.
 Both modes hand the reranker the same fifty candidates, because the
 candidate window is held at fifty for every row. The reranker sorts them by
 its own judgement of the query, and where they came from leaves no trace in
@@ -204,9 +204,9 @@ in all three languages. Nothing in the retrieval is that good.
 
 Only judged passages are indexed, about 26 thousand of Arabic's 2.06
 million, so almost every distractor a real corpus would contain is absent.
-The number to carry away from that column is not its height but its
-flatness: it has nowhere left to move, which is exactly why the
-configurations look so close to each other.
+What to carry away from that column is its flatness: it has nowhere left
+to move, which is exactly why the configurations look so close to each
+other.
 
 **Every gap in this table is a floor on the real gap, not a measure of it.**
 A configuration that ties another here has not been shown to tie on a full

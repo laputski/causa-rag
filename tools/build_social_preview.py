@@ -38,7 +38,7 @@ def draw_card() -> Image.Image:
     lead = ImageFont.truetype(f"{GEORGIA}.ttf", 38)
     small = ImageFont.truetype(f"{GEORGIA}.ttf", 26)
 
-    # Centred rather than flush left: previews are cropped differently in
+    # Centred, not flush left: previews are cropped differently in
     # different places, and a block against the edge loses half of itself.
     content = MARK_PX + 64 + 640
     left, top = (W - content) // 2, 168
@@ -60,7 +60,7 @@ def draw_card() -> Image.Image:
     canvas.text((text_x, 476), "Runs entirely on your own machine.", font=small, fill=MUTED)
 
     # The Okabe-Ito row, the palette the platform's own diagrams use. It sits
-    # under the text rather than in a corner: a lone element at the edge reads
+    # under the text, not in a corner: a lone element at the edge reads
     # as the offcut of something, not as part of the composition.
     for i, colour in enumerate(("#0072B2", "#009E73", "#D55E00", "#CC79A7", "#E69F00")):
         canvas.rectangle([text_x + i * 40, 534, text_x + i * 40 + 28, 542], fill=rgb(colour))

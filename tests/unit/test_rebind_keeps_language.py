@@ -1,4 +1,4 @@
-"""core/experiment/runner.py — a rebound OpenSearch retriever keeps its analyser.
+"""core/experiment/runner.py: a rebound OpenSearch retriever keeps its analyser.
 
 The rebind exists to point a registry-resolved retriever at a specific
 corpus and Realm. It rebuilds the object, so every constructor argument it

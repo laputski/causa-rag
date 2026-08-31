@@ -59,7 +59,7 @@ pytestmark = pytest.mark.skipif(
 
 def test_the_document_has_a_row_for_every_measurement():
     missing = sorted(set(_rows_from_json()) - set(_rows_from_document()))
-    assert not missing, f"measured but not published: {missing}"
+    assert not missing, f"measured, yet absent from the document: {missing}"
 
 
 def test_the_document_invents_no_rows():

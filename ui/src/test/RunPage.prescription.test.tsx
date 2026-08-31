@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router-dom'
 import RunPrescription from '../components/RunPrescription'
 import type { ExperimentDetail, Prescription } from '../api/client'
 
-// Phase 4 — its stated deliverable was that the owner of an external system
+// Phase 4, whose stated deliverable was that the owner of an external system
 // receives a document they can work from. Everything for it existed on the
 // server and nothing showed it, which made the phase's own output the one
 // thing a reader could not reach.

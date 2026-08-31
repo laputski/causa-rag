@@ -8,12 +8,12 @@ image.
 
 Which is what happened. The mark's generator appended a `class` attribute to
 every rectangle after drawing it, and when the thread's class was renamed the
-guard in that step still tested the old name — so the thread took a second
+guard in that step still tested the old name, so the thread took a second
 `class`, the wordmark stopped being valid XML, and the README's first image
 stopped rendering. It was reported by a person, not by a test.
 
 The generator no longer appends anything; it writes one colour attribute per
-rectangle. This test guards the outcome rather than that particular mistake:
+rectangle. This test guards the outcome, not that particular mistake:
 whatever a future generator does, the file it writes has to parse.
 """
 
@@ -41,7 +41,7 @@ def _svgs() -> list[Path]:
 def test_there_are_assets_to_check() -> None:
     """A test that checks nothing passes for the wrong reason.
 
-    If the folders move, this fails rather than quietly guarding an empty set.
+    If the folders move, this fails instead of quietly guarding an empty set.
     """
     assert _svgs(), f"no SVG found under {', '.join(PUBLISHED)}"
 

@@ -1,8 +1,8 @@
-"""core/pipeline.py — retrieve(): the search half, stopped before the model.
+"""core/pipeline.py, retrieve(): the search half, stopped before the model.
 
 core/experiment/runner.py switches a run to retrieval-only by asking whether
 its pipeline has a `retrieve` method. The in-process pipeline had none, so
-`retrieval_only: true` was accepted and quietly ignored — every run still
+`retrieval_only: true` was accepted and quietly ignored, so every run still
 generated. These tests hold that shut with a generator that raises when
 called, which is the only way the difference is visible from the outside:
 a run that generates and one that does not return the same shape of Answer.
@@ -173,7 +173,7 @@ def test_retrieve_records_timing():
 
 
 def test_runner_switch_sees_the_method():
-    """The exact expression at core/experiment/runner.py — the switch is a
+    """The exact expression at core/experiment/runner.py, where the switch is a
     hasattr, so an in-process pipeline without this method would take the
     generating path with no error and no log line."""
     assert hasattr(_pipeline(), "retrieve")

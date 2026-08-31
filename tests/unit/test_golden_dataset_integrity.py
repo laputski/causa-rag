@@ -7,7 +7,7 @@ The invariants are parametrised over whatever golden sets exist, so a new
 set is covered the moment it is added. The one that motivated this file had
 12 duplicate ids (same id, different question); that set has since been
 removed along with the rest of the client corpora, and the check outlived it
-because the failure mode belongs to the format rather than to one file.
+because the failure mode belongs to the format, not to one file.
 """
 from __future__ import annotations
 

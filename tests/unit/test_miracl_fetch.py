@@ -1,9 +1,9 @@
-"""eval/miracl/fetch.py — the identity chain and the retrieval pool.
+"""eval/miracl/fetch.py: the identity chain and the retrieval pool.
 
 Two claims carry the Configuration Report. The first is that a MIRACL
 docid survives the trip through the filesystem and comes back as the same
 string the golden set names, which is checked here against the real
-ingestion reader rather than a restatement of it. The second is that the
+ingestion reader, never a restatement of it. The second is that the
 pool keeps the passages a human judged and rejected: without them every
 document in the corpus answers every question, and configurations that
 differ in the field would come out equal on paper.
@@ -69,7 +69,7 @@ def test_passage_without_a_title_has_no_leading_blank_line(tmp_path):
 
 
 def test_pool_keeps_the_rejected_passages(slice_):
-    """The distractors. Their absence would not fail anything — it would
+    """The distractors. Their absence would fail nothing. It would
     quietly raise every recall number and flatten the differences the
     report exists to show."""
     assert slice_.judged == {"151236#0", "151236#1", "77#3", "904#0", "42#7", "500#0"} - {"500#0"}

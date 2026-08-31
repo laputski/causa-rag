@@ -1,13 +1,13 @@
 """The layout of the mark, defined once.
 
-The mark appears in four places — `docs/assets/logo.svg`, its dark twin, the
-wordmark, and the sidebar component — and a shape edited in one of them and
+The mark appears in four places: `docs/assets/logo.svg`, its dark twin, the
+wordmark, and the sidebar component. A shape edited in one of them and
 forgotten in the others stops being a mark and becomes four drawings. The
 coordinates therefore live here, and every output is generated from them.
 
 **What the mark says.** The funnel the platform measures, with the thread that
 came through it. Everything retrieved, what survived reranking, what reached the
-answer — and the column running down the middle in the accent colour is the part
+answer, and the column running down the middle in the accent colour is the part
 that made it all the way. Narrowing alone was ambiguous: it read as a tree or an
 arrow. The surviving thread is what turns it into a funnel.
 

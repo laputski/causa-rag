@@ -45,7 +45,7 @@ RERANKER = "cross_encoder_local"
 # outside English" when the finding is "this reranker only speaks English".
 # bge-reranker-v2-m3 is multilingual and pairs with the BGE-M3 embeddings
 # already in use. Overridable, because that is a claim the report should be
-# able to re-test rather than assume.
+# able to re-test, not one it assumes.
 RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
 
 # The candidate window, held constant across the whole grid so that
@@ -90,7 +90,7 @@ _CACHE_EVERY = 50
 
 
 class _MemoisingReranker:
-    """The reranker, with its answers remembered — within a run and across runs.
+    """The reranker, with its answers remembered within a run and across runs.
 
     Two savings, one mechanism.
 
@@ -102,7 +102,7 @@ class _MemoisingReranker:
 
     Across runs: measured on real passages, one Arabic rerank takes about
     four seconds, so a language is hours of work concentrated in the first
-    reranked configuration — the other two read that one's answers. Without
+    reranked configuration, and the other two read that one's answers. Without
     a cache on disk, "resume" means losing every hour spent inside whichever
     configuration was running, which is not resuming.
 
@@ -110,8 +110,8 @@ class _MemoisingReranker:
     on every question, and what comes back is what the wrapped reranker
     returned for that exact query and candidate set, scores included; a
     cross-encoder in eval mode is a pure function of its inputs. The key
-    carries the model name, so changing the reranker invalidates every entry
-    rather than silently replaying the old model's ranking.
+    carries the model name, so changing the reranker invalidates every entry.
+    Without that, the old model's ranking replays under the new model's name.
     """
 
     def __init__(self, inner: Any, model_name: str = "", cache_path: Path | None = None) -> None:
@@ -253,8 +253,8 @@ def indexed_count(lang: str, embedder_id: str) -> int | None:
 
     Checked before the grid starts. A corpus that was never ingested does
     not fail: every query returns nothing, every metric averages to zero,
-    and twelve rows of zeros land in the table looking like a finding about
-    retrieval rather than about an empty collection.
+    and twelve rows of zeros land in the table, where they look like a
+    finding about retrieval and are a finding about an empty collection.
 
     Three states, not two. None means the server could not be reached at
     all, which is a different problem from an empty collection and needs a
@@ -323,7 +323,7 @@ def _persist(result: Any, log: Callable[[str], None], realm_id: str = DEMO_REALM
 
     Two deliberate choices.
 
-    The Realm is set on the result after the run rather than passed into it.
+    The Realm is set on the result after the run, never passed into it.
     Handing a realm_id to the runner rebinds the retriever, and the index
     names would change to a Realm that holds none of this data. What is
     wanted here is where the run is filed, not where it read from.
@@ -341,9 +341,9 @@ def _persist(result: Any, log: Callable[[str], None], realm_id: str = DEMO_REALM
     result.run_id = f"{result.config.name}_{result.config.config_hash}"
 
     _await(_save(result))
-    # Read it back rather than trusting the write. _save swallows database
-    # errors by design, having kept a file copy, so "saved" on its own says
-    # only that nothing crashed.
+    # Read it back, because the write cannot be trusted on its own. _save
+    # swallows database errors by design, having kept a file copy, so
+    # "saved" says only that nothing crashed.
     try:
         stored = _await(mdb.find_one("experiment_runs", {"run_id": result.run_id}))
     except Exception as exc:
@@ -366,9 +366,9 @@ def run_language(
     reranker_model: str = RERANKER_MODEL, resume: bool = True,
     persist: bool = False, realm_id: str = DEMO_REALM,
 ) -> list[Row]:
-    # Imported rather than reimplemented. A second copy of the metric
-    # definitions would drift from the platform's own, and the report would
-    # then describe a scoring nobody else uses.
+    # Imported, never reimplemented. A second copy of the metric definitions
+    # would drift from the platform's own, and the report would then describe
+    # a scoring nobody else uses.
     from adapters.bge_m3 import BgeM3Embedder
     from services.api_gateway.routers.experiments import _CompositeEvaluator
 
@@ -382,8 +382,8 @@ def run_language(
         dataset.questions = dataset.questions[:limit]
 
     # Rows this language already has, from an earlier run that was stopped.
-    # Matched on the axes rather than on the name, so a renamed
-    # configuration is recomputed instead of silently reused.
+    # Matched on the axes, not on the name, so a renamed configuration is
+    # recomputed instead of silently reused.
     done: dict[tuple[str, int, bool], Row] = {}
     out = _RESULTS / f"{lang}.json"
     # A persisting run is producing screenshots over a slice of the
@@ -488,7 +488,7 @@ def _absent(rows: list[Row]) -> str:
     if not missing:
         return ""
     return (
-        "\n**Not measured yet**, and absent rather than zero: "
+        "\n**Not measured yet**, and absent from the table entirely: "
         + ", ".join(missing)
         + ". Running the same command again fills them in.\n"
     )
@@ -508,7 +508,7 @@ def _reading() -> str:
 
 
 def to_document(rows: list[Row], limit: int | None) -> str:
-    """The report itself, assembled from the run rather than written around it.
+    """The report itself, assembled from the run that produced it.
 
     The three caveats lead. They are what separates a measurement from a
     claim, and a reader who meets them in a footnote has already formed the
@@ -523,7 +523,7 @@ def to_document(rows: list[Row], limit: int | None) -> str:
     return f"""# Configuration Report: retrieval on MIRACL
 
 What changes when you change a RAG's retrieval, measured on a public
-multilingual benchmark rather than on a demo corpus. Languages: {', '.join(langs)}.
+multilingual benchmark, not on a demo corpus. Languages: {', '.join(langs)}.
 Questions: {', '.join(f'{lang} {n[lang]}' for lang in langs)}, {scope}.
 
 ## Why this replaced the demo corpus
@@ -534,7 +534,7 @@ anyone opened the file.
 
 Half of it was also wrong, and that surfaced only while preparing this
 report. **The demo corpus is English, and its sparse index was built with a
-Russian analyser** — the platform hardcoded one analyser for every corpus,
+Russian analyser**, because the platform hardcoded one analyser for every corpus,
 whatever language it held. Checked against the running index:
 `approving purchases requires evidence` tokenises to
 `approving · purchases · requires · evidence`, where an English analyser
@@ -543,7 +543,7 @@ did not match a document saying "approving purchases".
 
 Dense retrieval was unaffected, since the embedder does not consult an
 analyser. BM25 and every hybrid configuration on that corpus were measuring
-something broken. It is recorded here rather than quietly fixed because a
+something broken. It is recorded here, and was not quietly fixed, because a
 measurement platform that cannot say where its own numbers came from has
 nothing to offer anyone else's.
 
@@ -586,9 +586,9 @@ Identical for every row unless the row says otherwise.
 {_absent(rows)}
 Numbers are means over the questions that produced them. A cell reading
 "not measured" is a metric this run had no basis to compute, left empty
-rather than filled with a zero. The last column counts questions the run
+and was not filled with a zero. The last column counts questions the run
 could not answer at all; a row with failures is an average over a subset,
-and the count is printed rather than folded into the mean.
+so the count is printed beside it and never folded into the mean.
 
 {_reading()}## Reproducing it
 
@@ -629,7 +629,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--languages", nargs="*", default=list(LANGUAGES))
     ap.add_argument("--limit", type=int, default=None,
-                    help="first N questions per language — use this for a smoke run")
+                    help="first N questions per language, for a smoke run")
     ap.add_argument("--no-reranker", action="store_true",
                     help="skip the reranked half of the grid; it is the slow half")
     ap.add_argument("--persist", action="store_true",

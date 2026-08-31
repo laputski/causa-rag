@@ -16,7 +16,7 @@ def _stub_embedder_in_the_fast_layers(request, monkeypatch):
     """Keep USE_REAL_BGE_M3 out of the suites that are meant to be fast.
 
     BgeM3Embedder reads that variable, and deepeval installs itself as a
-    pytest plugin that loads `.env` — so a developer whose `.env` sets it
+    pytest plugin that loads `.env`, so a developer whose `.env` sets it
     for running the platform silently gets the real BGE-M3 inside every
     unit test. Measured on this repository: 37 seconds becomes 508, and
     tests written against the deterministic stub start asserting cosine
@@ -27,7 +27,7 @@ def _stub_embedder_in_the_fast_layers(request, monkeypatch):
     green and quick while another is slow and occasionally red, and neither
     can show the other why.
 
-    Scoped by path rather than applied everywhere: the layers below need
+    Scoped by path, not applied everywhere: the layers below need
     the real model, and switching it on is the first thing their own
     fixtures do.
     """

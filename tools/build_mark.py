@@ -3,7 +3,7 @@
 
 Run after editing `mark_layout.py`. The component in `ui/src/components/Logo.tsx`
 cannot import Python, so its rectangles are printed here for pasting: keeping
-them in step is then a copy rather than a redrawing.
+them in step is then a copy, never a redrawing.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ PUBLIC = ROOT / "ui/public"
 HEAD = """  <!-- The funnel the platform measures, with the thread that came through it:
        everything retrieved, what survived reranking, what reached the answer.
        The middle column in the accent colour is the part that made it all the
-       way, and it is what makes the narrowing read as a funnel rather than as
+       way, and it is what makes the narrowing read as a funnel instead of as
        a tree.
 
        The module and the grid are the sibling registry's, module to pitch as
@@ -34,7 +34,7 @@ def rects(indent: int = 2, thread_class: str = "thread", ink_class: str | None =
           thread_fill: str | None = None, ink_fill: str | None = None) -> str:
     """Every module as a rect, with exactly one colour attribute each.
 
-    The attribute is chosen here rather than appended afterwards. Appending is
+    The attribute is chosen here and never appended afterwards. Appending is
     what produced a duplicate `class` once already: the thread's class name
     changed and the guard in the post-processing step still tested the old one,
     so every rect took a second class and the file stopped being valid XML.
@@ -153,7 +153,7 @@ def write_favicon() -> None:
 </svg>
 """, encoding="utf-8")
     # Safari takes the touch icon reliably only as a raster, so the same
-    # geometry is drawn twice rather than relied on to convert.
+    # geometry is drawn twice, because relying on a conversion failed once.
     try:
         from PIL import Image, ImageDraw
     except ImportError:
@@ -177,7 +177,7 @@ def write_favicon() -> None:
 
 
 def print_tsx() -> None:
-    print("\n— paste into ui/src/components/Logo.tsx, Cascade() —")
+    print("\npaste into ui/src/components/Logo.tsx, Cascade()")
     for x, y, is_thread in cells():
         fill = 'var(--color-primary)' if is_thread else 'currentColor'
         print(f'      <rect x="{x}" y="{y}" width="{MODULE}" height="{MODULE}" fill="{fill}" />')

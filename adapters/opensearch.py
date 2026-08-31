@@ -5,14 +5,14 @@ Each (strategy_id) maps to its own OpenSearch index.
 **The analyser is chosen per corpus.** It used to be fixed: every index, in
 every language, was created with the Russian/Belarusian one, so an Arabic or
 English corpus was stemmed by Russian rules and filtered through Russian stop
-words. BM25 still returned something, which is what made it hard to notice —
-the numbers were not low, they were meaningless, and any hybrid merge inherited
-that.
+words. BM25 still returned something, which is what made it hard to notice.
+The numbers were not low, they were meaningless, and any hybrid merge
+inherited that.
 
 The language is only needed when the index is created: the analyser lives in
 the field mapping, so queries against an existing index inherit it. That leaves
-one hazard, and it is guarded below — an index created before ingestion, by a
-query that arrived first, freezes the wrong analyser and nothing says so.
+one hazard, guarded below: an index created before ingestion, by a query that
+arrived first, freezes the wrong analyser and nothing says so.
 """
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ _BUILT_IN = (
 )
 
 # ISO 639-1 for the built-ins, so a corpus can be named the way its
-# documents are tagged rather than the way Lucene spells the language.
+# documents are tagged, not the way Lucene spells the language.
 _ISO_639_1 = {
     "ar": "arabic", "bg": "bulgarian", "bn": "bengali", "ca": "catalan",
     "cs": "czech", "da": "danish", "de": "german", "el": "greek",
@@ -200,7 +200,7 @@ class OpenSearchRetriever:
         rules, BM25 keeps returning results, and nothing anywhere says so.
 
         That failure is exactly the kind this platform exists to catch, so it
-        is caught here rather than reported as a low score later.
+        is caught here, and never reported as a low score later.
         """
         if not self._client.indices.exists(index=self._index):
             self._client.indices.create(
@@ -222,7 +222,7 @@ class OpenSearchRetriever:
     def _existing_analyzer(self) -> str | None:
         """The analyser the index actually carries, or None if it cannot be read.
 
-        None rather than a guess: an unreadable mapping is not evidence of a
+        None, never a guess: an unreadable mapping is not evidence of a
         mismatch, and refusing to start over one would be worse than the
         problem. An index with no analyser named uses OpenSearch's default.
         """
@@ -303,7 +303,7 @@ class OpenSearchRetriever:
 
 
 class OpenSearchRetrieverStub:
-    """In-memory BM25 stub — no OpenSearch server needed for unit tests."""
+    """In-memory BM25 stub: no OpenSearch server needed for unit tests."""
 
     retriever_id = "opensearch_bm25_stub"
 

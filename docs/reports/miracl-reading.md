@@ -20,7 +20,7 @@ difference to erase, erased more completely.
 | ru | 0.041 to 0.055 | 0.000 |
 | ar | 0.024 to 0.031 | 0.001 to 0.002 |
 
-The mechanism is visible in the conditions rather than hidden in the model.
+The mechanism is visible in the conditions, and hides nowhere in the model.
 Both modes hand the reranker the same fifty candidates, because the
 candidate window is held at fifty for every row. The reranker sorts them by
 its own judgement of the query, and where they came from leaves no trace in
@@ -95,9 +95,9 @@ in all three languages. Nothing in the retrieval is that good.
 
 Only judged passages are indexed, about 26 thousand of Arabic's 2.06
 million, so almost every distractor a real corpus would contain is absent.
-The number to carry away from that column is not its height but its
-flatness: it has nowhere left to move, which is exactly why the
-configurations look so close to each other.
+What to carry away from that column is its flatness: it has nowhere left
+to move, which is exactly why the configurations look so close to each
+other.
 
 **Every gap in this table is a floor on the real gap, not a measure of it.**
 A configuration that ties another here has not been shown to tie on a full

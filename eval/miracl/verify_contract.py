@@ -13,7 +13,7 @@ back, and that loss would be invisible to anyone whose RAG only ever spoke
 to it that way.
 
 The text is compared as well as the identifiers, and that is why this is
-worth running on Arabic and Russian rather than English alone. Retrieval
+worth running on Arabic and Russian, not on English alone. Retrieval
 metrics match on source_code and article_no, so a passage mangled in a JSON
 round trip would reach the reranker and the answer while every number in
 the report stayed identical.

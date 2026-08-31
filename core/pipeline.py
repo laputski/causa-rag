@@ -141,7 +141,7 @@ class NaivePipeline:
 
     def run(self, request: QueryRequest, *, _generate: bool = True) -> Answer:
         # _generate=False is retrieve() below, not a public knob. It is a
-        # flag rather than a second method because the worth of a
+        # flag and not a second method, because the worth of a
         # retrieval-only measurement rests entirely on it measuring the
         # retrieval this pipeline actually performs; a parallel copy of
         # the search half would drift from this one, and the report would

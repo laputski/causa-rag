@@ -11,7 +11,7 @@ separator, so writing it to `151236/1.txt` makes the golden set's
 The dataset lives behind a loading script on HuggingFace, and the viewer
 answers 501 for it ("runs arbitrary Python code"), so nothing here goes
 through `datasets`. Topics and qrels are plain TSV; the corpus is gzipped
-JSONL shards, streamed and filtered rather than kept, because English alone
+JSONL shards, streamed and filtered but never kept, because English alone
 is 5 GB compressed and only about eight thousand of its passages are judged.
 
 Usage:
@@ -42,7 +42,7 @@ _SHARD = _HF + "/datasets/miracl/miracl-corpus/resolve/main/{path}"
 
 # Only `dev` has public judgements. test-a and test-b withhold theirs, so a
 # run against them would score every configuration at zero and look like a
-# broken pipeline rather than a missing answer key.
+# broken pipeline, when what is missing is the answer key.
 SPLIT = "dev"
 
 # The same shape services/ingestion/cli.py requires of a filename stem
@@ -117,7 +117,7 @@ def read_qrels(lang: str) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
     built from the relevant ones alone is a pool where every document is an
     answer, and every configuration scores near the top of it.
 
-    Per query rather than flat, because --limit selects questions and the
+    Per query and not flat, because --limit selects questions and the
     pool has to narrow with them; a flat set would have to be thrown away
     and the small run would lose exactly its distractors.
     """
@@ -162,7 +162,7 @@ def build_slice(lang: str, limit: int | None = None) -> Slice:
     positives, judged = read_qrels(lang)
 
     # Questions with no positive judgement cannot be scored; they are
-    # dropped here rather than counted as failures later.
+    # dropped here, so that nothing counts them as failures later.
     qids = sorted(q for q in topics if positives.get(q))
     if limit is not None:
         qids = qids[:limit]

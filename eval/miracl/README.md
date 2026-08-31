@@ -31,13 +31,13 @@ of this work, not part of the first.
 
 **Only the dev split.** `test-a` and `test-b` keep their judgements
 private. A run against them scores every configuration at zero, which reads
-as a broken pipeline rather than a missing answer key.
+as a broken pipeline, when what is missing is the answer key.
 
 **No generation metrics, in any language.** MIRACL ships relevance
 judgements and no reference answers. Answer similarity, faithfulness and
 refusal correctness need a reference, so the golden sets carry no
-`ground_truth` field and those metrics stay empty rather than scoring
-against an empty string. Generation is measured separately on
+`ground_truth` field and those metrics stay empty, never scoring against
+an empty string. Generation is measured separately on
 MIRAGE-Bench, which exists because MIRACL does not answer this.
 
 ## Volumes, dev split
@@ -66,7 +66,7 @@ make miracl-report                 # the whole grid
 
 Do the smoke run first.
 
-**What it costs, measured rather than guessed.** The half without the
+**What it costs, measured and not guessed.** The half without the
 reranker is four minutes for all three languages and 4947 questions. The
 reranked half is about ten hours. Reranking one candidate window takes 4.1
 seconds on Arabic and 2.5 on English, and a language's whole cost sits in
@@ -117,8 +117,8 @@ multilingual and pairs with the BGE-M3 embeddings already in use, and every
 row records which reranker produced it.
 
 **Nothing generates.** The generator slot is filled by a component that
-raises if called, so the claim is checked on every row rather than
-asserted once here.
+raises if called, so the claim is checked on every row and never merely
+asserted here.
 
 ## The contract, measured against the pipeline
 
@@ -138,7 +138,7 @@ what a RAG does with that text is its business.
 same sources, in the same order, with the same text, down both paths.
 
 The text is compared as well as the identifiers, and that is why this runs
-on Arabic and Russian rather than English alone. Retrieval metrics match on
+on Arabic and Russian, not on English alone. Retrieval metrics match on
 source_code and article_no, so a passage mangled in a JSON round trip would
 reach the reranker and the answer while every number in the report stayed
 identical.

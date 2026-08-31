@@ -7,7 +7,7 @@ against the question and the chunks. Averaged over a dataset that is three
 columns of zeros describing a generator that was never asked to speak.
 
 The Configuration Report is measured this way on every one of its rows, so
-these hold the columns out rather than explaining them in a footnote.
+these hold the columns out, so no footnote has to explain them.
 """
 from __future__ import annotations
 
