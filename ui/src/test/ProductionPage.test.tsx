@@ -42,7 +42,15 @@ function renderPage() {
 
 async function selectCorpus() {
   await waitFor(() => expect(screen.getByText('Choose a corpus')).toBeInTheDocument())
-  fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'handbook_01' } })
+  // The prompt above renders before the corpus ids do, and a change to an
+  // option the select does not offer yet is dropped in silence, so the wait
+  // is on the option rather than on the invitation to choose one.
+  // findAllByRole, because the page carries more than one select and the
+  // corpus one is the first.
+  const [select] = await screen.findAllByRole('combobox') as HTMLSelectElement[]
+  await waitFor(() =>
+    expect([...select.options].map(o => o.value)).toContain('handbook_01'))
+  fireEvent.change(select, { target: { value: 'handbook_01' } })
 }
 
 describe('ProductionPage', () => {

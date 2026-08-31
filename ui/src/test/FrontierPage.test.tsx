@@ -40,6 +40,20 @@ function renderPage() {
   return renderWithRealm(<FrontierPage />, '/frontier', 'acme')
 }
 
+/** The metric select, once the options have actually arrived.
+ *
+ * They come from a second query (`experiments.list`), and waiting on the
+ * frontier call says nothing about it: the select is rendered from the first
+ * response and holds one option until the second lands. A `fireEvent.change`
+ * to a value that is not an option yet is dropped by a controlled select
+ * without a word, which is how this raced. */
+async function metricSelect(): Promise<HTMLSelectElement> {
+  const select = await screen.findByRole('combobox') as HTMLSelectElement
+  await waitFor(() =>
+    expect([...select.options].map(o => o.value)).toContain('faithfulness'))
+  return select
+}
+
 describe('FrontierPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -72,8 +86,7 @@ describe('FrontierPage', () => {
   it('offers only quality measures the Realm has actually recorded', async () => {
     renderPage()
     await waitFor(() => expect(screen.getByText('Built-in pipeline')).toBeInTheDocument())
-    const select = screen.getByRole('combobox') as HTMLSelectElement
-    const options = [...select.options].map(o => o.value)
+    const options = [...(await metricSelect()).options].map(o => o.value)
     expect(options).toContain('faithfulness')
     expect(options).not.toContain('answer_relevancy')
   })
@@ -81,7 +94,7 @@ describe('FrontierPage', () => {
   it('re-asks for the frontier when the quality measure changes', async () => {
     renderPage()
     await waitFor(() => expect(frontierMock).toHaveBeenCalledWith('acme', 'retrieval_recall_at_k'))
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'faithfulness' } })
+    fireEvent.change(await metricSelect(), { target: { value: 'faithfulness' } })
     await waitFor(() => expect(frontierMock).toHaveBeenCalledWith('acme', 'faithfulness'))
   })
 

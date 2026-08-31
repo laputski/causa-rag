@@ -23,6 +23,20 @@ const RUN = {
   dataset_name: 'handbook.v2.full.jsonl', status: 'done' as const, realm_id: 'demo',
 }
 
+/** The stat band, once it holds `text`.
+ *
+ * The band is rendered before the run list arrives, so waiting for the
+ * element and then reading it asserts against the empty first paint. Waiting
+ * for the content is the same wait done one step later. */
+async function bandShowing(text: string) {
+  await waitFor(() => {
+    const band = document.querySelector('.stat-band')
+    expect(band).toBeTruthy()
+    expect(within(band as HTMLElement).queryByText(text)).toBeInTheDocument()
+  })
+  return within(document.querySelector('.stat-band') as HTMLElement)
+}
+
 describe('the number band on the runs page', () => {
   beforeEach(() => { listMock.mockReset(); localStorage.clear() })
 
@@ -49,10 +63,8 @@ describe('the number band on the runs page', () => {
 
     // Scoped to the band rather than the whole page: the same id also appears in
     // a table row, and a document-wide search finds both.
-    await waitFor(() => expect(document.querySelector('.stat-band')).toBeTruthy())
-    const band = within(document.querySelector('.stat-band') as HTMLElement)
     // Not the newest and not the first in the list: the marked one.
-    expect(band.getByText('ffff9999')).toBeInTheDocument()
+    expect((await bandShowing('ffff9999')).getByText('ffff9999')).toBeInTheDocument()
   })
 
   it("the best value is taken by the realm's first key metric", async () => {
@@ -63,11 +75,9 @@ describe('the number band on the runs page', () => {
     realmWithMetrics(['retrieval_recall_at_k', 'answer_similarity'])
     renderWithRealm(<ExperimentsPage />, '/experiments', 'demo')
 
-    await waitFor(() => expect(document.querySelector('.stat-band')).toBeTruthy())
-    const band = within(document.querySelector('.stat-band') as HTMLElement)
     // 0.833 on recall rather than 0.99 on similarity: the metric comes from the
     // realm's list rather than being whichever number is largest.
-    expect(band.getByText('0.833')).toBeInTheDocument()
+    expect((await bandShowing('0.833')).getByText('0.833')).toBeInTheDocument()
   })
 
   it('with no baseline the cell says so rather than showing an arbitrary run', async () => {
