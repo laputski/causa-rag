@@ -12,8 +12,15 @@ authors:
 # A paper citing one particular state should use that release's own
 # identifier, which the release page on the deposit gives.
 doi: "10.5281/zenodo.22117626"
-version: "0.2.0"
+version: "0.2.1"
 date-released: "2026-08-31"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.22210414"
+    description: >-
+      v0.2.0, the release that produced the Configuration Report's numbers.
+      Cite this one when the work depends on those numbers; the concept
+      identifier above moves with every release.
 repository-code: "https://github.com/laputski/causa-rag"
 abstract: >-
   A diagnostic bench for retrieval-augmented generation. It scores every

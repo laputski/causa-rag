@@ -598,11 +598,12 @@ make miracl-ingest
 make miracl-report
 ```
 
-Cite this report by the software's concept identifier,
-[10.5281/zenodo.22117626](https://doi.org/10.5281/zenodo.22117626), which
-always resolves to the newest release. A paper depending on these exact
-numbers should cite the identifier of the release that produced them, which
-that release's page on the deposit gives; these are the numbers of v0.2.0.
+These numbers were produced by v0.2.0,
+[10.5281/zenodo.22210414](https://doi.org/10.5281/zenodo.22210414). Work
+that depends on them should cite that identifier, because it names one
+fixed state of the software. To cite the software itself, use the concept
+identifier [10.5281/zenodo.22117626](https://doi.org/10.5281/zenodo.22117626),
+which always resolves to the newest release.
 
 Data: MIRACL, Zhang et al., TACL 2023, arXiv:2210.09984, Apache-2.0.
 Passage text is Wikipedia under CC BY-SA 3.0 and is not redistributed;
