@@ -12,6 +12,8 @@ authors:
 # A paper citing one particular state should use that release's own
 # identifier, which the release page on the deposit gives.
 doi: "10.5281/zenodo.22117626"
+version: "0.2.0"
+date-released: "2026-08-31"
 repository-code: "https://github.com/laputski/causa-rag"
 abstract: >-
   A diagnostic bench for retrieval-augmented generation. It scores every
@@ -24,7 +26,8 @@ abstract: >-
   comment becomes a classified diagnosis and a reusable golden question. Any RAG
   can connect over a versioned HTTP contract, and diagnostic depth follows what
   that system reports about itself. No document, question or answer leaves the
-  host it runs on.
+  host it runs on. Version 0.2.0 adds the first Configuration Report, measured
+  on the MIRACL benchmark over 4947 questions in Arabic, Russian and English.
 keywords:
   - retrieval-augmented generation
   - evaluation
