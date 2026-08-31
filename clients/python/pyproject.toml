@@ -6,13 +6,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "causa-rag-client"
-# This version number IS the contract version this
-# client speaks (see causa_rag_client/client.py:CONTRACT_VERSION). A
-# breaking change to the platform's external-RAG contract (core/models.py)
-# bumps both together; run_experiment()/register_rag() refuse to proceed
-# against a platform whose /external-rag-spec reports a different version,
-# rather than silently sending a request the platform can't parse.
-version = "1.0.0"
+# The package's own version, which is NOT the contract version. This comment
+# used to claim it was, and that had already stopped being true: the package
+# read 1.0.0 while the platform's /external-rag-spec reported 1.1.0. The
+# contract version lives in causa_rag_client/client.py:CONTRACT_VERSION and
+# moves with the contract, not with this package. check_contract_version()
+# refuses to proceed against a platform whose major version differs, rather
+# than silently sending a request the platform cannot parse.
+#
+# Starting at 0.1.0 rather than 1.0.0 is deliberate. The contract has had one
+# external implementer so far, this project's own reference server, so
+# calling this client stable would be a promise made on a single data point.
+version = "0.1.0"
 description = "Thin HTTP client for the RAG debugging/eval platform — register an external RAG, upload datasets, run experiments, fetch results."
 readme = "README.md"
 license = "Apache-2.0"
