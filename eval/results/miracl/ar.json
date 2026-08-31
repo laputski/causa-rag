@@ -17,6 +17,22 @@
   {
     "language": "ar",
     "mode": "naive",
+    "top_k": 5,
+    "reranker": true,
+    "reranker_model": "BAAI/bge-reranker-v2-m3",
+    "n_questions": 2896,
+    "n_failed": 0,
+    "seconds": 16017.0,
+    "metrics": {
+      "retrieval_recall_at_k": 0.9081,
+      "retrieval_precision_at_k": 0.3384,
+      "retrieval_average_precision": 0.8129,
+      "pre_rerank_recall_at_k": 0.8869
+    }
+  },
+  {
+    "language": "ar",
+    "mode": "naive",
     "top_k": 10,
     "reranker": false,
     "reranker_model": "",
@@ -32,6 +48,22 @@
   {
     "language": "ar",
     "mode": "naive",
+    "top_k": 10,
+    "reranker": true,
+    "reranker_model": "BAAI/bge-reranker-v2-m3",
+    "n_questions": 2896,
+    "n_failed": 0,
+    "seconds": 31.3,
+    "metrics": {
+      "retrieval_recall_at_k": 0.9734,
+      "retrieval_precision_at_k": 0.1897,
+      "retrieval_average_precision": 0.8385,
+      "pre_rerank_recall_at_k": 0.9603
+    }
+  },
+  {
+    "language": "ar",
+    "mode": "naive",
     "top_k": 20,
     "reranker": false,
     "reranker_model": "",
@@ -42,6 +74,22 @@
       "retrieval_recall_at_k": 0.9828,
       "retrieval_precision_at_k": 0.0961,
       "retrieval_average_precision": 0.8146
+    }
+  },
+  {
+    "language": "ar",
+    "mode": "naive",
+    "top_k": 20,
+    "reranker": true,
+    "reranker_model": "BAAI/bge-reranker-v2-m3",
+    "n_questions": 2896,
+    "n_failed": 0,
+    "seconds": 20.8,
+    "metrics": {
+      "retrieval_recall_at_k": 0.99,
+      "retrieval_precision_at_k": 0.097,
+      "retrieval_average_precision": 0.8417,
+      "pre_rerank_recall_at_k": 0.9828
     }
   },
   {
@@ -62,6 +110,22 @@
   {
     "language": "ar",
     "mode": "hybrid_rrf",
+    "top_k": 5,
+    "reranker": true,
+    "reranker_model": "BAAI/bge-reranker-v2-m3",
+    "n_questions": 2896,
+    "n_failed": 0,
+    "seconds": 16584.2,
+    "metrics": {
+      "retrieval_recall_at_k": 0.911,
+      "retrieval_precision_at_k": 0.3392,
+      "retrieval_average_precision": 0.8142,
+      "pre_rerank_recall_at_k": 0.8768
+    }
+  },
+  {
+    "language": "ar",
+    "mode": "hybrid_rrf",
     "top_k": 10,
     "reranker": false,
     "reranker_model": "",
@@ -77,6 +141,22 @@
   {
     "language": "ar",
     "mode": "hybrid_rrf",
+    "top_k": 10,
+    "reranker": true,
+    "reranker_model": "BAAI/bge-reranker-v2-m3",
+    "n_questions": 2896,
+    "n_failed": 0,
+    "seconds": 48.4,
+    "metrics": {
+      "retrieval_recall_at_k": 0.9764,
+      "retrieval_precision_at_k": 0.1903,
+      "retrieval_average_precision": 0.8399,
+      "pre_rerank_recall_at_k": 0.965
+    }
+  },
+  {
+    "language": "ar",
+    "mode": "hybrid_rrf",
     "top_k": 20,
     "reranker": false,
     "reranker_model": "",
@@ -87,6 +167,22 @@
       "retrieval_recall_at_k": 0.9915,
       "retrieval_precision_at_k": 0.097,
       "retrieval_average_precision": 0.7904
+    }
+  },
+  {
+    "language": "ar",
+    "mode": "hybrid_rrf",
+    "top_k": 20,
+    "reranker": true,
+    "reranker_model": "BAAI/bge-reranker-v2-m3",
+    "n_questions": 2896,
+    "n_failed": 0,
+    "seconds": 36.4,
+    "metrics": {
+      "retrieval_recall_at_k": 0.9946,
+      "retrieval_precision_at_k": 0.0974,
+      "retrieval_average_precision": 0.8433,
+      "pre_rerank_recall_at_k": 0.9915
     }
   }
 ]

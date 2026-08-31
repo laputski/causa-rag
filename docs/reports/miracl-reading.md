@@ -1,5 +1,5 @@
-Written by hand from the table above, and revised as rows arrive. What is
-still being measured is named as such rather than assumed.
+Written by hand from the table above, and revised as rows arrived. All 36
+configurations are measured: 4947 questions, no failures.
 
 ### The reranker makes the retrieval mode stop mattering
 
@@ -14,6 +14,12 @@ depending on context size. Reranked, it is **0.000 at all three**: 0.788
 against 0.788, 0.845 against 0.845, 0.852 against 0.852. A larger
 difference to erase, erased more completely.
 
+| Language | Gap without a reranker | With one |
+|---|---:|---:|
+| en | 0.024 | 0.001 |
+| ru | 0.041 to 0.055 | 0.000 |
+| ar | 0.024 to 0.031 | 0.001 to 0.002 |
+
 The mechanism is visible in the conditions rather than hidden in the model.
 Both modes hand the reranker the same fifty candidates, because the
 candidate window is held at fifty for every row. The reranker sorts them by
@@ -27,10 +33,16 @@ about ranking and becomes a question about what enters the window.** Hybrid
 is marginally ahead there: 0.998 against 0.996 recall at twenty in English,
 and ahead at twenty in Russian and Arabic without a reranker as well.
 
-Two cautions on that. The reranked Arabic rows are still being measured,
-and if the sign differs there, the divergence is the finding rather than
-this convergence. And the pool is short, which compresses every gap in the
-table, this one included.
+Arabic closes it. Its unreranked gap runs 0.024 to 0.031, and reranked it
+is 0.001, 0.001, 0.002 at the three context sizes. Three languages, three
+morphologies, one result, and the two that were measured last were measured
+after this paragraph had already been written about the first.
+
+One caution stands: the pool is short, and that compresses every gap in the
+table, this one included. What is being said here is that the reranker
+erases a difference that was already small. On a full corpus the difference
+it has to erase would be larger, and whether it still erases all of it is
+not something this run can answer.
 
 ### Adding BM25 costs ranking and buys recall
 
@@ -55,13 +67,18 @@ English dense at twenty gains .057 mean average precision from reranking.
 Hybrid gains .082. Russian dense gains .058. Every one of those is larger
 than the .024 that separates the two retrieval modes without a reranker.
 
+Arabic gains 0.027 on dense and 0.053 on hybrid, the smallest of the three
+and still larger than the 0.024 that separates its two retrieval modes.
+
 The ordering of effort follows: a reranker earns more than a merge
-strategy, on this pool, in every language measured so far.
+strategy, on this pool, in all three languages.
 
 ### Arabic was not the hard case
 
 Arabic scored the highest ranking precision of the three languages,
-ahead of Russian and English, in every unreranked configuration.
+ahead of Russian and English, in every unreranked configuration. Reranked,
+Russian overtakes it (0.852 against 0.842 at twenty) while English stays
+behind both.
 
 This is worth stating because the expectation ran the other way, mine
 included. It says nothing about Arabic retrieval in general: it says that

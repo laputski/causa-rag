@@ -41,11 +41,17 @@ Identical for every row unless the row says otherwise.
 | Language | Mode | top-k | Reranker | Recall@k | Precision@k | MAP | Questions | Failed |
 |---|---|---:|---|---:|---:|---:|---:|---:|
 | ar | hybrid_rrf | 5 | off | 0.877 | 0.320 | 0.753 | 2896 | 0 |
+| ar | hybrid_rrf | 5 | on | 0.911 | 0.339 | 0.814 | 2896 | 0 |
 | ar | hybrid_rrf | 10 | off | 0.965 | 0.187 | 0.785 | 2896 | 0 |
+| ar | hybrid_rrf | 10 | on | 0.976 | 0.190 | 0.840 | 2896 | 0 |
 | ar | hybrid_rrf | 20 | off | 0.992 | 0.097 | 0.790 | 2896 | 0 |
+| ar | hybrid_rrf | 20 | on | 0.995 | 0.097 | 0.843 | 2896 | 0 |
 | ar | naive | 5 | off | 0.887 | 0.330 | 0.784 | 2896 | 0 |
+| ar | naive | 5 | on | 0.908 | 0.338 | 0.813 | 2896 | 0 |
 | ar | naive | 10 | off | 0.960 | 0.186 | 0.810 | 2896 | 0 |
+| ar | naive | 10 | on | 0.973 | 0.190 | 0.839 | 2896 | 0 |
 | ar | naive | 20 | off | 0.983 | 0.096 | 0.815 | 2896 | 0 |
+| ar | naive | 20 | on | 0.990 | 0.097 | 0.842 | 2896 | 0 |
 | en | hybrid_rrf | 5 | off | 0.771 | 0.400 | 0.620 | 799 | 0 |
 | en | hybrid_rrf | 5 | on | 0.837 | 0.440 | 0.721 | 799 | 0 |
 | en | hybrid_rrf | 10 | off | 0.958 | 0.277 | 0.707 | 799 | 0 |
@@ -72,8 +78,6 @@ Identical for every row unless the row says otherwise.
 | ru | naive | 20 | on | 0.992 | 0.141 | 0.852 | 1252 | 0 |
 
 
-**Not measured yet**, and absent rather than zero: ar naive k=5 reranker on, ar naive k=10 reranker on, ar naive k=20 reranker on, ar hybrid_rrf k=5 reranker on, ar hybrid_rrf k=10 reranker on, ar hybrid_rrf k=20 reranker on. Running the same command again fills them in.
-
 Numbers are means over the questions that produced them. A cell reading
 "not measured" is a metric this run had no basis to compute, left empty
 rather than filled with a zero. The last column counts questions the run
@@ -82,8 +86,8 @@ and the count is printed rather than folded into the mean.
 
 ## Reading
 
-Written by hand from the table above, and revised as rows arrive. What is
-still being measured is named as such rather than assumed.
+Written by hand from the table above, and revised as rows arrived. All 36
+configurations are measured: 4947 questions, no failures.
 
 ### The reranker makes the retrieval mode stop mattering
 
@@ -98,6 +102,12 @@ depending on context size. Reranked, it is **0.000 at all three**: 0.788
 against 0.788, 0.845 against 0.845, 0.852 against 0.852. A larger
 difference to erase, erased more completely.
 
+| Language | Gap without a reranker | With one |
+|---|---:|---:|
+| en | 0.024 | 0.001 |
+| ru | 0.041 to 0.055 | 0.000 |
+| ar | 0.024 to 0.031 | 0.001 to 0.002 |
+
 The mechanism is visible in the conditions rather than hidden in the model.
 Both modes hand the reranker the same fifty candidates, because the
 candidate window is held at fifty for every row. The reranker sorts them by
@@ -111,10 +121,16 @@ about ranking and becomes a question about what enters the window.** Hybrid
 is marginally ahead there: 0.998 against 0.996 recall at twenty in English,
 and ahead at twenty in Russian and Arabic without a reranker as well.
 
-Two cautions on that. The reranked Arabic rows are still being measured,
-and if the sign differs there, the divergence is the finding rather than
-this convergence. And the pool is short, which compresses every gap in the
-table, this one included.
+Arabic closes it. Its unreranked gap runs 0.024 to 0.031, and reranked it
+is 0.001, 0.001, 0.002 at the three context sizes. Three languages, three
+morphologies, one result, and the two that were measured last were measured
+after this paragraph had already been written about the first.
+
+One caution stands: the pool is short, and that compresses every gap in the
+table, this one included. What is being said here is that the reranker
+erases a difference that was already small. On a full corpus the difference
+it has to erase would be larger, and whether it still erases all of it is
+not something this run can answer.
 
 ### Adding BM25 costs ranking and buys recall
 
@@ -139,13 +155,18 @@ English dense at twenty gains .057 mean average precision from reranking.
 Hybrid gains .082. Russian dense gains .058. Every one of those is larger
 than the .024 that separates the two retrieval modes without a reranker.
 
+Arabic gains 0.027 on dense and 0.053 on hybrid, the smallest of the three
+and still larger than the 0.024 that separates its two retrieval modes.
+
 The ordering of effort follows: a reranker earns more than a merge
-strategy, on this pool, in every language measured so far.
+strategy, on this pool, in all three languages.
 
 ### Arabic was not the hard case
 
 Arabic scored the highest ranking precision of the three languages,
-ahead of Russian and English, in every unreranked configuration.
+ahead of Russian and English, in every unreranked configuration. Reranked,
+Russian overtakes it (0.852 against 0.842 at twenty) while English stays
+behind both.
 
 This is worth stating because the expectation ran the other way, mine
 included. It says nothing about Arabic retrieval in general: it says that
