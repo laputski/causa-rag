@@ -526,6 +526,27 @@ What changes when you change a RAG's retrieval, measured on a public
 multilingual benchmark rather than on a demo corpus. Languages: {', '.join(langs)}.
 Questions: {', '.join(f'{lang} {n[lang]}' for lang in langs)}, {scope}.
 
+## Why this replaced the demo corpus
+
+Every number this platform had published came from a synthetic handbook of
+eight documents and fifteen questions. As evidence it fell apart the moment
+anyone opened the file.
+
+Half of it was also wrong, and that surfaced only while preparing this
+report. **The demo corpus is English, and its sparse index was built with a
+Russian analyser** — the platform hardcoded one analyser for every corpus,
+whatever language it held. Checked against the running index:
+`approving purchases requires evidence` tokenises to
+`approving · purchases · requires · evidence`, where an English analyser
+gives `approv · purchas · requir · evid`. A query for "approve purchase"
+did not match a document saying "approving purchases".
+
+Dense retrieval was unaffected, since the embedder does not consult an
+analyser. BM25 and every hybrid configuration on that corpus were measuring
+something broken. It is recorded here rather than quietly fixed because a
+measurement platform that cannot say where its own numbers came from has
+nothing to offer anyone else's.
+
 ## Read these three things first
 
 **The pool is the judged passages, not the whole corpus.** Arabic MIRACL
