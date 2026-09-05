@@ -34,6 +34,7 @@ import DatasetsPage       from './pages/DatasetsPage'
 import GuidePage          from './pages/GuidePage'
 import DomainPacksPage    from './pages/DomainPacksPage'
 import RealmsPage         from './pages/RealmsPage'
+import AtlasPage from './pages/AtlasPage'
 import RealmResourcesPage from './pages/RealmResourcesPage'
 import OverviewPage        from './pages/OverviewPage'
 import WelcomePage         from './pages/WelcomePage'
@@ -285,6 +286,7 @@ function Sidebar({ onOpenCommands, onOpenShortcuts }: {
           matchPaths={['/data/presets']}
         />
         <NavItem to="/settings/resources" label={t('nav.resources')} icon={Cpu} disabled={noRealms} />
+        <NavItem to="/atlas"          label={t('nav.atlas')}         icon={BookOpen} />
         <NavItem to="/domain-packs"   label={t('nav.domainPacks')}   icon={Puzzle} />
         <NavItem to="/realms"         label={t('nav.realms')}        icon={Settings} />
 
@@ -385,6 +387,7 @@ function AppShell() {
             <Route path="/prompts"            element={<PromptsPage />} />
             <Route path="/chat"               element={<ChatPage />} />
             <Route path="/guide"              element={<GuidePage />} />
+            <Route path="/atlas"              element={<AtlasPage />} />
             <Route path="/domain-packs"       element={<DomainPacksPage />} />
             <Route path="/realms"             element={<RealmsPage />} />
             <Route path="/settings/resources" element={<RealmResourcesPage />} />

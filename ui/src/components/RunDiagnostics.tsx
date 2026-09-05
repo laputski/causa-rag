@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { TriangleAlert, Pin } from 'lucide-react'
 import type { DetectorItem, ExperimentDetail } from '../api/client'
@@ -63,15 +63,63 @@ function DiagItem({ item }: { item: DiagnosticItem }) {
 // rather than a button for that reason, same as the pre-restructure
 // DetectorSection.
 function DetectorPanelItem({ item }: { item: DetectorItem }) {
+  const { t } = useTranslation()
+  const toRealm = useRealmPath()
+  // The title is looked up by the finding's id, and the server's English
+  // sentence stays as the fallback for an id this file does not know yet.
+  // Corpus health has done it this way for a while; this panel rendered raw
+  // server prose, so the Russian interface showed an English finding beside a
+  // translated one.
   return (
     <div className="find-row">
       <span className={`find-dot find-${item.severity}`} aria-hidden="true" />
       <div>
-        <div className="find-title">{item.title}</div>
+        <div className="find-title">
+          {t(`runDiagnostics.finding.${item.id}`, { defaultValue: item.title })}
+          {(item.failure_ids ?? []).map(id => (
+            <Link key={id} className="link-btn mono-sm ml-8" to={toRealm(`/atlas?entry=${id}`)}>
+              {id}
+            </Link>
+          ))}
+        </div>
         <p className="find-detail">{item.detail}</p>
         {item.action && <p className="find-detail find-action">{item.action}</p>}
       </div>
     </div>
+  )
+}
+
+
+/** What this run made impossible to check.
+ *
+ *  It used to live on the prescription tab, away from the findings. A reader
+ *  saw what was found and had no sign that a whole class of findings could not
+ *  have been produced at all, which reads as a clean bill of health for a check
+ *  that never ran. */
+function TraceGaps({ run }: Props) {
+  const { t } = useTranslation()
+  const gaps = run.trace_gaps ?? []
+  return (
+    <>
+      {run.diagnosis_depth && (
+        <p className="find-detail mb-8">
+          {t('runDiagnostics.diagnosisDepth')}:{' '}
+          <b>{t(`prescription.depth_${run.diagnosis_depth}`, { defaultValue: run.diagnosis_depth })}</b>
+        </p>
+      )}
+      {gaps.length === 0
+        ? <p className="diag-detail diag-panel-empty">{t('runDiagnostics.noTraceGaps')}</p>
+        : gaps.map(gap => (
+            <div key={gap.field} className="find-row">
+              <span className="find-dot find-info" aria-hidden="true" />
+              <div>
+                <div className="find-title mono-sm">{gap.field}</div>
+                <p className="find-detail">{gap.unavailable}</p>
+                <p className="find-detail find-action">{gap.remedy}</p>
+              </div>
+            </div>
+          ))}
+    </>
   )
 }
 
@@ -252,6 +300,9 @@ export default function RunDiagnostics({ run }: Props) {
         {detectorItems.length > 0
           ? detectorItems.map((d, i) => <DetectorPanelItem key={i} item={d} />)
           : <p className="diag-detail diag-panel-empty">{t('runDiagnostics.allGood')}</p>}
+      </Panel>
+      <Panel title={t('runDiagnostics.traceGaps')}>
+        <TraceGaps run={run} />
       </Panel>
       <Panel title={t('runDiagnostics.metrics')} items={metricItems} emptyLabel={t('runDiagnostics.allGood')} />
       <Panel title={t('runDiagnostics.retrieval')} items={retrievalItems} emptyLabel={t('runDiagnostics.allGood')} />

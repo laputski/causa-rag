@@ -3106,3 +3106,43 @@ details[open] > .qrow-summary .qrow-caret { transform: rotate(90deg); color: var
 /* Ratings: label on the left, stars on the right, all on one line with no
    wrapping. */
 .qrow-panel .star-row { display: flex; align-items: center; justify-content: space-between; gap: 10px }
+
+/* ── The failure catalogue ───────────────────────────────────────────────────
+   Two vocabularies this file did not have.
+
+   A detection state is carried by shape as well as colour: solid, half-solid,
+   dashed. Colour alone fails the contrast rule the interface is held to, and a
+   reader deciding what to work on is reading four states down a column where
+   the difference has to survive a glance. */
+.det-state { display: inline-flex; align-items: center; gap: 7px; font-size: var(--fs-2xs); white-space: nowrap; }
+.det-state .det-bar { width: 22px; height: 3px; border-radius: 2px; flex: none; background: var(--color-border); }
+.det-caught   { color: var(--color-success) }
+.det-caught   .det-bar { background: var(--color-success) }
+.det-visible  { color: var(--color-warning) }
+.det-visible  .det-bar { background: linear-gradient(90deg, var(--color-warning) 55%, var(--color-border) 55%) }
+.det-unproven { color: var(--color-primary) }
+.det-unproven .det-bar { background: linear-gradient(90deg, var(--color-primary) 30%, var(--color-border) 30%) }
+.det-none     { color: var(--color-text-muted) }
+.det-none     .det-bar { background: repeating-linear-gradient(90deg, var(--color-text-muted) 0 3px, transparent 3px 6px) }
+
+/* A coordinate of the configuration space. Monospaced because it is a code and
+   not a word, and bordered because it is a value somebody else defines: the
+   link beside it goes to that definition. */
+.coord {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-mono); font-size: var(--fs-2xs);
+  border: var(--hair); border-radius: 4px; padding: 2px 7px;
+  background: var(--color-code-bg); color: var(--color-text); white-space: nowrap;
+}
+.coord a { color: var(--color-primary); text-decoration: none; }
+.coord a:hover { text-decoration: underline; }
+.coord.gap { border-color: color-mix(in srgb, var(--color-warning) 50%, transparent); color: var(--color-warning) }
+
+.atlas-row-open { background: color-mix(in srgb, var(--color-primary) 5%, transparent) }
+.atlas-detail { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 4px 0 14px }
+@media (max-width: 900px) { .atlas-detail { grid-template-columns: 1fr } }
+
+/* A row of chips or coordinates that wraps. Named for what it holds rather
+   than for its direction, because a row that wraps is only a row until it
+   does not. */
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center }

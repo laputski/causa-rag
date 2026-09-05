@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
+import { Link, useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import GuideLink from '../components/GuideLink'
@@ -795,6 +795,7 @@ function CorpusHealthTab({ corpusId, setCorpusId, knownIds, realmId }: {
   corpusId: string; setCorpusId: (id: string) => void; knownIds: string[]; realmId?: string | null
 }) {
   const { t } = useTranslation()
+  const toRealm = useRealmPath()
   const { data, isLoading, error } = useQuery({
     queryKey: ['corpus-health', corpusId, realmId],
     queryFn: () => api.corpus.health(corpusId, realmId),
@@ -905,6 +906,15 @@ function CorpusHealthTab({ corpusId, setCorpusId, knownIds, realmId }: {
                         action carry numbers and are left as they came. */}
                     <div className="find-title">
                       {t(`corpusPage.health.finding.${item.id}`, { defaultValue: item.title })}
+                      {/* Which catalogue entries this finding is evidence for.
+                          A reader could see a finding and had no way to tell
+                          whether it named a failure the platform knows or was
+                          a sentence about this corpus alone. */}
+                      {(item.failure_ids ?? []).map(id => (
+                        <Link key={id} className="link-btn mono-sm ml-8" to={toRealm(`/atlas?entry=${id}`)}>
+                          {id}
+                        </Link>
+                      ))}
                     </div>
                     <p className="find-detail">{item.detail}</p>
                     {item.action && <p className="find-detail find-action">{item.action}</p>}

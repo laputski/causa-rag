@@ -1,0 +1,432 @@
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import { useQuery } from '@tanstack/react-query'
+import { ExternalLink } from 'lucide-react'
+import { api, type AtlasEntry, type Atlas, type AtlasSignal } from '../api/client'
+
+/** What the platform can do about an entry today, decided by the catalogue.
+ *
+ *  Four, and the difference between them is the whole reason this page exists.
+ *  `caught` claims a signal decides it and a bait proved both ends. `visible`
+ *  claims the data shows something and a person concludes. `unproven` claims a
+ *  signal and points at a bait on a proving ground that does not exist yet, so
+ *  nobody has watched it fire. `none` claims nothing catches it, and the entry
+ *  has to say what is missing.
+ *
+ *  The rule lived here for a while, in TypeScript, and a second copy of it
+ *  lived in a reporting tool, in Python, with nothing holding the two to the
+ *  same answer. It arrives from the server now. */
+type State = AtlasEntry['state']
+
+const STATE_KEY: Record<State, string> = {
+  caught: 'atlasPage.state.caught',
+  visible: 'atlasPage.state.visible',
+  unproven: 'atlasPage.state.unproven',
+  none: 'atlasPage.state.none',
+}
+
+/** A coordinate, and a link to whoever defines it. The codes are borrowed from
+ *  a published schema, so a reader meeting one must be able to reach its
+ *  definition and not guess at it. */
+function Coord({ code, values, url, gap }: {
+  code: string; values?: string[]; url: string; gap?: boolean
+}) {
+  return (
+    <span className={`coord${gap ? ' gap' : ''}`}>
+      {values && values.length ? `${code} ∈ ${values.join(' · ')}` : code}
+      <a href={url} target="_blank" rel="noreferrer" aria-label={code}>
+        <ExternalLink size={11} />
+      </a>
+    </span>
+  )
+}
+
+function DetectionState({ state }: { state: State }) {
+  const { t } = useTranslation()
+  return (
+    <span className={`det-state det-${state}`}>
+      <i className="det-bar" aria-hidden="true" />
+      {t(STATE_KEY[state])}
+    </span>
+  )
+}
+
+function EntryDetail({ entry }: { entry: AtlasEntry }) {
+  const { t } = useTranslation()
+  const s = entry.severity
+  return (
+    <div className="atlas-detail">
+      <div className="stack-8">
+        <div className="panel">
+          <div className="eyebrow mb-8">
+            {entry.detection === 'none'
+              ? t('atlasPage.detail.whatIsMissing')
+              : t('atlasPage.detail.whatDetects')}
+          </div>
+          {entry.detection === 'none'
+            ? <p className="find-detail">{entry.not_detected_reason}</p>
+            : entry.signals.map(signal => (
+                <div key={signal.id} className="find-row">
+                  <span className="find-dot find-info" aria-hidden="true" />
+                  <div>
+                    <div className="find-title mono-sm">{signal.id}</div>
+                    <p className="find-detail">
+                      {signal.side === 'ui'
+                        ? t('atlasPage.detail.sideUi')
+                        : t('atlasPage.detail.sideCore')}
+                    </p>
+                  </div>
+                </div>
+              ))}
+          {entry.bait && (
+            <p className="hint-line">
+              {t('atlasPage.detail.bait')}: <code className="inline-code">{entry.bait}</code>
+              {entry.bait_level === 'proving_ground' && `. ${t('atlasPage.detail.baitPending')}`}
+            </p>
+          )}
+          {entry.shares_signals_with.length > 0 && (
+            <p className="hint-line">
+              {t('atlasPage.detail.sharesSignals', {
+                others: entry.shares_signals_with.join(', '),
+              })}
+            </p>
+          )}
+        </div>
+
+        <div className="panel">
+          <div className="eyebrow mb-8">{t('atlasPage.detail.stages')}</div>
+          <p className="find-detail">
+            {t('atlasPage.detail.arises')}: <b>{t(`atlasPage.stage.${entry.stage_origin}`, entry.stage_origin)}</b>
+            {' · '}
+            {t('atlasPage.detail.becomesVisible')}: <b>{t(`atlasPage.stage.${entry.stage_visible}`, entry.stage_visible)}</b>
+          </p>
+        </div>
+      </div>
+
+      <div className="stack-8">
+        <div className="panel">
+          <div className="eyebrow mb-8">{t('atlasPage.detail.scope')}</div>
+          {entry.applies_when.length === 0
+            ? <p className="find-detail">{t('atlasPage.detail.scopeAny')}</p>
+            : <div className="chip-row">
+                {entry.applies_when.map(scope => (
+                  <Coord key={scope.code} code={scope.code} values={scope.values} url={scope.url} />
+                ))}
+              </div>}
+          {entry.scope_caveat && (
+            <p className="hint-line">{t('atlasPage.detail.scopeCaveat')}: {entry.scope_caveat}</p>
+          )}
+        </div>
+
+        <div className="panel">
+          <div className="eyebrow mb-8">{t('atlasPage.detail.severity')}</div>
+          <p className="find-detail">
+            {t('atlasPage.detail.quiet')} {s.quiet} · {t('atlasPage.detail.cost')} {s.cost} ·{' '}
+            {t('atlasPage.detail.prevalence')} {s.prevalence} = <b>{s.total}</b>
+          </p>
+          <p className="hint-line">{t('atlasPage.detail.severityCaveat')}</p>
+          <p className="hint-line">
+            {t('atlasPage.detail.instrument')}: {t(`atlasPage.instrument.${entry.instrument}`, entry.instrument)}
+            {entry.atlas_rows.length > 0 && ` · ${t('atlasPage.detail.atlasRow')} ${entry.atlas_rows.join(', ')}`}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function EntryTable({ entries, openId, onOpen }: {
+  entries: AtlasEntry[]
+  openId: string | null
+  onOpen: (id: string | null) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <div className="table-wrap">
+      <table className="table">
+        <thead>
+          <tr>
+            <th>{t('atlasPage.column.id')}</th>
+            <th>{t('atlasPage.column.title')}</th>
+            <th>{t('atlasPage.column.stage')}</th>
+            <th>{t('atlasPage.column.severity')}</th>
+            <th>{t('atlasPage.column.state')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map(entry => {
+            const open = openId === entry.id
+            return [
+              <tr key={entry.id} className={open ? 'atlas-row-open' : undefined}>
+                <td>
+                  <button
+                    className="link-btn mono-sm"
+                    aria-expanded={open}
+                    onClick={() => onOpen(open ? null : entry.id)}
+                  >
+                    {entry.id}
+                  </button>
+                </td>
+                <td>{t(entry.title_key, entry.title)}</td>
+                <td className="text-muted">{t(`atlasPage.stage.${entry.stage_visible}`, entry.stage_visible)}</td>
+                <td className="mono-sm">{entry.severity.total}</td>
+                <td><DetectionState state={entry.state} /></td>
+              </tr>,
+              open ? (
+                <tr key={`${entry.id}-detail`} className="atlas-row-open">
+                  <td colSpan={5}><EntryDetail entry={entry} /></td>
+                </tr>
+              ) : null,
+            ]
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+
+/** The catalogue answers "what detects this". The reverse question, "what does
+ *  a signal that just fired mean", is asked more often and until now nothing
+ *  answered it.
+ *
+ *  Two facts have to survive this table. A signal standing for two entries is
+ *  evidence for either and for neither in particular, and a reader not told
+ *  that takes it for evidence about the entry in front of them. And the
+ *  platform has two sets of signals, one on each side, which disagree on the
+ *  same data; a reference showing one of them would describe half a platform.
+ */
+function SignalsTab() {
+  const { t } = useTranslation()
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['atlas-signals'],
+    queryFn: () => api.atlas.signals(),
+  })
+
+  if (isLoading) return <p className="text-muted">{t('common.loading')}</p>
+  if (error || !data) return <p className="text-muted">{t('atlasPage.unavailable')}</p>
+
+  const shared = data.signals.filter((s: AtlasSignal) => !s.singles_out)
+
+  return (
+    <>
+      <p className="page-sub">{t('atlasPage.signals.lead')}</p>
+      {shared.length > 0 && (
+        <div className="guide-callout warn">
+          <div>
+            <strong>{t('atlasPage.signals.sharedTitle', { count: shared.length })}</strong>
+            <p className="hint-line">{t('atlasPage.signals.sharedDetail')}</p>
+          </div>
+        </div>
+      )}
+      <div className="table-wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>{t('atlasPage.signals.column.signal')}</th>
+              <th>{t('atlasPage.signals.column.side')}</th>
+              <th>{t('atlasPage.signals.column.evidenceFor')}</th>
+              <th>{t('atlasPage.signals.column.bait')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.signals.map((signal: AtlasSignal) => (
+              <tr key={signal.id}>
+                <td className="mono-sm">{signal.id}</td>
+                <td>
+                  <span className={`badge ${signal.side === 'ui' ? 'badge-info' : ''}`}>
+                    {t(`atlasPage.signals.side.${signal.side}`)}
+                  </span>
+                </td>
+                <td>
+                  <span className="mono-sm">{signal.failures.join(', ')}</span>
+                  {!signal.singles_out && (
+                    <span className="badge badge-warn ml-8">
+                      {t('atlasPage.signals.doesNotSeparate')}
+                    </span>
+                  )}
+                </td>
+                <td className="text-muted">
+                  {signal.bait_level.map(level => t(`atlasPage.signals.bait.${level}`, level)).join(', ')}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
+export default function AtlasPage() {
+  const { t } = useTranslation()
+  const [tab, setTab] = useState<'catalogue' | 'signals'>('catalogue')
+  const [point, setPoint] = useState('hybrid')
+  // An entry named in the address opens on arrival. Findings elsewhere link
+  // here by identifier, and a link landing on the catalogue with nothing opened
+  // is a promise the page did not keep.
+  const [searchParams] = useSearchParams()
+  const requested = searchParams.get('entry')
+  const [openId, setOpenId] = useState<string | null>(requested)
+
+  const { data, isLoading, error } = useQuery<Atlas>({
+    queryKey: ['atlas', point],
+    queryFn: () => api.atlas.read(point),
+  })
+
+  // A requested entry that cannot occur in the architecture on screen sits in a
+  // list it is filtered out of, so the page moves to one where it can occur.
+  // The destination comes from the entry itself. The first version picked "any
+  // point other than this one", which sends a reader back and forth for ever
+  // between two architectures that both exclude the entry.
+  const requestedEntry = data?.entries.find(e => e.id === requested)
+  const moveTo =
+    requestedEntry && requestedEntry.applies_here !== true
+      ? requestedEntry.applies_to_points.find(name => name !== point)
+      : undefined
+  useEffect(() => {
+    if (moveTo) setPoint(moveTo)
+  }, [moveTo])
+
+  const tabs = (
+    <div className="data-tab-bar" role="tablist">
+      <button type="button" role="tab" aria-selected={tab === 'catalogue'}
+              className={`data-tab${tab === 'catalogue' ? ' active' : ''}`}
+              onClick={() => setTab('catalogue')}>
+        {t('atlasPage.tab.catalogue')}
+      </button>
+      <button type="button" role="tab" aria-selected={tab === 'signals'}
+              className={`data-tab${tab === 'signals' ? ' active' : ''}`}
+              onClick={() => setTab('signals')}>
+        {t('atlasPage.tab.signals')}
+      </button>
+    </div>
+  )
+
+  if (tab === 'signals') {
+    return (
+      <div className="page">
+        <h1 className="page-title">{t('atlasPage.title')}</h1>
+        {tabs}
+        <SignalsTab />
+      </div>
+    )
+  }
+
+  if (isLoading) return <div className="page">{tabs}<p className="text-muted">{t('common.loading')}</p></div>
+  if (error || !data) {
+    return <div className="page">{tabs}<p className="text-muted">{t('atlasPage.unavailable')}</p></div>
+  }
+
+  // Applicable here, and nothing else. A count over the whole catalogue answers
+  // no question anybody has: half the entries cannot occur in a dense system
+  // and a different half cannot occur in a graph one.
+  const byWeight = (a: AtlasEntry, b: AtlasEntry) =>
+    b.severity.total - a.severity.total || a.id.localeCompare(b.id)
+  const applicable = data.entries.filter(e => e.applies_here === true).sort(byWeight)
+  // Neither applicable nor ruled out: this architecture records nothing about a
+  // coordinate the entry depends on. Dropping them silently would turn "never
+  // asked" into "does not apply", which is the distinction the whole scope
+  // mechanism exists to keep.
+  const undetermined = data.entries.filter(e => e.applies_here === null).sort(byWeight)
+
+  const caught = applicable.filter(e => e.state === 'caught')
+  const visible = applicable.filter(e => e.state === 'visible')
+  const unproven = applicable.filter(e => e.state === 'unproven')
+  const notCaught = applicable.filter(e => e.state === 'none')
+  const worked = [...caught, ...visible, ...unproven].sort(byWeight)
+
+  return (
+    <div className="page">
+      <h1 className="page-title">{t('atlasPage.title')}</h1>
+      {tabs}
+      <p className="page-sub">{t('atlasPage.lead')}</p>
+
+      <section className="section">
+        <div className="section-rule flush">
+          <h2 className="section-title">{t('atlasPage.architecture')}</h2>
+          <span className="section-meta">
+            {t('atlasPage.schemaRelease', { release: data.schema.release })}
+            {' · '}
+            <a className="link-muted" href={data.schema.source} target="_blank" rel="noreferrer">
+              {data.schema.source.replace('https://', '')}
+            </a>
+          </span>
+        </div>
+        <div className="chip-row">
+          {Object.entries(data.points).map(([name, info]) => (
+            <button
+              key={name}
+              className={`chip${name === point ? ' active' : ''}`}
+              aria-pressed={name === point}
+              onClick={() => { setPoint(name); setOpenId(null) }}
+            >
+              {t(`atlasPage.point.${name}`, name)}
+              <span className="mono-sm">{info.applicable}</span>
+            </button>
+          ))}
+        </div>
+        <div className="chip-row mt-8">
+          {(data.points[point]?.coordinates ?? []).map(c => (
+            <Coord key={c.code} code={`${c.code}=${c.value}`} url={c.url} />
+          ))}
+        </div>
+      </section>
+
+      {data.uncovered_coordinates && data.uncovered_coordinates.length > 0 && (
+        <div className="guide-callout warn">
+          <div>
+            <strong>{t('atlasPage.gapTitle')}</strong>
+            <div className="chip-row mt-8">
+              {data.uncovered_coordinates.map(g => (
+                <Coord key={g.code} code={`${g.code}=${g.value}`} url={g.url} gap />
+              ))}
+            </div>
+            <p className="hint-line">{t('atlasPage.gapDetail')}</p>
+          </div>
+        </div>
+      )}
+
+      <section className="section">
+        <div className="section-rule flush">
+          <h2 className="section-title">
+            {t('atlasPage.applicable', { shown: applicable.length, total: data.entries.length })}
+          </h2>
+          <span className="section-meta">
+            <span className="det-state det-caught"><i className="det-bar" />{caught.length}</span>{' '}
+            <span className="det-state det-visible"><i className="det-bar" />{visible.length}</span>{' '}
+            <span className="det-state det-unproven"><i className="det-bar" />{unproven.length}</span>{' '}
+            <span className="det-state det-none"><i className="det-bar" />{notCaught.length}</span>
+          </span>
+        </div>
+
+        <EntryTable entries={worked} openId={openId} onOpen={setOpenId} />
+
+        {/* Collapsed, and counted in the header above where the number stays in
+            sight. The list of what can be worked on is read more often; the
+            share that nothing catches is the honest figure and does not move. */}
+        {undetermined.length > 0 && (
+          <details className="mt-8">
+            <summary>
+              <strong>{t('atlasPage.undetermined', { count: undetermined.length })}</strong>{' '}
+              <span className="text-muted">{t('atlasPage.undeterminedHint')}</span>
+            </summary>
+            <EntryTable entries={undetermined} openId={openId} onOpen={setOpenId} />
+          </details>
+        )}
+
+        {notCaught.length > 0 && (
+          <details className="mt-8">
+            <summary>
+              <span className="det-state det-none"><i className="det-bar" /></span>{' '}
+              <strong>{t('atlasPage.notCaught', { count: notCaught.length })}</strong>{' '}
+              <span className="text-muted">{t('atlasPage.notCaughtHint')}</span>
+            </summary>
+            <EntryTable entries={notCaught} openId={openId} onOpen={setOpenId} />
+          </details>
+        )}
+      </section>
+    </div>
+  )
+}

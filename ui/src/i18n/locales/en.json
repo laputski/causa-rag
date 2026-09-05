@@ -1,4 +1,142 @@
 {
+"atlasPage": {
+      "applicable": "Applies to this point: {{shown}} of {{total}}",
+      "architecture": "Architecture",
+      "column": {
+        "id": "No.",
+        "severity": "Severity",
+        "stage": "Stage",
+        "state": "State",
+    "title": "What looks like it works"
+      },
+      "detail": {
+        "arises": "Arises",
+        "atlasRow": "document row",
+        "bait": "Bait",
+        "baitPending": "lives on a proving ground that does not exist yet, so the claim is unproven",
+        "becomesVisible": "Becomes visible",
+        "cost": "cost",
+        "instrument": "Instrument",
+        "prevalence": "prevalence",
+        "quiet": "quiet",
+        "scope": "Scope",
+        "scopeAny": "Possible in every architecture: it depends on no coordinate.",
+        "scopeCaveat": "Caveat",
+        "severity": "Severity",
+        "severityCaveat": "It orders and does not measure: cost and prevalence are judgement.",
+        "sharesSignals": "This entry's signals do not tell it apart from {{others}}: one firing is evidence for either and for neither in particular.",
+        "sideCore": "Computed on the server.",
+        "sideUi": "Computed in the interface, with no server counterpart.",
+        "stages": "Stages",
+        "whatDetects": "What detects it",
+        "whatIsMissing": "What is missing"
+      },
+      "entry": {
+    "F01": "Re-ingestion adds instead of updating",
+    "F02": "A lost source path makes chunk identifiers collide",
+    "F03": "The chosen segmentation strategy silently does nothing",
+    "F04": "The source export lost or overwrote documents",
+    "F05": "Fixed-size segmentation cuts through the middle of a thought",
+    "F06": "Chunks are too small to carry the grounds for an answer",
+    "F07": "The grounds are spread across chunks and no single one wins",
+    "F08": "Tables and lists are destroyed by naive splitting",
+    "F09": "A stale index: the documents changed and the index did not",
+    "F10": "A stub embedder indexes random vectors",
+    "F11": "Different models at indexing time and at query time",
+    "F12": "The model changed and the corpus was not reindexed",
+    "F13": "A document longer than the model window is silently truncated",
+    "F14": "The model does not cover the language of the corpus",
+    "F15": "Semantic search misses codes, names and numbers",
+    "F16": "Keyword search misses a paraphrase",
+    "F17": "Keyword search raises a document carrying a frequent word",
+    "F18": "The right fragment sits below the cut-off: the selection is too narrow",
+    "F19": "No confidence threshold: something is always returned",
+    "F20": "A metadata filter silently excludes everything",
+    "F21": "The halves are on incomparable scales and one of them rules the merge",
+    "F22": "The rank-fusion constant was chosen without measuring it",
+    "F23": "Both halves return the same thing: you pay for two",
+    "F24": "The reranker does not know the language of the corpus",
+    "F25": "The candidate window equals the selection: reordering is possible, rescue is not",
+    "F26": "Near-duplicates make the ranking unstable",
+    "F27": "The price in latency is not measured",
+    "F28": "A reasoning model spends its budget and returns nothing",
+    "F29": "The right fragment was found and the answer cites another one's number",
+    "F30": "An overfilled context: the middle is lost",
+    "F31": "The model answers from its own knowledge, ignoring the context",
+    "F32": "Refusal is calibrated badly in both directions",
+    "F33": "A metric's definition does not match its name",
+    "F34": "The read path loses data: the measured is blamed and the measurer is at fault",
+    "F35": "A metric is computed in a mode where it has no grounds",
+    "F36": "The golden set is too small and too uniform to expose a defect",
+    "F37": "Tuning was done on the same questions the measurement uses",
+    "F38": "Linking units by shared words builds an edge count that grows with the square of the vocabulary",
+    "F39": "Communities look like structure while the grouping follows frequent words and not meaning"
+    },
+    "gapDetail": "Nothing is known about failures peculiar to them. That is a gap in the catalogue, not a clean bill of health.",
+      "gapTitle": "Some coordinates of this point are spoken about by no entry",
+      "instrument": {
+        "config": "a broken setting",
+        "corpus": "a broken corpus",
+        "faulty_rag": "a faulty RAG",
+        "platform": "platform code"
+      },
+      "lead": "Failures possible in a RAG whose coordinates admit them. The catalogue is read-only: an entry claims a failure is detected, and the build refuses such a claim without a bait.",
+      "notCaught": "{{count}} failures nothing catches",
+      "notCaughtHint": "expand to read what each one is missing",
+      "point": {
+        "dense": "Dense",
+        "graph": "Graph",
+        "hybrid": "Hybrid"
+      },
+      "schemaRelease": "coordinate schema {{release}}",
+      "stage": {
+        "chunking": "chunking",
+        "citation": "citation",
+        "data": "data",
+        "fusion": "fusion",
+        "generation": "generation",
+        "ingest": "ingest",
+        "measurement": "measurement",
+        "rerank": "rerank",
+        "retrieval": "retrieval",
+        "vectors": "vectors"
+      },
+      "signals": {
+      "lead": "Every named judgement the platform makes, what raises it, and which failures it is evidence for.",
+      "sharedTitle": "{{count}} signals do not tell apart the entries they stand for",
+      "sharedDetail": "One firing is evidence for either and for neither in particular. Hiding that would let a reader take it for evidence about the entry in front of them.",
+      "doesNotSeparate": "does not separate them",
+      "column": {
+        "signal": "Signal",
+        "side": "Side",
+        "evidenceFor": "Evidence for",
+        "bait": "Bait"
+      },
+      "side": {
+        "core": "server",
+        "ui": "interface"
+      },
+      "bait": {
+        "unit": "fixture",
+        "proving_ground": "proving ground",
+        "none": "none"
+      }
+    },
+    "tab": {
+      "catalogue": "Catalogue",
+      "signals": "Signals"
+    },
+    "state": {
+        "caught": "caught",
+        "none": "not caught",
+        "unproven": "unproven",
+        "visible": "visible"
+      },
+      "title": "Failure atlas",
+      "undetermined": "{{count}} entries whose applicability is not established",
+    "undeterminedHint": "this architecture records nothing about a coordinate they depend on",
+    "unavailable": "The catalogue is unavailable."
+    },
   "app": {
     "title": "RAG Platform"
   },
@@ -1437,6 +1575,7 @@
     "comparison": "Comparison",
     "dataPresets": "Presets",
     "dataQa": "Control questions",
+    "atlas": "Failure atlas",
     "domainPacks": "Domain packs",
     "experiments": "Runs",
     "guide": "Guide",
@@ -1907,7 +2046,21 @@
     "contextSizeUnreachable": "A further {{count}} question(s) no context size would close, their source never appeared at all.",
     "unsetBaseline": "Unset baseline",
     "more": "More actions",
-    "baselineHint": "The run others in this realm are compared against"
+    "baselineHint": "The run others in this realm are compared against",
+    "finding": {
+      "stub_embedder": "Looks like a stub embedder",
+      "embedder_unverified": "The embedder could not be checked",
+      "duplicates": "Duplicates in the context",
+      "header_only": "Chunks carry headings only",
+      "bm25_dominance": "One half rules the merge",
+      "empty_answers": "Many empty or refused answers",
+      "incorrect_refusals": "Refusal decisions are going the wrong way",
+      "layer_bottleneck": "A bottleneck in the funnel",
+      "unverified_coverage": "Corpus coverage was not verified"
+    },
+    "traceGaps": "What this run made impossible to check",
+    "noTraceGaps": "The run recorded everything every check needs.",
+    "diagnosisDepth": "Diagnosis depth"
   },
   "runPage": {
     "avgLatencyHeading": "Pipeline — average latency across the dataset",

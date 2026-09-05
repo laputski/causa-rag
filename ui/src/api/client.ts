@@ -155,6 +155,11 @@ export interface ExperimentDetail {
   generator_model?: string
   // backend-provided diagnostics & regression guard
   diagnostics?: DetectorItem[]
+  // What this run made impossible to check. Beside the findings and not on
+  // another tab: a check that could not run and a check that ran and found
+  // nothing are the same absence on a screen unless one of them is named.
+  trace_gaps?: { field: string; unavailable: string; remedy: string }[]
+  diagnosis_depth?: string
   // How many questions each root cause accounts for, derived
   // server-side from the stored per-question verdicts. This is the number
   // that turns a list of failures into a comparison between kinds of work:
@@ -213,6 +218,10 @@ export interface PanelStatus {
 }
 
 export interface DetectorItem {
+  // Which catalogue entries this finding is evidence for. Empty when no entry
+  // names it, which means the platform is saying something the catalogue has no
+  // place for.
+  failure_ids?: string[]
   id: string
   severity: 'ok' | 'info' | 'warn' | 'error'
   title: string
@@ -352,6 +361,11 @@ export interface QuestionResult {
   question: string
   reference_answer: string
   generated_answer: string
+  // Whether this answer refuses, decided by the server so that one rule lives
+  // in one place. Absent on a run read before the field existed; a count over
+  // it then reports what it can see instead of falling back to a weaker rule
+  // of its own, which is what the two sides used to disagree about.
+  is_refusal?: boolean
   metrics: Record<string, number>
   source_refs?: SourceRefView[]
   // Ranked list BEFORE the reranker cut it (core/pipeline.py) — empty when
@@ -691,7 +705,86 @@ export interface RealmImportReport {
 
 // ── API calls ─────────────────────────────────────────────────────────────────
 
+// ── The failure catalogue ─────────────────────────────────────────────────────
+//
+// Read-only by design. An entry claims a failure is detected, and the build
+// refuses such a claim without a bait; let this side write entries and that
+// refusal stops holding.
+
+export interface AtlasSignalRef {
+  id: string
+  kind: string
+  name: string
+  side: 'core' | 'ui'
+}
+
+export interface AtlasScope {
+  code: string
+  values: string[]
+  dimension: string | null
+  url: string
+}
+
+export interface AtlasEntry {
+  id: string
+  title: string
+  title_key: string
+  atlas_rows: number[]
+  stage_origin: string
+  stage_visible: string
+  severity: { quiet: number; cost: number; prevalence: number; total: number }
+  origin: string
+  detection: 'detector' | 'visible' | 'none'
+  // Decided by the catalogue, never re-derived here: the rule had two copies
+  // in two languages, and nothing held them to one answer.
+  state: 'caught' | 'visible' | 'unproven' | 'none'
+  instrument: string
+  signals: AtlasSignalRef[]
+  applies_when: AtlasScope[]
+  // Three answers, never two. `null` says this architecture records nothing
+  // about a coordinate the entry depends on, so the failure is neither possible
+  // nor ruled out, and showing it as excluded would state something nobody
+  // established.
+  applies_here: boolean | null
+  // Every architecture this entry can occur in, so a link to it can be
+  // honoured instead of guessed at.
+  applies_to_points: string[]
+  bait: string
+  bait_level: 'unit' | 'proving_ground' | null
+  not_detected_reason: string
+  scope_caveat: string
+  shares_signals_with: string[]
+  superseded_by: string[]
+}
+
+export interface AtlasPoint {
+  coordinates: { code: string; value: string; url: string }[]
+  applicable: number
+}
+
+export interface Atlas {
+  entries: AtlasEntry[]
+  schema: { source: string; release: string; dimensions: number }
+  points: Record<string, AtlasPoint>
+  point?: string
+  uncovered_coordinates?: { code: string; value: string; dimension: string | null; url: string }[]
+}
+
+export interface AtlasSignal {
+  id: string
+  side: 'core' | 'ui'
+  kind: string
+  failures: string[]
+  singles_out: boolean
+  bait_level: string[]
+}
+
 export const api = {
+  atlas: {
+    read: (point?: string) =>
+      req<Atlas>(`/atlas${point ? `?point=${encodeURIComponent(point)}` : ''}`),
+    signals: () => req<{ signals: AtlasSignal[] }>('/atlas/signals'),
+  },
   experiments: {
     list: (params?: { sort_by?: string; dataset?: string; realmId?: string | null }) => {
       const qs = new URLSearchParams()
@@ -1238,6 +1331,8 @@ export interface CorpusChunksResult {
 }
 
 export interface CorpusHealthItem {
+  // See DetectorItem: the catalogue entries this finding is evidence for.
+  failure_ids?: string[]
   id: string
   severity: 'ok' | 'info' | 'warn' | 'error'
   title: string
