@@ -232,3 +232,51 @@ def test_F16_the_wrong_analyser_costs_the_lexical_half_its_word_forms(
             "thirteen against thirteen at k=5. Staging this needs questions phrased in cases "
             "and numbers the documents do not use, which is what the entry means by a paraphrase."
         )
+
+
+def test_F40_a_missing_half_leaves_the_other_supplying_everything(
+    embedder: Any,
+) -> None:
+    """A proof about the signal, and deliberately not about a catalogue entry.
+
+    The lexical index is never built and the run stays configured for hybrid
+    retrieval throughout, so one half supplies every chunk of every context and
+    the dominance signal reads exactly that. No setting can produce it: both
+    halves draw on the same corpus, and putting the whole weight on one of them
+    moves the order of the merged list without moving its membership.
+
+    It was written first as proof of an entry that already existed, and that
+    was wrong: the entry it named is scoped to fusion which normalises scores,
+    while this proving ground fuses by rank, so that entry cannot occur here at
+    all. The condition staged here had no entry, which is how the catalogue
+    gained one. Its signal is shared with two others, and all three say so, so
+    a firing is read as evidence for any of them and for none in particular.
+    """
+    healthy = _against(embedder, CORPUS, pipeline_id="hybrid_rrf")
+    missing = _against(embedder, f"{CORPUS}-lexical-missing", pipeline_id="hybrid_rrf")
+
+    def single_half(run: dict[str, Any]) -> tuple[int, int]:
+        refs = [s for q in run["question_results"] for s in (q.get("pre_rerank_source_refs") or [])]
+        alone = [s for s in refs if s.get("dense_score", 0) > 0 and not s.get("sparse_score", 0)]
+        return len(alone), len(refs)
+
+    alone_healthy, total_healthy = single_half(healthy)
+    alone_missing, total_missing = single_half(missing)
+    assert alone_missing == total_missing, (
+        f"the lexical half still contributes: {total_missing - alone_missing} chunks of "
+        f"{total_missing} carry a score from it"
+    )
+    assert "detector:bm25_dominance" not in detector_signals(healthy), (
+        "the healthy half already reads as ruled by one source"
+    )
+    assert "detector:bm25_dominance" in detector_signals(missing), (
+        f"one half supplied the whole context and nothing said so: "
+        f"{sorted(detector_signals(missing))}"
+    )
+    assert alone_healthy < total_healthy // 2, (
+        f"the healthy half already leans on one source: {alone_healthy} of {total_healthy}"
+    )
+    record("F40", "a lexical index that was never built leaves one half supplying everything",
+           single_half_healthy=f"{alone_healthy}/{total_healthy}",
+           single_half_missing=f"{alone_missing}/{total_missing}",
+           signals=sorted(detector_signals(missing)))

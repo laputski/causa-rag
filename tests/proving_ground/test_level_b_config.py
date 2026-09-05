@@ -122,15 +122,15 @@ def test_F21_one_half_deciding_is_not_stageable_on_a_corpus_this_small(
         "one half now supplies the merged list, so this failure is stageable here after all"
     )
     pytest.skip(
-        f"NOT STAGED: the signal reads which half supplied each chunk, and putting the whole "
-        f"weight on one half changes the order of the merged list and not its membership. "
-        f"Measured on the merged list before the reranker: {len(dense_only)} of {len(merged)} "
-        f"chunks came from the semantic half alone, {share:.0%} against the signal's threshold "
-        "of 80%, and the healthy half sits within two points of that. Both halves fetch from "
-        "the same corpus, so neither can be shut out by a weight. Staging this needs one half "
-        "to stop contributing, which is a load and not a setting: an empty or wrongly built "
-        "lexical index. The first reason recorded here blamed the size of the corpus, which "
-        "measuring on a corpus of twice the size disproved."
+        f"NOT STAGED BY A SETTING: the signal reads which half supplied each chunk, and "
+        f"putting the whole weight on one half moves the order of the merged list without "
+        f"moving its membership. Measured on the merged list before the reranker: "
+        f"{len(dense_only)} of {len(merged)} chunks came from the semantic half alone, "
+        f"{share:.0%} against the signal's threshold of 80 per cent. Both halves draw on the "
+        "same corpus, so no weight shuts one out. It is staged by a load instead, and proved "
+        "there: see test_level_b_ingest.py, where a lexical index that was never built leaves "
+        "one half supplying every chunk of every context. The first reason recorded here "
+        "blamed the size of the corpus, which measuring on one of twice the size disproved."
     )
 
 

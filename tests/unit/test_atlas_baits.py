@@ -313,6 +313,21 @@ def bait_F21_incomparable_scales() -> set[str]:
     return _detector_ids(run)
 
 
+def bait_F40_one_half_is_absent() -> set[str]:
+    """No chunk of any context carries a score from the second half.
+
+    Distinct from the entry above, which has both halves present and one of
+    them outweighed: here the second index was never built, so it contributes
+    to nothing. Measured on the proving ground, that is 750 of 750 chunks from
+    one half, against 167 of 750 when both are built.
+    """
+    run = clean_run()
+    for qr in run["question_results"]:
+        for ref in qr["source_refs"]:
+            ref["dense_score"], ref["sparse_score"] = 0.7, 0.0
+    return _detector_ids(run)
+
+
 def bait_F16_keyword_search_misses_a_paraphrase() -> set[str]:
     return bait_F15_semantic_search_misses_an_identifier()
 
@@ -334,6 +349,7 @@ BAITS = {
     "F17": bait_F17_keyword_bias,
     "F18": bait_F18_right_fragment_below_the_cutoff,
     "F21": bait_F21_incomparable_scales,
+    "F40": bait_F40_one_half_is_absent,
     "F24": bait_F24_reranker_does_not_know_the_language,
     "F28": bait_F28_reasoning_model_returns_nothing,
     "F29": bait_F29_wrong_number_in_the_citation,

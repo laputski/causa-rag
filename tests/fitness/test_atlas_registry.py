@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 
 from core.eval import rag_space
-from core.eval.atlas import FAILURES, FailureMode
+from core.eval.atlas import FAILURES, FailureMode, applicable_to
 from core.eval.funnel import Layer
 from core.eval.root_cause import Cause
 
@@ -480,7 +480,7 @@ def test_the_vendored_coordinates_are_compared_against_the_published_ones() -> N
 # ── the outbound links, and the date beside them ─────────────────────────────
 #
 # Two questions a reviewer asked of the mockups, and both had to become checks
-# rather than intentions: does the link go where it says, and is the date next
+# and never intentions: does the link go where it says, and is the date next
 # to it still current. Neither was checked, and the first was already wrong:
 # the link named an anchor per dimension code, and the article declares nine
 # section anchors and none per code, so it resolved to nothing and dropped the
@@ -667,3 +667,38 @@ def test_every_additional_instrument_is_a_known_one() -> None:
     known = {"corpus", "config", "ingest", "faulty_rag", "platform"}
     bad = sorted(f.id for f in FAILURES if set(f.also_staged_by) - known)
     assert bad == [], f"unknown additional instrument: {bad}"
+
+
+def test_no_entry_is_recorded_as_reproduced_where_it_cannot_occur() -> None:
+    """Evidence of a live run has to belong to a point the entry applies to.
+
+    Found by the contradiction: an entry scoped to fusion that normalises
+    scores was recorded as reproduced on a proving ground that fuses by rank.
+    What the run had actually shown was that the signal the entry names fires,
+    and that signal is shared with a second entry, so the firing was evidence
+    for either of them and for neither in particular.
+
+    A catalogue that accepts such a record says a failure was reproduced at a
+    point where it cannot happen, which is the one thing this whole apparatus
+    exists to stop.
+    """
+    evidence = ROOT / "eval" / "results" / "proving_ground"
+    if not evidence.is_dir():
+        pytest.skip("NOT RUN: no proving-ground evidence in this tree")
+    recorded = {p.stem for p in evidence.glob("*.json")}
+    if not recorded:
+        pytest.skip("NOT RUN: the evidence directory is empty")
+
+    anywhere: set[str] = set()
+    for point in rag_space.POINTS.values():
+        applicable, _ = applicable_to(point)
+        anywhere |= {f.id for f in applicable}
+
+    known = {f.id for f in FAILURES}
+    unknown = sorted(recorded - known)
+    assert unknown == [], f"evidence for entries the catalogue does not hold: {unknown}"
+
+    impossible = sorted(recorded - anywhere)
+    assert impossible == [], (
+        f"recorded as reproduced, and applicable to no point the platform knows: {impossible}"
+    )

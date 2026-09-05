@@ -193,6 +193,35 @@ def _index_and_query_with_different_models(path: str, corpus_id: str, language: 
     )
 
 
+def _load_without_the_lexical_half(path: str, corpus_id: str, language: str, strategy: str) -> Plan:
+    """Build the semantic index and leave the lexical one unbuilt.
+
+    The merge then has one list to merge, so every chunk of the context comes
+    from one source and the dominance signal reads exactly that. A weight
+    cannot produce this: both halves draw on the same corpus, so no setting
+    shuts one out, and putting the whole weight on one of them moves the order
+    of the merged list without moving its membership. Measured on the merged
+    list of a weighted run, 543 chunks of 735 came from one half, against the
+    signal's threshold of 80 per cent and within two points of the healthy
+    half's own figure.
+
+    What this reproduces is a lexical index never built, or built and lost. The
+    run stays configured for hybrid retrieval throughout, which is the point:
+    nothing in the configuration says the second half is missing.
+    """
+    broken = f"{corpus_id}-lexical-missing"
+    return Plan(
+        control_corpus_id=corpus_id,
+        distorted_corpus_id=broken,
+        control=(_ingest(path, corpus_id, language, strategy, note="both halves built"),),
+        distorted=(Step(
+            tuple(_ingest(path, broken, language, strategy).argv) + ("--no-opensearch",),
+            env=(("USE_REAL_BGE_M3", "true"),),
+            note="the semantic half only: the merge has one list to merge",
+        ),),
+    )
+
+
 def _index_under_the_other_analyser(path: str, corpus_id: str, language: str, strategy: str) -> Plan:
     """Create the lexical index under an analyser for another language.
 
@@ -249,6 +278,11 @@ DISTORTIONS: tuple[IngestDistortion, ...] = (
         "index_under_the_other_analyser",
         "the lexical index stems the text by another language's rules",
         ("F16",), _index_under_the_other_analyser,
+    ),
+    IngestDistortion(
+        "load_without_the_lexical_half",
+        "the lexical index was never built, so one half supplies the whole context",
+        ("F40",), _load_without_the_lexical_half,
     ),
 )
 

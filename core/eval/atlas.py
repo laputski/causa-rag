@@ -433,7 +433,7 @@ FAILURES: tuple[FailureMode, ...] = (
     ),
     FailureMode(
         id="F17",
-        shares_signals_with=("F21",),
+        shares_signals_with=("F21", "F40"),
         atlas_rows=(17,),
         title="Keyword search raises a document carrying a frequent word",
         stage_origin="retrieval",
@@ -494,7 +494,7 @@ FAILURES: tuple[FailureMode, ...] = (
     ),
     FailureMode(
         id="F21",
-        shares_signals_with=("F17",),
+        shares_signals_with=("F17", "F40"),
         atlas_rows=(21,),
         title="The halves are on incomparable scales and one of them rules the merge",
         stage_origin="fusion",
@@ -509,6 +509,27 @@ FAILURES: tuple[FailureMode, ...] = (
         scope_caveat=(
             "the schema does not tell fusion of sources from fusion of reformulations of one query, so applicability to a system with a single source is unverified"
         ),
+    ),
+    FailureMode(
+        # Found by the proving ground rather than by reading: staging a
+        # dominance of one half by a setting turned out to be impossible, and
+        # the load that did stage it described a failure the catalogue had no
+        # entry for. A hybrid system whose second index was never built, or was
+        # built and lost, answers every query from one half while every
+        # configuration on file still says two.
+        id="F40",
+        shares_signals_with=("F17", "F21"),
+        atlas_rows=(),
+        title="One half of the retrieval is absent and every setting still says two",
+        stage_origin="ingest",
+        stage_visible="retrieval",
+        severity=Severity(3, 3, 2),
+        origin="mechanism",
+        detection="detector",
+        instrument="ingest",
+        applies_when=(("C3", ("rrf", "score_normalization", "learned_fusion")),),
+        signals=(Signal("detector", "bm25_dominance"),),
+        bait="tests/unit/test_atlas_baits.py::test_bait[F40]",
     ),
     FailureMode(
         id="F22",

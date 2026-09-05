@@ -226,4 +226,4 @@ def test_the_two_instruments_together_cover_what_used_to_be_one() -> None:
     assert claimed_by_ingest == by_instrument["ingest"], (
         f"ingest entries unclaimed: {sorted(by_instrument['ingest'] - claimed_by_ingest)}"
     )
-    assert len(claimed_by_config | claimed_by_ingest) == 10
+    assert len(claimed_by_config | claimed_by_ingest) == 11
