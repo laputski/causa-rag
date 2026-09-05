@@ -4,6 +4,11 @@ import { useSearchParams } from 'react-router-dom'
 interface Realm {
   id: string
   name: string
+  // `proving_ground` marks a realm whose data carries defects on purpose. The
+  // interface says so wherever the realm is named, because red diagnostics
+  // there are the expected outcome and read as a broken installation
+  // otherwise.
+  purpose?: string
   description?: string
   resources: unknown[]
   /** The realm's key metrics: one list governing both the run table's columns

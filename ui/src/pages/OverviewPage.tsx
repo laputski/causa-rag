@@ -1,3 +1,4 @@
+import { RealmPurposeBadge } from '../components/RealmPurposeBadge'
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -136,7 +137,10 @@ export default function OverviewPage() {
   return (
     <div className="page page-wide">
       <div className="page-head">
-        <h1 className="page-title">{activeRealm?.name ?? '—'}</h1>
+        <h1 className="page-title">
+          {activeRealm?.name ?? '—'}
+          <RealmPurposeBadge purpose={activeRealm?.purpose} />
+        </h1>
         <p className="page-sub">{activeRealm?.description || t('overview.noDescription')}</p>
         <span className="page-act">
           <Link to={toRealm('/realms')} className="btn btn-sm"><Download size={13} />{t('overview.exportRealm')}</Link>

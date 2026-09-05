@@ -1806,6 +1806,10 @@
     "identityHeading": "Name and description"
   },
   "realm": {
+    "provingGround": {
+      "label": "broken on purpose",
+      "hint": "The data and settings of this realm carry defects on purpose. A red diagnostic here is the expected outcome and not a broken installation."
+    },
     "createFirst": "Create your first Realm…",
     "manage": "Manage Realms",
     "needRealm": "Create a Realm first",

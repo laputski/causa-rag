@@ -664,6 +664,10 @@ export interface RealmRecord {
   id: string
   name: string
   description?: string
+  // `proving_ground` marks a realm whose data carries defects on purpose. The
+  // interface says so where the realm is named, because red diagnostics there
+  // are the expected outcome and read as a broken installation otherwise.
+  purpose?: string
   resources: { type: string; [k: string]: unknown }[]
   key_metrics?: string[]
   created_at: string

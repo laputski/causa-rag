@@ -31,9 +31,9 @@ CORPUS = "base-ru"
 LANGUAGE = "ru_be"
 
 #: Each defect, the catalogue entry it is meant to make observable, and the
-#: signal that entry names. Read off the catalogue rather than repeated here
-#: would be better; the entries name several signals each and only one of them
-#: speaks about the documents, so which one is the claim of this file.
+#: signal that entry names. Reading it off the catalogue would be better than
+#: repeating it here; the entries name several signals each and only one of
+#: them speaks about the documents, so which one is the claim of this file.
 PAIRS: tuple[tuple[str, str, str], ...] = (
     ("drop_a_numbered_document", "F04", "health:missing_structural_numbers"),
     ("repeat_a_structural_number", "F04", "health:duplicate_structural_numbers"),
@@ -147,8 +147,8 @@ def test_the_control_index_holds_what_the_files_hold() -> None:
 
 def test_the_healthy_corpus_is_silent() -> None:
     """The premise of every pair below, read off the index the platform ships
-    rather than off the files: a corpus that is clean on disk and damaged in
-    the index would make each pair compare two damaged halves."""
+    off the index and never off the files: a corpus that is clean on disk and
+    damaged in the store would make each pair compare two damaged halves."""
     spoke = health_signals(CORPUS)
     assert spoke == set(), f"the corpus the pairs are measured against is not clean: {sorted(spoke)}"
 

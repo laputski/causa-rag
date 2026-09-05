@@ -1,3 +1,4 @@
+import { RealmPurposeBadge } from './components/RealmPurposeBadge'
 import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
 import {
   MessageSquare, Database, FileEdit, FlaskConical, Plus, GitCompare,
@@ -69,7 +70,10 @@ function RealmSwitcher() {
             in URLs and exports. The first alone does not tell you whether
             this is the realm you meant. */}
         <span className="realm-switcher-label">
-          <span className="realm-switcher-name">{activeRealm?.name ?? '…'}</span>
+          <span className="realm-switcher-name">
+            {activeRealm?.name ?? '…'}
+            <RealmPurposeBadge purpose={activeRealm?.purpose} />
+          </span>
           {activeRealm && (
             <span className="realm-switcher-id">
               {activeRealm.id} · {t('realm.resourceCount', { count: activeRealm.resources?.length ?? 0 })}
@@ -90,6 +94,7 @@ function RealmSwitcher() {
               >
                 <span className="realm-switcher-dot active" />
                 {r.name}
+                <RealmPurposeBadge purpose={r.purpose} />
               </div>
             ))}
             <div className="realm-switcher-footer">
