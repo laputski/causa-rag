@@ -151,4 +151,5 @@ markers = [
     "integration: tests requiring live external services (Qdrant/Ollama/MongoDB/etc.)",
     "fitness: evolutionary architecture invariant tests (layer isolation, API surface, data integrity)",
     "e2e: full-platform walkthrough over the demo realm (needs the whole stack up)",
+    "proving_ground: paired baits on the proving ground realm, one live run per half (needs the whole stack, the real embedding model and the loaded proving-ground indexes)",
 ]
