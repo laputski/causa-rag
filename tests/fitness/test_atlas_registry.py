@@ -23,7 +23,14 @@ from pathlib import Path
 import pytest
 
 from core.eval import rag_space
-from core.eval.atlas import FAILURES, FailureMode, applicable_to
+from core.eval.atlas import (
+    AWAITING_AN_ENTRY,
+    FAILURES,
+    REPORTS_A_CHECK_THAT_COULD_NOT_BE_MADE,
+    FailureMode,
+    applicable_to,
+    signal_index,
+)
 from core.eval.funnel import Layer
 from core.eval.root_cause import Cause
 
@@ -734,3 +741,74 @@ def test_a_proving_ground_bait_named_for_an_entry_records_what_it_saw() -> None:
             f"{path.name}: named for {missing} and records nothing for them, so a run that "
             "proves the entry leaves the report saying it is unproven"
         )
+
+
+def _signals_the_platform_emits() -> set[str]:
+    """Every named judgement the two signal modules construct.
+
+    Read out of the source, because the identifiers are literals inside the
+    functions that build them and there is no list of them anywhere else. That
+    is itself the reason this check exists: nothing enumerates the signals, so
+    a new one reaches every screen without the catalogue hearing about it.
+    """
+    import inspect
+    import re
+
+    from core.eval import corpus_health, detectors
+
+    found: set[str] = set()
+    for side, module in (("detector", detectors), ("health", corpus_health)):
+        for match in re.finditer(r'id="([a-z_]+)"', inspect.getsource(module)):
+            if match.group(1) != "ok":
+                found.add(f"{side}:{match.group(1)}")
+    return found
+
+
+def test_every_signal_is_either_named_by_an_entry_or_accounted_for() -> None:
+    """A signal no entry names speaks about something the catalogue does not
+    hold, and the gap is invisible while it is unwritten: the reverse index
+    returns an empty list and a finding appears on screen with nothing beside
+    it.
+
+    Six were found this way. Three report that a check could not be made, which
+    is the absence of a verdict and never becomes an entry. Three report a
+    failure the catalogue has no entry for yet, and those are counted so the
+    number falls where somebody can see it.
+    """
+    emitted = _signals_the_platform_emits()
+    accounted = set(signal_index()) | set(REPORTS_A_CHECK_THAT_COULD_NOT_BE_MADE) | set(AWAITING_AN_ENTRY)
+    orphans = sorted(emitted - accounted)
+    assert orphans == [], (
+        f"signals the platform emits and nothing accounts for: {orphans}. Either an entry "
+        "names it, or it is listed in core/eval/atlas.py with the reason it has none."
+    )
+
+
+def test_nothing_is_listed_as_unaccounted_that_an_entry_already_names() -> None:
+    """The other half. A signal that gained an entry and stayed on the list
+    would keep being counted as a gap that no longer exists."""
+    named = set(signal_index())
+    for label, listing in (("a check that could not be made", REPORTS_A_CHECK_THAT_COULD_NOT_BE_MADE),
+                           ("awaiting an entry", AWAITING_AN_ENTRY)):
+        overlap = sorted(named & set(listing))
+        assert overlap == [], f"listed as {label} and named by an entry as well: {overlap}"
+
+
+def test_the_two_listings_do_not_overlap() -> None:
+    both = sorted(set(REPORTS_A_CHECK_THAT_COULD_NOT_BE_MADE) & set(AWAITING_AN_ENTRY))
+    assert both == [], f"listed as both an aid and a gap: {both}"
+
+
+def test_every_listed_signal_is_one_the_platform_actually_emits() -> None:
+    """A listing that outlives its signal turns into a permanent excuse."""
+    emitted = _signals_the_platform_emits()
+    for label, listing in (("a check that could not be made", REPORTS_A_CHECK_THAT_COULD_NOT_BE_MADE),
+                           ("awaiting an entry", AWAITING_AN_ENTRY)):
+        gone = sorted(set(listing) - emitted)
+        assert gone == [], f"listed as {label} and emitted by nothing: {gone}"
+
+
+def test_each_listing_says_why() -> None:
+    for listing in (REPORTS_A_CHECK_THAT_COULD_NOT_BE_MADE, AWAITING_AN_ENTRY):
+        for signal, reason in listing.items():
+            assert len(reason) > 60, f"{signal} is listed with no reason worth reading"

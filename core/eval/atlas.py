@@ -876,6 +876,50 @@ def uncovered_coordinates(point: Point) -> dict[str, str]:
     return gaps
 
 
+#: Signals the platform emits that no entry names, and why.
+#:
+#: A signal is a named judgement, and the catalogue is what says which failure a
+#: judgement is evidence for. A signal named by nothing therefore speaks about
+#: something the catalogue does not hold, and until it is written down that
+#: gap is invisible: the reverse index simply returns an empty list and the
+#: interface shows a finding with no entry beside it.
+#:
+#: Two kinds live here, and telling them apart is the point. The first reports
+#: that a check could not be made, which is not a failure and never will have
+#: an entry. The second reports a failure the catalogue has no entry for yet,
+#: and the report counts those so the number falls where somebody can see it.
+REPORTS_A_CHECK_THAT_COULD_NOT_BE_MADE: dict[str, str] = {
+    "detector:embedder_unverified": (
+        "says the run recorded no per-half split, so whether the corpus was embedded by a "
+        "working model could not be established. The absence of a verdict, and not a verdict."
+    ),
+    "detector:unverified_coverage": (
+        "says the index was not consulted after the run, so what retrieval could have found "
+        "was never checked against what it did find."
+    ),
+    "detector:layer_bottleneck": (
+        "names the stage a run loses most at. A diagnosis pointing at where to look, which "
+        "every failure of that stage shares and none of them is identified by."
+    ),
+}
+
+AWAITING_AN_ENTRY: dict[str, str] = {
+    "detector:header_only": (
+        "a context of chunks carrying a heading and almost no body. Adjacent to the entry for "
+        "chunks too small to carry an answer, and not the same failure: those hold text and "
+        "too little of it, these hold a title and nothing."
+    ),
+    "health:header_only": (
+        "the same failure read off a corpus, and never off one run's context: the whole "
+        "index holds titles where it should hold text."
+    ),
+    "health:empty_corpus": (
+        "an index holding nothing at all, which every retrieval metric reports as a total "
+        "failure of the system, naming an empty corpus nowhere."
+    ),
+}
+
+
 def signal_index() -> dict[str, list[str]]:
     """Signal id -> the failures it evidences.
 
