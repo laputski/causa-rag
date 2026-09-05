@@ -39,6 +39,7 @@ from core.models import Answer, QueryRequest
 from core.pipeline import NaivePipeline
 from core.registry import registry
 from core.retrieval.hybrid import HybridRetriever
+from services.api_gateway.routers import atlas as atlas_router
 from services.api_gateway.routers import corpus as corpus_router
 from services.api_gateway.routers import (
     datasets,
@@ -317,6 +318,7 @@ app.include_router(realms_router.connector_types_router)
 app.include_router(domain_packs_router.router)
 app.include_router(judgments_router.router)
 app.include_router(production_router.router)
+app.include_router(atlas_router.router)
 
 
 @app.middleware("http")

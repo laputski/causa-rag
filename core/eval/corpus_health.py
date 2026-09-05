@@ -35,14 +35,19 @@ class HealthItem:
     title: str
     detail: str
     action: str = ""
+    # See DiagnosticItem in core/eval/detectors.py: filled by the services
+    # layer from the catalogue's own index, so this module stays unaware of
+    # anything that describes it.
+    failure_ids: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "severity": self.severity,
             "title": self.title,
             "detail": self.detail,
             "action": self.action,
+            "failure_ids": list(self.failure_ids),
         }
 
 
