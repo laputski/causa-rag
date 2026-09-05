@@ -1,0 +1,12 @@
+{
+  "failure_id": "F04",
+  "recorded_at": "2026-09-05T16:21:30.823102+00:00",
+  "claim": "repeat_a_structural_number in the documents is read off the index by health:duplicate_structural_numbers",
+  "measured": {
+    "defect": "repeat_a_structural_number",
+    "signal": "health:duplicate_structural_numbers",
+    "signals_seen": [
+      "health:duplicate_structural_numbers"
+    ]
+  }
+}

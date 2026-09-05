@@ -1,6 +1,6 @@
 {
   "failure_id": "F12",
-  "recorded_at": "2026-09-02T19:31:37.969455+00:00",
+  "recorded_at": "2026-09-05T16:22:22.430332+00:00",
   "claim": "loaded by one model and questioned by another: the layer is named, the cause is not",
   "measured": {
     "pre_rerank_healthy": 1.0,
