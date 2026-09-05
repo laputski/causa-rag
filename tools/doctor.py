@@ -266,19 +266,65 @@ def check_realms() -> Check:
     if not realms:
         return Check("realms", WARN, "none yet", "make demo  (creates the demo realm)")
 
-    root = Check("realms", OK, f"{len(realms)}: " + ", ".join(r.get("id", "?") for r in realms[:4]))
-    first = realms[0].get("id")
-    ok, corpora = _http(f"{GATEWAY_URL}/corpus/collections?realm_id={first}")
+    ids = sorted(str(r.get("id", "?")) for r in realms)
+    root = Check("realms", OK, f"{len(ids)}: " + ", ".join(ids[:4]))
+
+    # Which realm the corpus and dataset checks below are about. It used to be
+    # `realms[0]`, that is whichever the database happened to return first, so
+    # a second realm silently changed the subject of the installation check and
+    # nothing in the output said which realm it had looked at. Sorting makes
+    # the choice repeatable and naming it makes the answer readable.
+    subject = _subject_realm(realms)
+
+    ok, corpora = _http(f"{GATEWAY_URL}/corpus/collections?realm_id={subject}")
     root.children.append(Check(
-        "corpus", OK if ok and corpora else WARN,
+        f"corpus ({subject})", OK if ok and corpora else WARN,
         f"{len(corpora)} registered" if ok and corpora else "none registered",
-        "" if ok and corpora else "make demo", indent=1))
-    ok, datasets = _http(f"{GATEWAY_URL}/datasets?realm_id={first}")
+        "" if ok and corpora else _seed_hint(subject), indent=1))
+    ok, datasets = _http(f"{GATEWAY_URL}/datasets?realm_id={subject}")
     root.children.append(Check(
-        "dataset", OK if ok and datasets else WARN,
+        f"dataset ({subject})", OK if ok and datasets else WARN,
         f"{len(datasets)} available" if ok and datasets else "none",
-        "" if ok and datasets else "make demo", indent=1))
+        "" if ok and datasets else _seed_hint(subject), indent=1))
     return root
+
+
+# A realm built to be broken on purpose is a poor subject for a check that asks
+# whether the installation works. Preferred against, not excluded: on a machine
+# that holds nothing else it is still better to report on it than on nothing.
+#
+# Read from the realm's own `purpose` and no longer from a list of identifiers
+# kept here. The list was a second place to remember, and a realm named anything
+# else would have been checked as if it were healthy.
+_FAULTY_ON_PURPOSE = "proving_ground"
+
+
+def _subject_realm(realms: list[dict]) -> str:
+    """Sorts here instead of trusting the caller to have sorted.
+
+    The first version left the ordering to `check_realms` and was itself still
+    order-dependent, so the guarantee held only as long as every call site
+    remembered. A function whose contract is "repeatable" has to be repeatable
+    on its own arguments.
+    """
+    ordered = sorted(realms, key=lambda r: str(r.get("id", "")))
+    for realm in ordered:
+        if realm.get("purpose") != _FAULTY_ON_PURPOSE:
+            return str(realm.get("id", "?"))
+    return str(ordered[0].get("id", "?"))
+
+
+def _seed_hint(realm_id: str) -> str:
+    """What to run to fill this realm, and not what fills the demo one.
+
+    The advice was the literal `make demo` whatever realm had been checked,
+    which becomes wrong the moment the checked realm is not the demo.
+    """
+    if realm_id == "proving-ground":
+        return "make proving-ground"
+    if realm_id == "demo":
+        return "make demo"
+    return f"load a corpus and a question set into the {realm_id!r} realm"
 
 
 def check_ui() -> Check:

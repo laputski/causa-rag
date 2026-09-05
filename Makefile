@@ -1,4 +1,4 @@
-.PHONY: help types quickstart doctor stop demo up down infra api ui ingest install install-judges test test-unit test-int test-eval test-e2e load logs ps clean bootstrap publish-check publish-export miracl-fetch miracl-ingest miracl-report
+.PHONY: help types quickstart doctor stop demo proving-ground up down infra api ui ingest install install-judges test test-unit test-proving-ground test-int test-eval test-e2e load logs ps clean bootstrap publish-check publish-export miracl-fetch miracl-ingest miracl-report
 COMPOSE = docker compose -f deploy/compose/docker-compose.yml
 PORT    ?= 8081
 
@@ -44,6 +44,9 @@ ui-build:       ## Build the UI into static assets
 demo:           ## Seed the demo realm: corpus, dataset, prompt, preset
 	USE_REAL_BGE_M3=true python3 -m tools.seed_demo
 
+proving-ground: ## Seed the proving ground: a realm whose data is broken on purpose
+	USE_REAL_BGE_M3=true python3 -m tools.seed_proving_ground
+
 ingest:         ## Ingest the demo corpus (with the real BGE-M3)
 	USE_REAL_BGE_M3=true python3 -m services.ingestion.cli ingest corpus/demo_handbook/ \
 	  --strategy structure_aware --corpus-id handbook --realm-id demo
@@ -71,6 +74,9 @@ test-int:       ## Integration tests (needs docker compose up)
 openapi:        ## Regenerate the governance/openapi.json snapshot (the API surface guard fitness test reads it)
 	python3 -c "import json,sys;sys.path.insert(0,'.');from services.api_gateway.main import app;f=open('governance/openapi.json','w');json.dump(app.openapi(),f,indent=2,ensure_ascii=False)" 2>/dev/null
 	@echo "✅  governance/openapi.json updated: $$(python3 -c 'import json;print(len(json.load(open("governance/openapi.json"))["paths"]))' 2>/dev/null) paths"
+
+test-proving-ground: ## Paired baits on the proving ground (needs the stack, the real model and the loaded indexes)
+	./.venv/bin/python -m pytest tests/proving_ground -q -m proving_ground
 
 test-eval:      ## DeepEval tests (needs Ollama, Qdrant and the `judges` extra)
 	@python3 -c "import importlib.util as u, sys; sys.exit(0 if u.find_spec('deepeval') else 1)" \

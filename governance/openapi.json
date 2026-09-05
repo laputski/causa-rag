@@ -5301,6 +5301,126 @@
         }
       }
     },
+    "/atlas": {
+      "get": {
+        "tags": [
+          "atlas"
+        ],
+        "summary": "Read Atlas",
+        "description": "The catalogue, optionally narrowed to one architecture.\n\nWithout a point the whole catalogue is returned and every entry's\n`applies_here` is null, which is honest: applicability is a question about\nan architecture and there is none to ask about.\n\nWith a point, `applies_here` is true, false, or **null**, and the third is\nnot a rounding of the second. Null means the point records nothing about a\ncoordinate the entry depends on, so the failure is neither possible nor\nruled out. Collapsing it into false would report a failure excluded when it\nwas only never asked about.",
+        "operationId": "read_atlas_atlas_get",
+        "parameters": [
+          {
+            "name": "point",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Point"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Read Atlas Atlas Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/atlas/signals": {
+      "get": {
+        "tags": [
+          "atlas"
+        ],
+        "summary": "Read Signals",
+        "description": "Every signal named by the catalogue, and what each is evidence for.\n\nA signal standing for more than one entry is reported as such and never\nlisted twice: where two entries name an identical set, a firing signal is\nevidence for either and for neither in particular, and a reader who is not\ntold that takes it for evidence about the entry in front of them.",
+        "operationId": "read_signals_atlas_signals_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Read Signals Atlas Signals Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/atlas/{failure_id}": {
+      "get": {
+        "tags": [
+          "atlas"
+        ],
+        "summary": "Read Failure",
+        "operationId": "read_failure_atlas__failure_id__get",
+        "parameters": [
+          {
+            "name": "failure_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Failure Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Read Failure Atlas  Failure Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/query": {
       "post": {
         "summary": "Query",
@@ -7033,6 +7153,11 @@
             "type": "string",
             "title": "Description",
             "default": ""
+          },
+          "purpose": {
+            "type": "string",
+            "title": "Purpose",
+            "default": ""
           }
         },
         "type": "object",
@@ -7051,6 +7176,17 @@
             "type": "string",
             "title": "Description",
             "default": ""
+          },
+          "purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purpose"
           }
         },
         "type": "object",

@@ -124,10 +124,22 @@ async def list_connector_types() -> list[dict[str, Any]]:
 
 # ── Realm CRUD ───────────────────────────────────────────────────────────────
 
+# What a realm is for. Empty is the ordinary case and stays empty on every realm
+# that already exists, so nothing has to be rewritten to gain the field.
+#
+# `proving_ground` marks a realm whose data is broken on purpose. Without such a
+# mark its diagnostics read as a broken installation, and a green one would mean
+# the guards had stopped firing on the defects put there for them. It also keeps
+# the installation check off it: asking whether the platform works is the wrong
+# question to put to a realm built to fail.
+PURPOSES = ("", "proving_ground")
+
+
 class RealmCreateRequest(BaseModel):
     name: str
     id: str | None = None
     description: str = ""
+    purpose: str = ""
 
 
 @router.get("")
@@ -148,6 +160,7 @@ async def create_realm(body: RealmCreateRequest) -> dict[str, Any]:
         "id": realm_id,
         "name": body.name,
         "description": body.description.strip(),
+        "purpose": body.purpose,
         "resources": existing.get("resources", []) if existing else [],
         "created_at": existing.get("created_at", datetime.now(UTC).isoformat()) if existing else datetime.now(UTC).isoformat(),
         "deleted_at": None,
@@ -345,6 +358,7 @@ async def get_realm(realm_id: str) -> dict[str, Any]:
 class RealmUpdateRequest(BaseModel):
     name: str
     description: str = ""
+    purpose: str | None = None
 
 
 @router.put("/{realm_id}")
@@ -358,6 +372,15 @@ async def update_realm(realm_id: str, body: RealmUpdateRequest) -> dict[str, Any
     if not body.name.strip():
         raise HTTPException(status_code=400, detail="Name must not be empty")
     update = {"name": body.name.strip(), "description": body.description.strip()}
+    # Omitted leaves it as it was: a form that does not know about the field
+    # must not be able to clear it by staying silent.
+    if body.purpose is not None:
+        if body.purpose not in PURPOSES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown purpose {body.purpose!r}. Known: {list(PURPOSES)}",
+            )
+        update["purpose"] = body.purpose
     await mdb.update_one(_REALMS_COLLECTION, {"id": realm_id}, {"$set": update})
     doc.update(update)
     return _strip_id(doc)

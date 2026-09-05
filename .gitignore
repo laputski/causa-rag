@@ -40,6 +40,11 @@ domain_packs/*/golden/private/
 # Scraped corpus (large, re-downloadable via tools/corpus/download.py)
 corpus/*/
 !corpus/demo_handbook/
+# The proving ground's corpora are the same kind of thing as the demo one: a
+# fixture this repository writes and ships, read by the unit tests. Measured
+# with the directory moved aside, a tree without them fails twenty-four tests
+# and errors on three more, which is what a fresh clone would have done.
+!corpus/proving-ground/
 
 # DeepEval run results
 eval/results/*
@@ -52,6 +57,11 @@ eval/results/*
 # rebuildable from the corpus; what it buys is a run that survives being
 # stopped, not something a reader of the report needs.
 eval/results/miracl/cache/
+# What a proving-ground bait observed, one document per catalogue entry, each
+# carrying the date it was recorded. Kept for the same reason the report's own
+# numbers are: a claim that a failure was reproduced on a live stack, and which
+# has to be reproduced again to be checked, is a claim nobody checks.
+!eval/results/proving_ground/
 
 # Reviewer judgments: one file per realm-and-corpus pair, filled in on a live installation
 eval/judgments/

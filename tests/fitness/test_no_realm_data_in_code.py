@@ -69,7 +69,10 @@ SELF_EXEMPT = {
 # asserts on directly: a generated e2e id, a rename collision, a placeholder in
 # the connector guide.
 ALLOWED_REALM_IDS = {
-    "demo", "demo-2", "acme", "acme-2",
+    # "proving-ground" joins "demo" for the same reason: both name a realm this
+    # repository invents and ships a seed for, so both are written in code by
+    # design. Neither came off anybody's installation.
+    "demo", "demo-2", "proving-ground", "acme", "acme-2",
     "r", "other", "other-realm", "my-realm", "quickstart",
     "e2e-x", "realm_a", "realm_b", "", "null", "undefined",
 }
@@ -81,6 +84,12 @@ ALLOWED_CORPUS_IDS = {
     "acme-corpus", "acme_v2", "external_docs", "graphrag_docs", "docs",
     "c", "active", "gone", "orphan", "missing", "empty_corpus", "other",
     "brand_new_corpus", "test_corpus", "corpus", "",
+    # The two corpora this repository writes and ships for the proving ground.
+    # They were invisible to this guard until the seed named its fields: the
+    # pattern below wants the word `corpus_id` beside the value, and the seed
+    # listed them as bare tuple positions, so a corpus called anything at all
+    # passed. Found by planting one.
+    "base-ru", "base-en",
 }
 
 # A dotted lowerCamel path is an i18n key and not an id: `corpusId:
