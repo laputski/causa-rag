@@ -2176,6 +2176,32 @@ p.tight, .empty.tight { padding: 8px; margin: 0 }
 /* Fifteen and not seventeen: a section heading defers to the page heading
    instead of competing with it. */
 .section-title { font-family: var(--font-serif); font-size: var(--fs-md); font-weight: 600; margin: 0; }
+/* A section rule sets no bottom margin: what follows it is expected to bring
+   its own clearance, and most of it does, by margin (.form-grid, .funnel,
+   .res-grid, .tpl-block) or by padding (.chips, .table-toolbar, .loading).
+   These bring none, so they sat on the line.
+
+   Listed one by one, and the rule keeps no bottom margin of its own: giving it
+   one would add to the clearance every other sibling already has and loosen a
+   dozen screens to repair a few. The padding-based ones cannot be neutralised
+   as cleanly as a margin, which is what settles it.
+
+   The list was measured and not read off the markup. Reading it found six of
+   the eleven: the rest are rendered inside conditional branches, so which
+   element actually follows the rule depends on the data on screen. Reproduce
+   by walking the routes and, for every `.section-rule`, comparing its bottom
+   edge against its next sibling's top edge. */
+.section-rule + .chip-row,
+.section-rule + .table-wrap,
+.section-rule + .field-search,
+.section-rule + .mb-8,
+.section-rule + .form-group,
+.section-rule + .empty,
+.section-rule + .setup-done,
+.section-rule + .health-row,
+.section-rule + .step-list,
+.section-rule + .text-muted,
+.section-rule + table { margin-top: 10px; }
 .section-meta { margin-left: auto; font-family: var(--font-mono); font-size: var(--fs-2xs); color: var(--color-text-muted); }
 
 .ov-split { display: grid; grid-template-columns: 1fr 1fr; gap: 0 34px; }
