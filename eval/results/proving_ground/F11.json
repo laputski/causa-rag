@@ -1,12 +1,12 @@
 {
   "failure_id": "F11",
-  "recorded_at": "2026-09-05T16:39:30.641356+00:00",
+  "recorded_at": "2026-09-05T16:47:06.491494+00:00",
   "claim": "loaded by one model and questioned by another: the layer is named, the cause is not",
   "measured": {
     "pre_rerank_healthy": 1.0,
     "pre_rerank_mismatched": 0.0,
-    "final_healthy": 0.9230769230769231,
-    "final_mismatched": 0.5384615384615384,
+    "final_healthy": 0.9411764705882353,
+    "final_mismatched": 0.6470588235294118,
     "signals": [
       "detector:layer_bottleneck"
     ],

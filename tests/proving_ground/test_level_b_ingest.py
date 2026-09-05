@@ -222,16 +222,13 @@ def test_F16_the_wrong_analyser_costs_the_lexical_half_its_word_forms(
     own = hits(CORPUS, LANGUAGE)
     other = hits(f"{CORPUS}-en-analyser", "en")
     assert own > 0, "the lexical half finds nothing even under its own analyser"
-    if other >= own:
-        pytest.skip(
-            f"NOT STAGED: {other} questions of the answerable ones still find their own answer "
-            f"under the other language's analyser, against {own} under the corpus's own. "
-            "The question set and the documents were written together and share their word "
-            "forms, so exact matching carries them and there is little for stemming to do. "
-            "Measured at three depths: ten against ten at k=1, thirteen against twelve at k=3, "
-            "thirteen against thirteen at k=5. Staging this needs questions phrased in cases "
-            "and numbers the documents do not use, which is what the entry means by a paraphrase."
-        )
+    assert other < own, (
+        f"the wrong analyser cost nothing: {other} questions still find their own answer, "
+        f"against {own} under the corpus's own analyser"
+    )
+    record("F16", "an index built under another language's analyser loses the paraphrases",
+           found_under_own_analyser=own, found_under_the_other=other,
+           questions=len([e for e in expected if e]))
 
 
 def test_F40_a_missing_half_leaves_the_other_supplying_everything(

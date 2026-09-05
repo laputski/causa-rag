@@ -90,9 +90,14 @@ def test_F18_a_selection_of_one_loses_what_ranked_second(
             "questions whose answers legitimately sit at ranks two and three, which is a "
             "question set and not a corpus."
         )
+    # The other branch, which the first version of this test left empty: a pair
+    # that stages is a pair that records what it saw, and a test that passes in
+    # silence looks the same as one that never ran.
+    record("F18", "narrowing the selection to one fragment loses what ranked below it",
+           recall_control=recall(control), recall_broken=recall(broken))
 
 
-def test_F21_one_half_deciding_is_not_stageable_on_a_corpus_this_small(
+def test_one_half_deciding_is_not_stageable_by_a_setting(
     embedder: Any, control: dict[str, Any]
 ) -> None:
     """Not staged, which is a third state and not a signal that failed.

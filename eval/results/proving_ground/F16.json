@@ -1,0 +1,10 @@
+{
+  "failure_id": "F16",
+  "recorded_at": "2026-09-05T16:47:06.580877+00:00",
+  "claim": "an index built under another language's analyser loses the paraphrases",
+  "measured": {
+    "found_under_own_analyser": 16,
+    "found_under_the_other": 14,
+    "questions": 17
+  }
+}

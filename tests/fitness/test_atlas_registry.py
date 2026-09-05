@@ -702,3 +702,35 @@ def test_no_entry_is_recorded_as_reproduced_where_it_cannot_occur() -> None:
     assert impossible == [], (
         f"recorded as reproduced, and applicable to no point the platform knows: {impossible}"
     )
+
+
+def test_a_proving_ground_bait_named_for_an_entry_records_what_it_saw() -> None:
+    """A pair that stages a failure has to file what it measured.
+
+    Found by losing one: replacing an assertion with a conditional skip left
+    the other branch empty, so the pair ran, staged the failure, passed, and
+    recorded nothing. A test that passes in silence is indistinguishable from
+    one that never ran, and the report that reads those files then reports the
+    entry as unproven while a run had just proved it.
+
+    Read out of the source, because what is under test is that the call is
+    written at all, and running the suite needs a stack, the embedding model
+    and every index loaded.
+    """
+    import re
+
+    directory = ROOT / "tests" / "proving_ground"
+    if not directory.is_dir():
+        pytest.skip("NOT RUN: no proving-ground suite in this tree")
+    for path in sorted(directory.glob("test_*.py")):
+        source = path.read_text(encoding="utf-8")
+        named = set(re.findall(r"def test_(F\d+)[_a-z]", source))
+        recorded = set(re.findall(r'record\(\s*"(F\d+)"', source))
+        also = set(re.findall(r'for failure_id in \("(F\d+)", "(F\d+)"\)', source))
+        for pair in also:
+            recorded |= set(pair)
+        missing = sorted(named - recorded)
+        assert missing == [], (
+            f"{path.name}: named for {missing} and records nothing for them, so a run that "
+            "proves the entry leaves the report saying it is unproven"
+        )

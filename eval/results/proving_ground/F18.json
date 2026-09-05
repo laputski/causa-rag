@@ -1,0 +1,9 @@
+{
+  "failure_id": "F18",
+  "recorded_at": "2026-09-05T16:49:33.258832+00:00",
+  "claim": "narrowing the selection to one fragment loses what ranked below it",
+  "measured": {
+    "recall_control": 0.9411764705882353,
+    "recall_broken": 0.8235294117647058
+  }
+}
