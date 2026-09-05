@@ -34,11 +34,26 @@ class BgeM3Embedder:
     embedder_id = "bge_m3"
     version = "1.0.0"
 
-    def __init__(self, use_real_model: bool = False) -> None:
+    def __init__(self, use_real_model: bool | None = None) -> None:
+        """`use_real_model` unset reads the environment; passed, it decides.
+
+        It used to be `use_real_model or os.getenv(...)`, so the argument could
+        turn the real model on and could never turn it off: a caller asking for
+        the stub in a process where USE_REAL_BGE_M3=true was set received the
+        real model and no indication of it. Found while staging a
+        stub-embedder failure on the proving ground, where the half that was
+        supposed to be broken retrieved exactly as well as the healthy one.
+
+        Unset is the default and keeps every existing caller reading the
+        environment, which is how the gateway and the ingestion command both
+        pass their choice today.
+        """
         import os
         self._cache: dict[str, list[float]] = {}
-        # Env var USE_REAL_BGE_M3=true overrides the flag (for integration contexts)
-        self._use_real_model = use_real_model or os.getenv("USE_REAL_BGE_M3", "").lower() == "true"
+        self._use_real_model = (
+            os.getenv("USE_REAL_BGE_M3", "").lower() == "true"
+            if use_real_model is None else use_real_model
+        )
         self._model: Any = None
         self._hits: int = 0
         self._misses: int = 0

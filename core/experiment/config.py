@@ -40,6 +40,7 @@ _BACKCOMPAT_DEFAULTS: dict[str, Any] = {
     "params": {},
     "retrieval_pins_enabled": False,
     "fetch_k": None,
+    "rrf_k": None,
 }
 
 
@@ -74,6 +75,19 @@ class ExperimentConfig(BaseModel):
     top_k: int = 5
     merge_strategy: str = "rrf"
     merge_alpha: float = 0.5
+
+    # The rank-fusion constant. Reciprocal rank fusion scores a document as
+    # 1/(rrf_k + rank), so the constant decides how steeply rank 1 outweighs
+    # rank 10: a small one makes the top of each list dominate, a large one
+    # flattens the two lists towards equal say. Sixty is the value from the
+    # paper that introduced the method, and it has been carried unmeasured
+    # ever since.
+    #
+    # It had no field here at all, so no run recorded which value it used and
+    # no comparison could show what changing it costs. None keeps the value
+    # the retriever was constructed with, which leaves every historical config
+    # hash unchanged (see _BACKCOMPAT_DEFAULTS above).
+    rrf_k: int | None = None
 
     # Eval
     dataset_name: str = ""
@@ -173,6 +187,38 @@ class ExperimentConfig(BaseModel):
                 payload.pop(key, None)
         canonical = json.dumps(payload, sort_keys=True, ensure_ascii=False)
         return hashlib.sha256(canonical.encode()).hexdigest()[:16]
+
+    def renamed(self, name: str) -> ExperimentConfig:
+        """A copy under a new name, with the fingerprint recomputed.
+
+        `name` is hashed, and the fingerprint is computed once, by the
+        validator above, at construction. Assigning to `.name` afterwards
+        therefore leaves a configuration whose stored fingerprint belongs to a
+        configuration that no longer exists, and nothing anywhere says so.
+
+        Found live: the MIRACL sweep appended the question count to the name
+        after the run, so thirty-six stored runs carry a fingerprint that does
+        not recompute from the configuration lying beside it. Deduplication,
+        cache boundaries and "same configuration" comparisons are all keyed on
+        that fingerprint.
+
+        The two informational backfills the runner performs after hashing
+        (`external_rag_name`, `http_endpoint`) are deliberate and stay as they
+        are: they exist so that a registered system's URL rotating over time
+        does not change the identity of "the same run against the same
+        registered system".
+        """
+        return ExperimentConfig(**{**self.model_dump(exclude={"config_hash"}), "name": name})
+
+    def fingerprint_matches_fields(self) -> bool:
+        """Whether the stored fingerprint still describes these fields.
+
+        False means somebody assigned to a hashed field after construction.
+        Offered as a question, and not enforced by a frozen model, because
+        the two backfills named in `renamed` above are deliberate and would
+        have to be undone to freeze it.
+        """
+        return self.config_hash == self._compute()
 
     def diff(self, other: ExperimentConfig) -> dict[str, dict[str, Any]]:
         """Return fields that differ between self and other."""

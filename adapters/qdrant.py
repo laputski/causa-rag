@@ -95,6 +95,18 @@ class QdrantRetriever:
                 id=str(chunk.chunk_id),
                 vector=vec,
                 payload={
+                    # Written into the payload as well as used as the point id.
+                    # Qdrant requires a point id to be a UUID or an integer, so
+                    # it normalises a thirty-two character hexadecimal chunk id
+                    # into dashed UUID form and hands that form back on read.
+                    # The sparse index returns the same id undashed, so the two
+                    # halves of a hybrid merge never recognised one chunk as one
+                    # chunk: measured on this proving ground, twenty dense and
+                    # nineteen sparse candidates shared none, and a context of
+                    # five carried four distinct texts. The sparse adapter
+                    # already carries the id in its own document body, and this
+                    # is the same measure on this side.
+                    "chunk_id": chunk.chunk_id,
                     "doc_id": chunk.doc_id,
                     "text": chunk.text,
                     "structural_path": chunk.structural_path,
@@ -131,7 +143,11 @@ class QdrantRetriever:
         for hit in results:
             payload = hit.payload or {}
             chunk = Chunk(
-                chunk_id=str(hit.id),
+                # From the payload, falling back to the point id for anything
+                # written before the payload carried it. The fallback is the
+                # dashed form, so a collection loaded by an older build keeps
+                # today's behaviour until it is loaded again.
+                chunk_id=str(payload.get("chunk_id") or hit.id),
                 doc_id=payload.get("doc_id", ""),
                 text=payload.get("text", ""),
                 structural_path=payload.get("structural_path", ""),
@@ -166,7 +182,7 @@ class QdrantRetriever:
                 continue
             chunks.append(
                 Chunk(
-                    chunk_id=str(p.id),
+                    chunk_id=str((p.payload or {}).get("chunk_id") or p.id),
                     doc_id=payload.get("doc_id", ""),
                     text=text,
                     structural_path=payload.get("structural_path", ""),
@@ -195,7 +211,7 @@ class QdrantRetriever:
         for p in points:
             payload = p.payload or {}
             chunks.append(Chunk(
-                chunk_id=str(p.id),
+                chunk_id=str(payload.get("chunk_id") or p.id),
                 doc_id=payload.get("doc_id", ""),
                 text=payload.get("text", ""),
                 structural_path=payload.get("structural_path", ""),

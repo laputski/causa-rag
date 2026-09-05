@@ -112,6 +112,36 @@ which covers a corpus like the demo handbook with no pack involved. Locked in
 with a unit test using a real corpus file, not a hand-built fixture, so the same
 regression can't silently recur.
 
+**Correction, found later by the failure catalogue.** The paragraph above says
+the `structure_aware` chunker "also derives a tree from markdown headings on its
+own, which covers a corpus like the demo handbook with no pack involved". That
+half was described and never built. `chunk()` read `if doc.structure is None:`
+and returned flat windows, and `make demo` passes no parser, so the demo realm
+shipped twenty-two chunks all carrying the path `root`, which is the very
+regression this entry says was closed. The test named as the lock exercises the pack's
+parser on a hand-written string and never touches that path.
+
+Two further losses came out of fixing it, both of the same shape and neither
+reported by anything:
+
+- `_traverse` emitted a chunk only for a leaf, so a section carrying a lead
+  paragraph before its subsections lost that paragraph. Eight hundred
+  characters of body text over the demo corpus's eight files.
+- `parse_manual_section` discarded every line arriving before the first
+  heading, and a file with no numbering at all produced a tree with no children
+  and therefore **zero chunks**: the whole file absent from the index, no
+  exception, no warning. A unit test asserted `tree.children == []` and so
+  pinned it.
+
+Deriving the tree then made a third defect reachable: chunk offsets are counted
+inside a node, so two sections sharing a heading in one file produced the same
+`chunk_id` and ingestion, which upserts by it, kept whichever was written last.
+That is entry F02 of the catalogue, introduced by a fix and caught by auditing
+the fix. The identifier now carries the node's position in the tree.
+
+`tests/unit/test_structure_aware_derives_a_tree.py` reads real corpus files, as
+this entry asked for and its own test did not.
+
 **How to detect:** Browse the corpus (Data → Corpus → Content) and check
 `structural_path`. If it is `"root"` for a non-`fixed` strategy, structure was
 never populated. The `missing_structural_numbers` health detector (#10 below)
@@ -216,3 +246,102 @@ secondary deterministic signal, but note it's capped near `1/top_k` for
 single-citation answers (it divides by *all* candidate numbers among
 retrieved chunks, not just the correct one), so a low absolute value alone
 doesn't mean the citation is wrong; check the actual text.
+
+## 12. Thirty-six stored runs carry a fingerprint that does not describe them
+
+**Symptom:** none visible. Every affected run displays, compares and reruns
+without complaint.
+
+**Found by:** recomputing `config_hash` from the configuration stored beside it,
+for all 41 runs in `eval/results/runs/`. Five reproduced; thirty-six did not.
+The check was run while adding an unrelated field, precisely to prove the new
+field did not break historical fingerprints. It did not, and the breakage was
+already there.
+
+**Root cause:** `config_hash` is computed once, by a validator, at
+construction, and `name` is one of the hashed fields. The MIRACL sweep appended
+the question count to the name *after* the run finished
+(`eval/miracl/report.py`, `result.config.name = ...`), so the stored
+fingerprint belongs to a configuration that no longer exists.
+
+The thirty-six are the whole MIRACL grid, saved in one eleven-minute window on
+2026-08-29. Runs from 08-25, 08-30 and 08-31 all reproduce, which is what ruled
+out a schema drift and pointed at the sweep.
+
+**Consequence:** `config_hash` is what run deduplication, cache-boundary
+decisions and every "same configuration" comparison are keyed on. For those
+thirty-six, that key describes a configuration whose name differs from the one
+on record. Nothing in the platform reads a fingerprint back to check it, so the
+disagreement stayed silent for as long as it existed.
+
+**Fix:** `ExperimentConfig.renamed(name)` returns a copy with the fingerprint
+recomputed, and the sweep uses it. `ExperimentConfig.fingerprint_matches_fields()`
+answers the question directly for anybody who wants to ask it.
+
+Offered as a question, and not enforced by freezing the model, because the runner
+performs two backfills after hashing on purpose (`external_rag_name`,
+`http_endpoint`), so that a registered system's URL rotating over time does not
+change the identity of the same run against the same system. Freezing would
+have to undo those.
+
+**Not repaired retroactively.** The thirty-six keep their fingerprints. Editing
+stored measurements to make a derived key agree is the wrong trade, and a rerun
+of the grid now produces different fingerprints for the same grid points. That is
+correct, and it is stated here so that the discontinuity is not read later as a
+second defect.
+
+**How to detect:** `config.fingerprint_matches_fields()` on any configuration
+read back out of storage.
+
+## 13. The two halves of the hybrid merge never recognised one chunk as one chunk
+
+**Symptom:** none visible. The answer's context looked correct on every screen.
+
+**Found by:** a proving-ground bait that would not fire. Setting the rank-fusion
+constant to one changed the retrieved order on none of fifteen questions, so the
+staged defect appeared to be no defect. Measuring the two halves' candidate
+lists showed twenty dense and nineteen sparse candidates with **zero** in
+common, on a corpus of forty-nine chunks.
+
+**Root cause:** Qdrant requires a point identifier to be a UUID or an integer. A
+chunk id here is thirty-two hexadecimal characters, which Qdrant accepts,
+normalises into dashed UUID form, and returns in that form. OpenSearch stores
+the same id verbatim and returns it verbatim. `core/retrieval/hybrid.py` keys
+the merge on the chunk id, so one chunk arriving from both halves was two
+documents.
+
+**Consequences, all silent:**
+
+- Reciprocal rank fusion adds a document's contribution from each list it
+  appears in. No document ever appeared in both, so every score had exactly one
+  term and the merge was an interleaving of two disjoint lists.
+- `rrf_k` could not change the order. With disjoint lists a document at rank r
+  scores 1/(k+r) whatever k is, and the ordering by that value is the ordering
+  by r. The constant is inert by construction, not by coincidence.
+- `dense_score` and `sparse_score` are annotated by looking a chunk up in the
+  other half's score map. That lookup always missed, so a chunk found by both
+  halves recorded one of its two scores as zero. Every detector reading that
+  split read it wrong.
+- The context could hold the same passage twice. Measured: a context of five
+  carried four distinct texts.
+
+**Why it stayed quiet:** `core/pipeline.py` drops repeated text before
+answering, so the user-visible context was clean. What was lost sat upstream of
+that.
+
+**Fix:** the Qdrant payload now carries `chunk_id`, as the OpenSearch document
+body already did, and the read takes the id from the payload. Points written
+before the field existed fall back to the point identifier, so an old
+collection keeps today's behaviour until it is loaded again.
+
+**After the fix,** the same measurement on the same corpus gives ten shared
+candidates of twenty, and the fusion constant changes the order on ten of the
+fifteen questions.
+
+**Not repaired retroactively.** Collections loaded by an older build keep the
+dashed identifiers until they are re-ingested. Runs stored against them keep
+whatever they recorded.
+
+**How to detect:** compare the identifier sets the two halves return for one
+query. Any overlap at all is the healthy state on a corpus small enough for the
+halves to compete.

@@ -337,7 +337,11 @@ def _persist(result: Any, log: Callable[[str], None], realm_id: str = DEMO_REALM
     from services.api_gateway.routers.experiments import _save
 
     result.realm_id = realm_id
-    result.config.name = f"{result.config.name}-demo{result.n_questions}"
+    # Through `renamed`, which recomputes the fingerprint. Assigning to
+    # `.name` left thirty-six stored runs carrying a fingerprint that does not
+    # recompute from the configuration beside it, because the name is hashed
+    # and the hash is computed once, at construction.
+    result.config = result.config.renamed(f"{result.config.name}-demo{result.n_questions}")
     result.run_id = f"{result.config.name}_{result.config.config_hash}"
 
     _await(_save(result))

@@ -117,10 +117,17 @@ def _rebind_corpus_id(
 
 
 
-def _params_with_fetch_k(
-    params: dict[str, Any] | None, fetch_k: int | None, supported: list[str] | None,
+# Config fields that reach an external RAG through `params`, the contract
+# carrying no field of its own for them. Written as a list because it grew: `fetch_k`
+# was forwarded alone, and `rrf_k` arriving later would have repeated, one
+# release apart, the exact defect the docstring below records.
+_FORWARDED_TO_EXTERNAL = ("fetch_k", "rrf_k")
+
+
+def _params_with_declared_fields(
+    params: dict[str, Any] | None, config: Any, supported: list[str] | None,
 ) -> dict[str, Any] | None:
-    """Forward `fetch_k` to an external RAG that reads it.
+    """Forward the knobs of `_FORWARDED_TO_EXTERNAL` that a RAG declares reading.
 
     Found by re-verification: `fetch_k` reached only the two in-process
     branches, so a run against an external RAG accepted the field, recorded
@@ -128,23 +135,29 @@ def _params_with_fetch_k(
     `merge_strategy` once had: an accepted setting that does not exist.
 
     Forwarded through `params`, the established channel for knobs without a
-    dedicated contract field, and **only when the RAG declared `fetch_k` in
-    its `supported_params`**. Sending it regardless would break the
-    platform's own rule and would let a wide-window run look applied against
-    a system that ignores the key.
+    dedicated contract field, and **only for a knob the RAG named in its
+    `supported_params`**. Sending one regardless would break the platform's
+    own rule and would let a wide-window run look applied against a system
+    that ignores the key.
 
-    An explicit `params["fetch_k"]` set by hand wins: a caller who typed a
-    value meant it, and silently overwriting it with the config field would
-    make the raw-params escape hatch unreliable.
+    An explicit value already in `params` wins: a caller who typed one meant
+    it, and silently overwriting it with the config field would make the
+    raw-params escape hatch unreliable.
     """
-    if fetch_k is None or not supported or "fetch_k" not in supported:
-        return params
+    declared = set(supported or ())
     merged = dict(params or {})
-    merged.setdefault("fetch_k", fetch_k)
-    return merged
+    changed = False
+    for field_name in _FORWARDED_TO_EXTERNAL:
+        value = getattr(config, field_name, None)
+        if value is None or field_name not in declared:
+            continue
+        merged.setdefault(field_name, value)
+        changed = True
+    return merged if changed else params
 
 
-def _rebind_merge(retriever: Any, merge: str | None, alpha: float | None) -> Any:
+def _rebind_merge(retriever: Any, merge: str | None, alpha: float | None,
+                  rrf_k: int | None = None) -> Any:
     """Apply a config's merge strategy and weight.
 
     `merge_strategy`/`merge_alpha` were decorative for their whole existence:
@@ -171,12 +184,19 @@ def _rebind_merge(retriever: Any, merge: str | None, alpha: float | None) -> Any
         return retriever
     target_merge = merge or getattr(retriever, "_merge", "rrf")
     target_alpha = getattr(retriever, "_alpha", 0.5) if alpha is None else alpha
-    if target_merge == getattr(retriever, "_merge", None) and target_alpha == getattr(retriever, "_alpha", None):
+    # Carried, not defaulted. Rebuilding without it reset the fusion constant
+    # to sixty, so asking for a different merge weight silently undid a
+    # different rank-fusion constant set anywhere upstream. Measured: a
+    # retriever built with rrf_k=10 came back with 60.
+    target_rrf_k = getattr(retriever, "_rrf_k", 60) if rrf_k is None else rrf_k
+    if (target_merge == getattr(retriever, "_merge", None)
+            and target_alpha == getattr(retriever, "_alpha", None)
+            and target_rrf_k == getattr(retriever, "_rrf_k", None)):
         return retriever
     try:
         return type(retriever)(
             dense_retriever=dense, sparse_retriever=sparse, embedder=retriever._embedder,
-            merge=target_merge, alpha=target_alpha,
+            merge=target_merge, alpha=target_alpha, rrf_k=target_rrf_k,
         )
     except Exception:
         # An unknown merge name raises in HybridRetriever's own constructor.
@@ -215,6 +235,41 @@ def _rebind_generator(generator: Any, model: str | None) -> Any:
         return generator
     from adapters.ollama_generator import OllamaGenerator
     return OllamaGenerator(base_url=generator._base_url, model=model, timeout=generator._timeout)
+
+
+def _rebind_reranker(reranker: Any, params: dict[str, Any] | None) -> Any:
+    """Rebuild `reranker` on the model a run asked for.
+
+    `ComponentRef.params` reached nothing: the pipeline builder resolves a
+    reranker out of the registry by its `component_id` and drops the params
+    beside it, so a run could name any model and get the one the gateway
+    started with. Measured: a reference asking for "BAAI/bge-reranker-v2-m3"
+    produced a component that had never heard of the request.
+
+    That absence is not cosmetic. Which model reranks decides which languages
+    the rerank step understands, and a reranker that does not speak the
+    corpus's language reorders by noise. The local reranker defaults to
+    `cross-encoder/ms-marco-MiniLM-L-6-v2`, which is English only, while the
+    default embedder is multilingual, so on a Russian corpus that mismatch was
+    the platform's own default and a run had no way to say otherwise. The
+    MIRACL sweep names the multilingual model explicitly for exactly this
+    reason, and could do so only by building its own component.
+
+    No-op for a reranker type with no model to swap, on the same convention as
+    `_rebind_generator` above: a caller merely passing its config along should
+    not have a run fail over a field that cannot apply to what it resolved.
+    """
+    model = (params or {}).get("model_name")
+    if not model or not hasattr(reranker, "_model_name"):
+        return reranker
+    if reranker._model_name == model:
+        return reranker
+    try:
+        return type(reranker)(model_name=model)
+    except Exception:
+        # A reranker whose constructor does not take the keyword. Degrading
+        # beats failing a whole run, and the run records what it asked for.
+        return reranker
 
 
 @dataclass
@@ -338,6 +393,18 @@ class ExperimentResult:
     # empty dict means a run stored before this field existed, which the
     # detector treats as "nothing to say" rather than as a problem.
     coverage_check: dict[str, Any] = field(default_factory=dict)
+    # Components this run's configuration named and the registry could not
+    # produce. The pipeline builder degrades to running without them, on
+    # purpose: an uninstalled reranker extra should not fail a whole run. What
+    # it did not do was say so, so a run whose configuration named a reranker
+    # and that reranked nothing was indistinguishable, on every screen and in
+    # every stored document, from one that did.
+    #
+    # That distinction decides whether a proving-ground pair means anything: a
+    # bait pairing two rerankers proves nothing at all when neither ran.
+    # Empty on a run stored before this field existed, which reads as "nothing
+    # to say" and never as "everything was available".
+    unavailable_components: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -355,6 +422,7 @@ class ExperimentResult:
             "stopped": self.stopped,
             "generator_model": self.generator_model,
             "coverage_check": self.coverage_check,
+            "unavailable_components": self.unavailable_components,
             "aggregate_metrics": self.aggregate_metrics,
             "question_results": [
                 {
@@ -421,8 +489,15 @@ class ExperimentRunner:
         self, config: ExperimentConfig, realm_id: str = "",
         qdrant_cfg: dict[str, Any] | None = None, opensearch_cfg: dict[str, Any] | None = None,
         retrieval_pins: list[Any] | None = None,
+        unavailable: list[str] | None = None,
     ) -> Any:
         """Build the pipeline the config describes.
+
+        `unavailable`, when given, collects every component the config named
+        and the registry could not produce. Collected, and never raised, since
+        an uninstalled reranker extra should not fail a whole run. Reported,
+        and no longer dropped: a run that named a reranker and reranked nothing
+        used to look identical to one that reranked.
 
         `realm_id`/`qdrant_cfg`/`opensearch_cfg` — see
         _rebind_corpus_id's docstring. Only affects the in_process branch
@@ -476,8 +551,8 @@ class ExperimentRunner:
                     external_pipeline_id=config.pipeline_id,
                     reranker_id=reranker_id,
                     # Extensible, capabilities-gated knobs.
-                    params=_params_with_fetch_k(
-                        config.params, config.fetch_k, resolved.get("supported_params"),
+                    params=_params_with_declared_fields(
+                        config.params, config, resolved.get("supported_params"),
                     ) or None,
                     # Registered per-RAG override of HttpPipeline's 30s default —
                     # some RAGs (e.g. a multi-step agentic one) genuinely need
@@ -501,7 +576,7 @@ class ExperimentRunner:
         )
         # After the corpus rebind, so the merge wrapper is rebuilt
         # around retrievers already bound to the right corpus.
-        retriever = _rebind_merge(retriever, config.merge_strategy, config.merge_alpha)
+        retriever = _rebind_merge(retriever, config.merge_strategy, config.merge_alpha, config.rrf_k)
         generator = _rebind_generator(base._generator, (config.params or {}).get("model"))
 
         if (config.reranker is None and config.grounding is None and config.route_policy is None
@@ -526,6 +601,8 @@ class ExperimentRunner:
                 return self._registry.resolve(kind, ref.component_id)
             except KeyError:
                 log.warning("experiment.component.unavailable", kind=kind, id=ref.component_id)
+                if unavailable is not None:
+                    unavailable.append(f"{kind}:{ref.component_id}")
                 return None
 
         return ConfigurablePipeline(
@@ -534,7 +611,8 @@ class ExperimentRunner:
             generator=generator,
             top_k=config.top_k,
             fetch_k=config.fetch_k,
-            reranker=_maybe("reranker", config.reranker),
+            reranker=_rebind_reranker(_maybe("reranker", config.reranker),
+                                      config.reranker.params if config.reranker else None),
             grounder=_maybe("grounder", config.grounding),
             route_policy=_maybe("route_policy", config.route_policy),
             scorer=_maybe("scorer", config.scorer),
@@ -595,13 +673,17 @@ class ExperimentRunner:
         # direct/scripted runner call gets.
         run_id = f"{config.name}_{config.config_hash}"
 
-        pipeline = self._build_pipeline(config, realm_id, qdrant_cfg, opensearch_cfg, retrieval_pins)
+        unavailable: list[str] = []
+        pipeline = self._build_pipeline(
+            config, realm_id, qdrant_cfg, opensearch_cfg, retrieval_pins, unavailable,
+        )
         result = ExperimentResult(
             config=config,
             run_id=run_id,
             started_at=started_at,
             n_questions=len(dataset.questions),
             dataset_name=dataset.name,
+            unavailable_components=unavailable,
         )
 
         # retrieval_only calls the cheaper retrieve() path
