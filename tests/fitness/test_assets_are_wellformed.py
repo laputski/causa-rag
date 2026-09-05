@@ -52,3 +52,51 @@ def test_svg_parses(path: Path) -> None:
         ElementTree.parse(path)
     except ElementTree.ParseError as error:
         pytest.fail(f"{path.relative_to(ROOT)} is not well-formed XML: {error}")
+
+
+def _referenced_images(markdown: Path) -> list[str]:
+    """Every local image path a markdown file points at.
+
+    Both spellings are read: the markdown form and the HTML tag, because the
+    README uses the tag wherever it needs a width and the markdown form
+    elsewhere. Remote addresses are left alone; whether a shield renders is the
+    business of the service that draws it.
+    """
+    import re
+
+    text = markdown.read_text(encoding="utf-8")
+    found = re.findall(r'<img[^>]+src="([^"]+)"', text)
+    found += [m for _, m in re.findall(r"!\[([^\]]*)\]\(([^)\s]+)", text)]
+    return [p for p in found if not p.startswith(("http://", "https://", "data:"))]
+
+
+def test_every_image_the_readme_points_at_exists() -> None:
+    """The first page a visitor sees carries these, and a missing one does not
+    fail loudly: the browser declines to draw it and moves on.
+
+    That has already happened here once, with a malformed wordmark, and it was
+    reported by a person and not by a test. This is the other half of the same
+    accident: a file renamed or removed while the reference stayed.
+    """
+    readme = ROOT / "README.md"
+    referenced = _referenced_images(readme)
+    assert referenced, "the README points at no local image at all, which it used to"
+    missing = sorted(p for p in referenced if not (ROOT / p).is_file())
+    assert missing == [], f"README points at files that are not here: {missing}"
+
+
+def test_no_published_asset_is_pointed_at_by_nothing() -> None:
+    """The other direction. An asset nothing references is either a leftover or
+    a reference somebody forgot to write, and both are worth seeing.
+
+    The social preview and the two logo variants are named by the code host and
+    by the interface, and by no markdown file, so they are listed here as
+    the exceptions they are.
+    """
+    named_elsewhere = {"social-preview.png", "logo.svg", "logo-dark.svg"}
+    referenced = set()
+    for markdown in sorted(ROOT.glob("*.md")) + sorted((ROOT / "docs").rglob("*.md")):
+        referenced |= {Path(p).name for p in _referenced_images(markdown)}
+    stray = sorted(p.name for p in (ROOT / "docs" / "assets").iterdir()
+                   if p.is_file() and p.name not in referenced | named_elsewhere)
+    assert stray == [], f"assets nothing points at: {stray}"

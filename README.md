@@ -21,35 +21,35 @@ assumed. Everything runs on your own machine.
 </div>
 
 <p align="center">
-  <img src="docs/assets/overview.svg" alt="The overview screen of the demo realm: a status band, the five setup steps, resource health, and the two most recent runs with their metrics" width="1000">
+  <img src="docs/assets/overview.png" alt="The overview screen of the demo realm: a status band with corpora, questions, prompts and runs; the five setup steps, each ticked or waiting; resource health for Qdrant, OpenSearch, Ollama and the rest; and the most recent runs" width="1000">
 </p>
 
 <p align="center">
-  <sub>The overview screen of the demo realm that <code>./install.sh</code> creates.</sub>
+  <sub>The overview of the demo realm that <code>./install.sh</code> creates. A screenshot of the running platform, not a drawing.</sub>
 </p>
 
 <p align="center">
-  <img src="docs/assets/run.svg" alt="The run screen: five aggregate metrics as a band, the funnel showing which layer lost each answer, and the two failing questions filtered by funnel layer" width="1000">
+  <img src="docs/assets/run.png" alt="The run screen: eight aggregate metrics with the change against the baseline, a funnel naming the layer each answer was lost at, the full configuration the run used, and the questions that need attention" width="1000">
 </p>
 
 <p align="center">
-  <sub>One run, read from the top: what it scored, where answers were lost, and which questions to look at.</sub>
+  <sub>One run, read from the top: what it scored, where answers were lost, what it was configured with, and which questions to look at. Every number measured over the demo corpus that ships with this repository.</sub>
 </p>
 
 <p align="center">
-  <img src="docs/assets/compare.svg" alt="Two runs compared: widening the context from five to ten keeps recall at 1.000 and drops precision from 0.795 to 0.290" width="1000">
+  <img src="docs/assets/atlas.png" alt="The failure atlas: an architecture chosen by its coordinates, a count of the entries applying to it, and the entries themselves with stage, severity and one of four detection states" width="1000">
 </p>
 
 <p align="center">
-  <sub>Real numbers, measured by <code>make test-e2e</code> over the demo corpus that ships with this repository.</sub>
+  <sub>The catalogue of failures a retrieval system can have. Which entries apply is derived from the architecture's coordinates, and each carries one of four states: caught by a named signal, visible in the data for a person to read, claimed but unproven, or not detected at all. The last is shown beside the others on purpose.</sub>
 </p>
 
 <p align="center">
-  <img src="docs/assets/corpus-health.svg" alt="Corpus health: five counters, the length distribution as a histogram, and the findings ordered by severity" width="1000">
+  <img src="docs/assets/corpus-health.png" alt="Corpus health: five counters, the length distribution as a histogram, and three findings, each carrying the catalogue entry it is evidence for" width="1000">
 </p>
 
 <p align="center">
-  <sub>A corpus is judged by the shape of its length distribution, not by its mean.</sub>
+  <sub>A corpus is judged by the shape of its length distribution, not by its mean. Each finding names the catalogue entry it is evidence for, so a reader can tell a known failure from a bare sentence.</sub>
 </p>
 
 ---
@@ -87,6 +87,23 @@ radius of a change visible.
 **Turns a reviewer's comment into reusable knowledge.** Free text becomes a
 classified diagnosis and, on confirmation, a golden question that every later
 run is measured against.
+
+**Names the failure, and says when it cannot.** Every finding carries the
+catalogue entry it is evidence for. The catalogue holds forty failures a
+retrieval system can have, and which of them apply to a given system is derived
+from that system's coordinates in the published schema at
+[ragworld.org](https://ragworld.org), never from an architecture's name. Each
+entry stands in one of four states, and the fourth is shown beside the others:
+caught by a named signal, visible in the data for a person to read, claimed and
+unproven, or not detected at all. A catalogue showing only what it catches is
+advertising.
+
+**Proves it catches them, on a realm built to be broken.** No entry may claim
+detection without a pair of observations: the signal has to speak on a sample
+carrying the failure and stay silent on the same sample without it. Half a pair
+proves nothing, and the half that rots is the silent one. Thirteen entries are
+reproduced on a live stack, with a real corpus in a real index and a real run;
+the rest say so.
 
 ## Quickstart
 
