@@ -9,7 +9,7 @@ Pure functions — no LLM, no I/O. Mirrored in ui/src/lib/diagnostics.ts.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 Severity = str  # "ok" | "info" | "warn" | "error"
@@ -48,14 +48,21 @@ class DiagnosticItem:
     title: str
     detail: str
     action: str = ""
+    # Which entries of the failure catalogue this finding is evidence for.
+    # Filled by the services layer, never here: the catalogue knows which
+    # signals evidence a failure and the signals know nothing about the
+    # catalogue, so a detector is never edited because a description of it
+    # changed. Empty on a finding no entry names, which is a fact worth seeing.
+    failure_ids: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "severity": self.severity,
             "title": self.title,
             "detail": self.detail,
             "action": self.action,
+            "failure_ids": list(self.failure_ids),
         }
 
 
@@ -73,33 +80,106 @@ def _generated_answers(run: dict[str, Any]) -> list[str]:
 # ── individual detectors ───────────────────────────────────────────────────────
 
 def detect_stub_embedder(refs: list[dict[str, Any]]) -> DiagnosticItem | None:
-    """All dense scores ≈ 0 ⇒ corpus indexed with stub vectors (USE_REAL_BGE_M3)."""
-    dense = [r.get("dense_score", 0.0) for r in refs if r.get("dense_score") is not None]
+    """Dense scores at the floor ⇒ the corpus was indexed with random vectors.
+
+    The check is only possible when the run recorded a per-signal score split
+    at all, and that is not a technicality. Only the hybrid retriever writes
+    `dense_score`/`sparse_score`; a dense-only pipeline leaves both at the
+    field's default and carries its retrieval score in `score` instead, and an
+    external system reports no split of its own either way.
+
+    Found live, and this is what the rule below is for: the old version read
+    the absent field as evidence and reported "indexed with random vectors" on
+    **every one of the eighteen stored dense-only runs**, each of which has a
+    recall@k between 0.81 and 1.00. Eighteen out of eighteen, at severity
+    error, on healthy runs.
+
+    Two fixes were considered and rejected. Skipping the check for a non-hybrid
+    pipeline trades a false alarm for a permanent silence. Reading `score`
+    instead does not restore the check either: after a reranker `score` carries
+    the reranker's output and not any similarity, and even without one, a
+    stub embedder over a few thousand random vectors of this width yields top
+    cosines around 0.1, which the 0.01 floor does not separate from health.
+
+    So the check says which of the three it is. Split recorded and dense side
+    collapsed: a fault. Split recorded and dense side alive: silence. No split
+    recorded: an explicit `embedder_unverified`, because a reader must be able
+    to tell "not checked" from "checked and fine". The reliable evidence is a
+    record of which model the corpus was actually indexed with, which nothing
+    keeps yet.
+
+    The rule reads the data instead of the configuration, so it needs no
+    special case for an external system: a run that reports no split gets the
+    same honest "could not check" whoever produced it.
+    """
+    dense = [r.get("dense_score") or 0.0 for r in refs]
+    sparse = [r.get("sparse_score") or 0.0 for r in refs]
+    if not dense:
+        return None
+
+    split_recorded = any(d > 0 for d in dense) or any(s > 0 for s in sparse)
+    if not split_recorded:
+        return DiagnosticItem(
+            id="embedder_unverified",
+            severity="info",
+            title="Whether the embedder is real could not be checked",
+            detail=f"None of the {len(dense)} retrieved chunks carries a per-signal score "
+            "split, which is what a dense-only pipeline and an external system both look "
+            "like. Nothing here distinguishes a corpus indexed with a real model from one "
+            "indexed with random vectors.",
+            action="Read the run's recall against its reference sources: a corpus indexed "
+                   "with random vectors cannot reach a high one.",
+        )
+
     nonzero = [d for d in dense if d > 0.01]
-    if dense and len(nonzero) / len(dense) < 0.1:
+    if len(nonzero) / len(dense) < 0.1:
         return DiagnosticItem(
             id="stub_embedder",
             severity="error",
             title="Looks like a stub embedder",
-            detail=f"{len(dense) - len(nonzero)}/{len(dense)} chunks have dense_score near zero, "
-            "so the corpus was probably indexed with random vectors.",
-            action="Re-index the corpus with USE_REAL_BGE_M3=true.",
+            detail=f"{len(dense) - len(nonzero)}/{len(dense)} chunks have a dense score at "
+            "the floor while the sparse side reports real values, so the corpus was probably "
+            "indexed with random vectors.",
+            action="Re-index the corpus with the real embedding model switched on.",
         )
     return None
 
 
-def detect_duplicates(refs: list[dict[str, Any]]) -> DiagnosticItem | None:
-    """Same chunk_text appears multiple times in retrieved context (re-ingest dupes)."""
-    texts = [r.get("chunk_text", "") for r in refs if r.get("chunk_text")]
-    if not texts:
-        return None
-    dupes = len(texts) - len(set(texts))
-    if dupes > 0:
+def detect_duplicates(run: dict[str, Any]) -> DiagnosticItem | None:
+    """The same text twice in one question's context.
+
+    Counted per question, and never across the run. It used to read every
+    question's sources pooled into one list, where a chunk that answers two
+    questions is indistinguishable from a chunk stored twice, so the detector
+    was measuring how useful a chunk is and calling that a defect.
+
+    Measured on the proving ground's healthy corpus: fifteen questions returned
+    seventy-five sources of twenty-eight distinct texts, with the most useful
+    chunk answering six questions and not one repeat inside any single
+    question. The pooled rule reported forty-seven duplicates. Across the
+    forty-one stored runs it fired on thirty-two, and on every one of those
+    thirty-two the repeats existed only in the pool.
+
+    The failure it exists for is a context holding the same passage twice,
+    which wastes the window and lets one source outvote the rest. That is a
+    property of one context, so it is asked of one context.
+    """
+    per_question = 0
+    affected = 0
+    for question in run.get("question_results") or []:
+        texts = [r.get("chunk_text", "") for r in (question.get("source_refs") or [])
+                 if r.get("chunk_text")]
+        repeats = len(texts) - len(set(texts))
+        if repeats:
+            per_question += repeats
+            affected += 1
+    if per_question > 0:
         return DiagnosticItem(
             id="duplicates",
             severity="warn",
             title="Duplicates in the context",
-            detail=f"{dupes} repeated chunks in the retrieved context.",
+            detail=f"{per_question} repeated chunks inside a single question's context, "
+                   f"across {affected} question(s).",
             action="Check that chunk_id is deterministic, then drop the collection and re-index.",
         )
     return None
@@ -124,24 +204,68 @@ def detect_header_only(refs: list[dict[str, Any]]) -> DiagnosticItem | None:
 
 
 def detect_bm25_dominance(refs: list[dict[str, Any]]) -> DiagnosticItem | None:
-    """Sparse score dominates dense everywhere ⇒ keyword bias."""
-    pairs = [
-        (r.get("dense_score", 0.0), r.get("sparse_score", 0.0))
+    """One half of a hybrid retriever supplies almost the whole context.
+
+    Measured by where the chunks came from, not by how large their scores are.
+    That distinction is the whole of this function's history.
+
+    The previous rule compared raw scores: sparse above three times dense for
+    most chunks. Measured over the 4664 scored pairs on this machine, it holds
+    for **100%** of them, on every hybrid run, always. Not because one half
+    rules the ranking but because the two numbers are not on one scale: dense
+    is a cosine between 0 and 0.89, sparse is a raw lexical score between 0 and
+    58.1. The comparison is arithmetic, not evidence. Worse, 95.4% of those
+    comparisons were against a dense score of exactly zero, which does not mean
+    "the model scored this chunk zero" but "this chunk was not in the dense
+    list at all", so the rule was reading an absence as a low value.
+
+    The rank-based question has an answer on the same data: between 11% and
+    47% of the final context comes from the sparse half alone, across all 23
+    hybrid runs. That is a balanced merge, which is what rank fusion is for,
+    and the opposite of what the old rule reported.
+
+    Symmetric on purpose: a dense half supplying everything is the same failure
+    as a sparse half supplying everything, and the old rule could only ever see
+    one of the two.
+    """
+    contributed = [
+        (r.get("dense_score") or 0.0, r.get("sparse_score") or 0.0)
         for r in refs
-        if r.get("sparse_score")
     ]
-    if len(pairs) < 3:
+    # A chunk with neither signal reported says nothing about the merge.
+    scored = [(d, s) for d, s in contributed if d > 0 or s > 0]
+    if len(scored) < _MIN_MERGE_OBSERVATIONS:
         return None
-    dominated = [1 for d, s in pairs if s > (d * 3 + 1e-6)]
-    if len(dominated) / len(pairs) > 0.7:
-        return DiagnosticItem(
-            id="bm25_dominance",
-            severity="info",
-            title="BM25 dominates the ranking",
-            detail="Sparse scores sit well above dense ones for most chunks, which points to a keyword bias.",
-            action="Switch to hybrid_rrf, or raise the dense weight in weighted merging.",
-        )
+
+    sparse_only = sum(1 for d, s in scored if d == 0 and s > 0)
+    dense_only = sum(1 for d, s in scored if s == 0 and d > 0)
+    for count, half, other in (
+        (sparse_only, "keyword", "semantic"),
+        (dense_only, "semantic", "keyword"),
+    ):
+        share = count / len(scored)
+        if share > _MERGE_DOMINANCE_SHARE:
+            return DiagnosticItem(
+                id="bm25_dominance",
+                severity="info",
+                title=f"The {half} half rules the merge",
+                detail=f"{count}/{len(scored)} of the chunks that reached the answer were "
+                f"contributed by the {half} half alone ({share:.0%}). The {other} half is "
+                "being paid for and is barely reaching the context.",
+                action="Compare the two halves' own recall separately before changing the "
+                       "merge: one of them may simply have nothing to add on this corpus.",
+            )
     return None
+
+
+# A merge needs a few observations before its balance means anything; below
+# this a single question's top-k decides the verdict.
+_MIN_MERGE_OBSERVATIONS = 20
+# Measured on this machine: a working rank fusion puts 11% to 47% of the final
+# context on the sparse half. The threshold sits well clear of that band, so
+# the check reports a half that has effectively stopped contributing rather
+# than one that contributes less than the other.
+_MERGE_DOMINANCE_SHARE = 0.8
 
 
 def detect_empty_answers(answers: list[str]) -> DiagnosticItem | None:
@@ -152,6 +276,9 @@ def detect_empty_answers(answers: list[str]) -> DiagnosticItem | None:
     see core/eval/answerability.py). This detector flags the raw rate as a
     starting point; detect_incorrect_refusals below is the precise version
     that knows which refusals were actually wrong.
+
+    Not called at all for a run that stopped before the generator: see the
+    gate in run_detectors, and the reason there.
     """
     if not answers:
         return None
@@ -314,12 +441,26 @@ def run_detectors(run: dict[str, Any]) -> list[DiagnosticItem]:
     # fields the same way, so it carries the identical false-positive risk.
     # Both skipped for http-sourced runs.
     is_external = (run.get("config") or {}).get("pipeline_source") == "http"
+
+    # A run that deliberately stopped before the generator answers nothing, and
+    # that is the documented intent of the mode and not a fault of it. The
+    # evaluator already refuses to score an empty answer for exactly this
+    # reason; this detector did not, and reported "100% of answers are empty"
+    # at severity error on every one of the thirty-six stored retrieval-only
+    # runs. The gate sits here and not inside the detector because the
+    # detector is given answers alone and has no way to know why they are empty.
+    retrieval_only = bool((run.get("config") or {}).get("retrieval_only"))
+
     candidates = [
-        None if is_external else detect_stub_embedder(refs),
-        detect_duplicates(refs),
+        # No external special case any more: detect_stub_embedder now decides
+        # from whether the run recorded a per-signal split at all, which is the
+        # same question the special case was standing in for, asked of the data
+        # instead of the configuration.
+        detect_stub_embedder(refs),
+        detect_duplicates(run),
         detect_header_only(refs),
         None if is_external else detect_bm25_dominance(refs),
-        detect_empty_answers(answers),
+        None if retrieval_only else detect_empty_answers(answers),
         detect_incorrect_refusals(run),
         detect_layer_bottleneck(run),
         detect_unverified_coverage(run),
