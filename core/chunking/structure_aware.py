@@ -33,6 +33,82 @@ from core.models import Chunk, Document, DocumentNode, _chunk_id
 _BARE_NUMERAL_RE = re.compile(r"^\d+(?:[.\-]\d+)*\.?$")
 
 
+# A markdown heading, and a fence that suspends them. A line starting with a
+# hash inside a fenced block is code, not a heading, and reading it as one
+# would invent a section out of a comment.
+_MARKDOWN_HEADING = re.compile(r"^(#{1,6})\s+(\S.*)$")
+_FENCE = re.compile(r"^\s*(```|~~~)")
+
+
+def tree_from_markdown_headings(content: str) -> DocumentNode | None:
+    """A structural tree derived from markdown headings, or None when there are none.
+
+    A heading convention belonging to a subject area belongs to a domain pack,
+    and this is not one: `#` is a property of the file format, the same in every
+    subject, so deriving from it needs no knowledge the platform does not have.
+
+    Written because the incident log said it already existed. It did not. The
+    log recorded that `structure_aware` had been silently splitting every real
+    ingest into flat windows and described the fix in two halves, of which one
+    was built: a parser was added to a domain pack and selected by an explicit
+    flag. The other half, this one, was described in the past tense and never
+    written, so a corpus ingested without that flag still got flat windows under
+    a strategy whose whole name promises otherwise.
+
+    Observed before writing this: the demo corpus has five headings in its first
+    file and produced twenty-two chunks, every one of them carrying the path
+    `root`.
+
+    Text standing before the first heading is kept, in a node of its own. The
+    pack's parser drops it, because a line arriving before any heading has no
+    section to belong to and is discarded; here it becomes a preamble, since a
+    document whose first paragraph never reaches the index is the same silent
+    loss this module exists to stop.
+    """
+    root = DocumentNode(node_id="root", node_type="document", level=0)
+    stack: list[DocumentNode] = [root]
+    preamble: list[str] = []
+    seen_heading = False
+    in_fence = False
+
+    for raw in content.splitlines():
+        if _FENCE.match(raw):
+            in_fence = not in_fence
+        match = None if in_fence else _MARKDOWN_HEADING.match(raw)
+        if match is None:
+            if seen_heading:
+                node = stack[-1]
+                node.content = f"{node.content}\n{raw}".strip() if node.content else raw.strip()
+            else:
+                preamble.append(raw)
+            continue
+
+        seen_heading = True
+        level = len(match.group(1))
+        title = match.group(2).strip()
+        while len(stack) > 1 and stack[-1].level >= level:
+            stack.pop()
+        node = DocumentNode(
+            node_id=f"{len(stack[-1].children) + 1}",
+            node_type="section",
+            title=title,
+            level=level,
+        )
+        stack[-1].children.append(node)
+        stack.append(node)
+
+    if not seen_heading:
+        return None
+
+    text = "\n".join(preamble).strip()
+    if text:
+        # First, so the document reads in its own order.
+        root.children.insert(0, DocumentNode(
+            node_id="0", node_type="preamble", level=1, content=text,
+        ))
+    return root
+
+
 def _build_path(ancestors: list[DocumentNode], current: DocumentNode) -> str:
     parts = [n.node_type for n in ancestors] + [current.node_type]
     titles = [n.title for n in ancestors + [current] if n.title]
@@ -56,13 +132,20 @@ class StructureAwareChunkingStrategy:
         self.fallback_overlap = fallback_overlap
 
     def chunk(self, doc: Document) -> list[Chunk]:
-        if doc.structure is None:
+        structure = doc.structure
+        if structure is None:
+            # A caller that supplied no tree may still have given a document
+            # that carries one in its own markup. Reading it costs one pass and
+            # is the difference between this strategy doing what its name says
+            # and doing exactly what `fixed` does under a different name.
+            structure = tree_from_markdown_headings(doc.content)
+        if structure is None:
             return self._split_text(
                 doc.doc_id, doc.source, doc.content, structural_path="root", metadata=doc.metadata,
             )
 
         chunks: list[Chunk] = []
-        self._traverse(doc.doc_id, doc.source, doc.structure, ancestors=[], out=chunks, metadata=doc.metadata)
+        self._traverse(doc.doc_id, doc.source, structure, ancestors=[], out=chunks, metadata=doc.metadata)
         return chunks
 
     def _traverse(
@@ -73,23 +156,58 @@ class StructureAwareChunkingStrategy:
         ancestors: list[DocumentNode],
         out: list[Chunk],
         metadata: dict,
+        ordinal: str = "0",
     ) -> None:
         path = _build_path(ancestors, node)
-        if not node.children:
-            out.extend(self._split_text(doc_id, source, node.content, structural_path=path, metadata=metadata))
-        else:
-            for child in node.children:
-                self._traverse(doc_id, source, child, ancestors + [node], out, metadata)
+        # A node's own text is emitted whether or not it has children. Only a
+        # leaf used to be emitted, so a section carrying an introduction before
+        # its subsections lost that introduction: measured on the demo corpus,
+        # eight hundred characters across eight files, one paragraph per
+        # section, gone from the index without a word anywhere.
+        #
+        # It bites both ways of building a tree, this module's own and a domain
+        # pack's, because both put a section's lead paragraph on the section and
+        # its detail on the children.
+        if node.content:
+            out.extend(self._split_text(
+                doc_id, source, node.content, structural_path=path, metadata=metadata,
+                ordinal=ordinal,
+            ))
+        for index, child in enumerate(node.children):
+            self._traverse(
+                doc_id, source, child, ancestors + [node], out, metadata,
+                ordinal=f"{ordinal}.{index}",
+            )
+
+    def _identity(self, structural_path: str, ordinal: str) -> str:
+        """What makes one chunk's identifier different from another's.
+
+        A chunk is identified by its source, this string, and its offsets, and
+        the offsets are counted inside the node, never inside the document.
+        The structural path alone is therefore not enough: two sections sharing
+        a heading in one file produce the same path, both start at zero, and the
+        two chunks collide. Ingestion upserts by that identifier, so one of them
+        silently overwrites the other.
+
+        Found by auditing this module's own change, which is what made the
+        collision reachable: before a tree was derived, a document without one
+        gave every chunk the path `root` and offsets running through the whole
+        file, so no two could meet. The ordinal is the node's position in the
+        tree, which distinguishes two sections that agree on everything a reader
+        can see.
+        """
+        return f"{self.strategy_id}:{structural_path}:{ordinal}"
 
     def _split_text(
         self, doc_id: str, source: str, text: str, structural_path: str, metadata: dict,
+        ordinal: str = "0",
     ) -> list[Chunk]:
         if not text:
             return []
         if len(text) <= self.max_chunk_size:
             return [
                 Chunk(
-                    chunk_id=_chunk_id(source, 0, len(text), self.strategy_id + ":" + structural_path),
+                    chunk_id=_chunk_id(source, 0, len(text), self._identity(structural_path, ordinal)),
                     doc_id=doc_id,
                     text=text,
                     structural_path=structural_path,
@@ -118,7 +236,7 @@ class StructureAwareChunkingStrategy:
             end = current_start + len(chunk_text)
             chunks.append(
                 Chunk(
-                    chunk_id=_chunk_id(source, current_start, end, self.strategy_id + ":" + structural_path),
+                    chunk_id=_chunk_id(source, current_start, end, self._identity(structural_path, ordinal)),
                     doc_id=doc_id,
                     text=chunk_text,
                     structural_path=structural_path,

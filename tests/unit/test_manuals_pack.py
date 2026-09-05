@@ -13,7 +13,7 @@ from core.domain.loader import load_pack
 from core.registry import ComponentRegistry
 from domain_packs.manuals.refusal import ManualsRefusalPolicy
 from domain_packs.manuals.routing import classify_question_type
-from domain_packs.manuals.structure_parser import parse_manual_section
+from domain_packs.manuals.structure_parser import _HEADING, parse_manual_section
 
 MANUAL = """4 Обслуживание
 Общие требования к обслуживанию.
@@ -47,9 +47,31 @@ def test_text_under_a_heading_belongs_to_it() -> None:
 def test_a_file_without_headings_yields_a_tree_rather_than_an_exception() -> None:
     # Ingestion has to survive a document that keeps no numbering: an exception
     # here would stop a whole corpus over one file.
+    #
+    # It used to assert `tree.children == []`, and surviving is not what that
+    # produced. A tree with no children and no content makes the chunker emit
+    # nothing at all, so a file without numbering reached the index as zero
+    # chunks: the whole file gone, no exception, no warning, nothing anywhere
+    # to notice it by. Measured on a three-line document, and it is the largest
+    # instance of a loss this pack had two of.
     tree = parse_manual_section("Просто текст без нумерации.\nВторая строка.")
     assert tree.node_type == "document"
-    assert tree.children == []
+    assert tree.children, "a file without numbering produces a tree that carries none of it"
+    assert "Просто текст" in tree.children[0].content
+
+
+def test_a_file_without_headings_still_reaches_the_index() -> None:
+    """The consequence, stated where it bites and not where it starts."""
+    from core.chunking.structure_aware import StructureAwareChunkingStrategy
+    from core.models import Document
+
+    text = "Просто текст без нумерации.\nВторая строка.\nТретья строка."
+    chunks = StructureAwareChunkingStrategy().chunk(
+        Document(source="m.txt", content=text, content_hash="h",
+                 structure=parse_manual_section(text))
+    )
+    assert chunks, "the file produced no chunks at all, so none of it is searchable"
+    assert "Третья строка" in " ".join(c.text for c in chunks)
 
 
 # @lat: [[domain-packs#Пример, совпадающий с демонстрацией]]
@@ -115,3 +137,57 @@ def test_the_question_type_still_classifies_russian() -> None:
     assert classify_question_type("Как заменить детектор?") == "procedure"
     assert classify_question_type("Есть ли ограничение по напряжению?") == "closed"
     assert classify_question_type("Опасно ли это?") == "safety"
+
+
+# ── the text between the structure ────────────────────────────────────────────
+
+def test_text_before_the_first_heading_is_kept() -> None:
+    """It used to be dropped, silently.
+
+    A line arriving before any heading belonged to no section, so nothing kept
+    it: a manual's title page, its scope statement and its revision note left
+    the document here with nothing anywhere reporting a loss. Found by reading
+    this parser while fixing the same defect in the chunker, which discarded a
+    section's own lead paragraph for the same reason. Nothing was looking after
+    the text that sits between the structure.
+    """
+    tree = parse_manual_section(
+        "Руководство по эксплуатации. Издание 3.\n"
+        "Действует с 1 марта.\n"
+        "\n"
+        "1 Назначение\n"
+        "Содержимое раздела.\n"
+    )
+    kept = " ".join(node.content for node in tree.children)
+    assert "Издание 3" in kept, f"the opening lines were dropped: {kept!r}"
+    assert "Действует с 1 марта" in kept
+    assert "Содержимое раздела" in kept, "the section's own text was lost while keeping the preamble"
+
+
+def test_a_document_that_opens_with_a_heading_gains_no_empty_preamble() -> None:
+    """Nothing is invented where nothing was lost."""
+    tree = parse_manual_section("1 Назначение\nСодержимое.\n")
+    assert [n.node_type for n in tree.children] == ["section"]
+
+
+def test_not_one_line_of_a_manual_is_lost() -> None:
+    """The property the previous two are instances of."""
+    source = (
+        "Титульный лист.\n\n"
+        "1 Назначение\nПервый раздел.\n\n"
+        "1.1 Область\nПодраздел.\n\n"
+        "2 Порядок\nВторой раздел.\n"
+    )
+    tree = parse_manual_section(source)
+
+    def texts(node):
+        yield node.content
+        for child in node.children:
+            yield from texts(child)
+
+    produced = " ".join(texts(tree))
+    missing = [
+        line.strip() for line in source.splitlines()
+        if line.strip() and not _HEADING.match(line) and line.strip() not in produced
+    ]
+    assert missing == [], f"lines of the manual that reached no node: {missing}"

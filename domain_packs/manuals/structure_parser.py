@@ -30,6 +30,7 @@ def parse_manual_section(content: str) -> DocumentNode:
     """
     root = DocumentNode(node_id="root", node_type="document", level=0)
     stack: list[DocumentNode] = [root]
+    preamble: list[str] = []
 
     for raw in content.splitlines():
         match = _HEADING.match(raw)
@@ -37,6 +38,16 @@ def parse_manual_section(content: str) -> DocumentNode:
             if len(stack) > 1:
                 node = stack[-1]
                 node.content = f"{node.content}\n{raw}".strip() if node.content else raw.strip()
+            else:
+                # Text arriving before the first heading used to be dropped: it
+                # belonged to no section, so nothing kept it. A manual opens
+                # with a title page, a scope statement, a revision note, and all
+                # of it left the document here without a word anywhere saying
+                # so. Found by reading this parser while fixing the same loss in
+                # the chunker, which discarded a section's own lead paragraph
+                # for the same reason: nothing was looking after the text that
+                # sits between the structure.
+                preamble.append(raw)
             continue
         number, title = match.group(1), match.group(2).strip()
         level = number.count(".") + 1
@@ -54,4 +65,10 @@ def parse_manual_section(content: str) -> DocumentNode:
         stack[-1].children.append(node)
         stack.append(node)
 
+    text = "\n".join(preamble).strip()
+    if text:
+        # First, so the document reads in its own order.
+        root.children.insert(0, DocumentNode(
+            node_id="0", node_type="preamble", level=1, content=text,
+        ))
     return root
