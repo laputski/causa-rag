@@ -1182,6 +1182,11 @@ async def corpus_health(
     if near_dup_item:
         health["items"].append(near_dup_item.to_dict())
 
+    # Each finding names the catalogue entries it is evidence for, so a reader
+    # can tell a known failure from a sentence about this corpus.
+    from services.api_gateway.routers.atlas import attach_failure_ids
+    attach_failure_ids(health["items"], "health")
+
     return {"corpus_id": corpus_id, **health}
 
 

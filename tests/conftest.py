@@ -1,8 +1,11 @@
 """Shared fixtures for every test layer.
 
-Two rules live here, and each exists because breaking it is silent.
+Three rules live here, and each exists because breaking it is silent.
 """
 from __future__ import annotations
+
+import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -34,6 +37,43 @@ def _stub_embedder_in_the_fast_layers(request, monkeypatch):
     path = str(getattr(request.node, "fspath", ""))
     if any(layer in path.replace("\\", "/") for layer in _STUB_ONLY):
         monkeypatch.delenv("USE_REAL_BGE_M3", raising=False)
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _isolate_the_run_store_in_the_fast_layers(request, monkeypatch):
+    """Keep the developer's own stored runs out of the fast suites.
+
+    The experiments router keeps a file copy of every run beside the database
+    one, and reads the files for runs the database does not have. On a machine
+    that has run experiments that directory holds real runs, and a test that
+    mocks only the database silently reads them too.
+
+    It used to be hidden: the reader returned as soon as the database answered
+    anything at all, so the files were reached only when the database was
+    empty, and every fast test was isolated by accident. That accident was
+    itself the defect: a run the database had rejected was invisible for as
+    long as any other run existed. Fixing the reader removed the accidental
+    isolation, so the isolation is asked for here instead of being relied upon.
+
+    Scoped by path, like the embedder rule above: the integration and
+    end-to-end layers work against a real store on purpose.
+
+    A directory of its own, never the `tmp_path` fixture: `tmp_path`
+    belongs to the test, and a test asserting on its exact contents fails when
+    something else puts a directory in it. One did.
+    """
+    path = str(getattr(request.node, "fspath", ""))
+    if any(layer in path.replace("\\", "/") for layer in _STUB_ONLY):
+        try:
+            from services.api_gateway.routers import experiments
+        except ImportError:  # a layer that does not import the gateway at all
+            yield
+            return
+        with tempfile.TemporaryDirectory(prefix="run_store_") as store:
+            monkeypatch.setattr(experiments, "_STORE_DIR", Path(store))
+            yield
+        return
     yield
 
 

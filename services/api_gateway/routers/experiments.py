@@ -51,12 +51,33 @@ _running_meta: dict[str, dict[str, Any]] = {}
 # ── Persistence ───────────────────────────────────────────────────────────────
 
 async def _save(result: ExperimentResult) -> None:
+    """Write the run to the database and to a file beside it.
+
+    The database write is allowed to fail: a run document larger than the
+    engine's own limit is rejected, and measured on this machine a run with a
+    wide candidate window reaches 215 KB per question, which puts that limit
+    around seventy-eight questions. The file copy is what survives it.
+
+    The failure is logged now. It used to be swallowed. With `_get_results` preferring the database whenever it returned anything
+    at all, a rejected run existed on disk and appeared nowhere: not in the
+    list, not on its own page. A run that cost hours to produce vanished
+    without a line anywhere saying so.
+    """
     data = result.to_dict()
     try:
         import adapters.mongodb as mdb
         await mdb.upsert_one("experiment_runs", {"run_id": result.run_id}, data)
-    except Exception:
-        pass
+    except Exception as exc:
+        import structlog
+        structlog.get_logger().warning(
+            "experiment.save.database_rejected",
+            run_id=result.run_id,
+            n_questions=len(result.question_results),
+            size_bytes=len(json.dumps(data, ensure_ascii=False)),
+            error=str(exc),
+            hint="the run is on disk and is still readable; a document over the "
+                 "engine's size limit is the usual cause",
+        )
     # keep file copy as backup
     p = _STORE_DIR / f"{result.run_id}.json"
     p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -109,8 +130,19 @@ def _parse_result(data: dict[str, Any], stem: str = "") -> ExperimentResult | No
 
 
 async def _get_results() -> dict[str, ExperimentResult]:
+    """Every run, from both places it can live.
+
+    The two are merged, and no longer tried in order. The file store used to be a
+    fallback reached only when the database returned nothing at all, so a run
+    the database had rejected was invisible for as long as any other run
+    existed, which is always. A run present in one place and absent from the
+    other is exactly the case the store has to survive, and it is the case the
+    ordering could not express.
+
+    The database wins on a run present in both: it is written first and a file
+    copy is only ever as new as the write that produced it.
+    """
     results: dict[str, ExperimentResult] = {}
-    # Primary: MongoDB
     try:
         import adapters.mongodb as mdb
         docs = await mdb.find_many("experiment_runs", sort=[("started_at", -1)])
@@ -118,19 +150,25 @@ async def _get_results() -> dict[str, ExperimentResult]:
             r = _parse_result(data, data.get("run_id", ""))
             if r:
                 results[r.run_id] = r
-        if results:
-            return results
     except Exception:
         pass
-    # Fallback: files
-    for p in _STORE_DIR.glob("*.json"):
+
+    # Only the runs the database does not have. Which those are is decided by
+    # the file name, since `_save` writes `{run_id}.json`, so a run present in
+    # both costs a directory entry and not a parse. The first version of
+    # this merge parsed every file on every request: with the runs on this
+    # machine that is a quarter of a gigabyte of JSON for one page of a list.
+    for path in _STORE_DIR.glob("*.json"):
+        if path.stem in results:
+            continue
         try:
-            data = json.loads(p.read_text(encoding="utf-8"))
-            r = _parse_result(data, p.stem)
+            data = json.loads(path.read_text(encoding="utf-8"))
+            r = _parse_result(data, path.stem)
             if r:
                 results[r.run_id] = r
         except Exception:
             pass
+
     return results
 
 
@@ -238,6 +276,29 @@ def _display_answerability(qr: dict[str, Any], metrics: dict[str, Any]) -> str:
     return qr.get("answerability") or (
         "answerable" if "retrieval_recall_at_k" in metrics else "not_applicable"
     )
+
+
+def _attach_refusal_verdict(question_results: list[dict[str, Any]]) -> None:
+    """Decide once, here, whether each answer refuses.
+
+    The decision existed in three places. `core/eval/detectors.py` holds the
+    canonical pattern, this router used to keep a weaker copy of it and now
+    imports the original, and the interface keeps a third: eleven fixed
+    substrings against the pattern's fifteen alternatives, several of which
+    match on a word stem. The interface does not know `не указан`, `нет
+    информац`, the stem of `отсутству`, `не содержит` in any form but one,
+    `could not find`, `does not say/include/mention`, `cannot find` or `no
+    relevant information`.
+
+    So the two halves of the platform disagreed about the same answer on the
+    same screen, and the comment beside the canonical pattern records that this
+    exact drift had already been found and removed once, between two copies on
+    this side. Deciding server-side and sending the verdict leaves one rule in
+    one place.
+    """
+    for qr in question_results:
+        answer = qr.get("generated_answer") or ""
+        qr["is_refusal"] = not answer.strip() or bool(_NOT_FOUND.search(answer))
 
 
 def _attach_funnel(question_results: list[dict[str, Any]]) -> None:
@@ -739,11 +800,24 @@ async def get_experiment(run_id: str) -> dict[str, Any]:
     payload = results[run_id].to_dict()
     payload["status"] = "done"
 
-    # silent-degradation detectors.
+    # silent-degradation detectors, each carrying the catalogue entries it is
+    # evidence for so a reader can tell a known failure from a bare sentence.
     from core.eval.detectors import run_detectors
+    from services.api_gateway.routers.atlas import attach_failure_ids
     payload["diagnostics"] = [d.to_dict() for d in run_detectors(payload)]
+    attach_failure_ids(payload["diagnostics"], "detector")
 
     _attach_funnel(payload["question_results"])
+    _attach_refusal_verdict(payload["question_results"])
+
+    # What this run made impossible to check, beside what it did check. The two
+    # used to live on different tabs, so a reader saw the findings and had no
+    # sign that a whole class of them could not have been produced at all. A
+    # check that could not run and a check that ran and found nothing are the
+    # same absence on a screen unless one of them is named.
+    from core.eval.trace_completeness import assess_trace_completeness, diagnosis_depth
+    payload["trace_gaps"] = [g.to_dict() for g in assess_trace_completeness(payload["question_results"])]
+    payload["diagnosis_depth"] = diagnosis_depth(payload["question_results"])
 
     # How many questions each root cause accounts for. Derived at
     # read time from the stored per-question verdicts rather than stored
