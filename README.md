@@ -21,7 +21,7 @@ assumed. Everything runs on your own machine.
 </div>
 
 <p align="center">
-  <img src="docs/assets/overview.png" alt="The overview screen of the demo realm: a status band with corpora, questions, prompts and runs; the five setup steps, each ticked or waiting; resource health for Qdrant, OpenSearch, Ollama and the rest; and the most recent runs" width="1000">
+  <img src="docs/assets/overview.png" alt="The overview of the demo realm: a band counting corpora, questions, prompts and runs; the five setup steps, each ticked; the health of Qdrant, OpenSearch, Ollama and the rest; and the most recent runs" width="1000">
 </p>
 
 <p align="center">
@@ -29,19 +29,19 @@ assumed. Everything runs on your own machine.
 </p>
 
 <p align="center">
-  <img src="docs/assets/run.png" alt="The run screen: eight aggregate metrics with the change against the baseline, a funnel naming the layer each answer was lost at, the full configuration the run used, and the questions that need attention" width="1000">
+  <img src="docs/assets/run.png" alt="One run: nine aggregate metrics with the change against the baseline, a funnel naming the layer each answer was lost at, and the full configuration the run used" width="1000">
 </p>
 
 <p align="center">
-  <sub>One run, read from the top: what it scored, where answers were lost, what it was configured with, and which questions to look at. Every number measured over the demo corpus that ships with this repository.</sub>
+  <sub>One run, read from the top: what it scored, where answers were lost, and what it was configured with. Every number measured over the demo corpus that ships with this repository.</sub>
 </p>
 
 <p align="center">
-  <img src="docs/assets/atlas.png" alt="The failure atlas: an architecture chosen by its coordinates, a count of the entries applying to it, and the entries themselves with stage, severity and one of four detection states" width="1000">
+  <img src="docs/assets/compare.png" alt="Two runs compared: a warning that they used different prompts, then each metric with its before, after, delta and a verdict of improved, regressed or noise" width="1000">
 </p>
 
 <p align="center">
-  <sub>The catalogue of failures a retrieval system can have. Which entries apply is derived from the architecture's coordinates, and each carries one of four states: caught by a named signal, visible in the data for a person to read, claimed but unproven, or not detected at all. The last is shown beside the others on purpose.</sub>
+  <sub>Two runs, question by question. The warning comes first: these two used different prompts, which the configuration diff does not show, so the comparison would otherwise read as one change when it was two.</sub>
 </p>
 
 <p align="center">
@@ -49,7 +49,7 @@ assumed. Everything runs on your own machine.
 </p>
 
 <p align="center">
-  <sub>A corpus is judged by the shape of its length distribution, not by its mean. Each finding names the catalogue entry it is evidence for, so a reader can tell a known failure from a bare sentence.</sub>
+  <sub>A corpus is judged by the shape of its length distribution, not by its mean. Each finding names the catalogue entry it is evidence for. This corpus had two different chunkings loaded into it, which is what the three findings are about; a fresh install shows one.</sub>
 </p>
 
 ---
