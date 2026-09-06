@@ -547,6 +547,66 @@ def detect_aggregate_disagrees_with_questions(run: dict[str, Any]) -> Diagnostic
     )
 
 
+def detect_tuned_on_the_measurement_set(run: dict[str, Any]) -> DiagnosticItem | None:
+    """The number is the best of a search over the questions it is measured on.
+
+    Not a mistake in itself, and not something a reader can be left to guess
+    at either: a figure reported after forty configurations were tried on one
+    question set is partly the search and partly the system, and which part
+    is which cannot be recovered afterwards. Nothing tied the two together
+    until the run store was asked.
+
+    Silent for the first configuration on a set, which searched over nothing.
+    """
+    provenance = run.get("tuning_provenance") or {}
+    tried = int(provenance.get("configurations_before") or 0)
+    if tried < 1:
+        return None
+    return DiagnosticItem(
+        id="tuned_on_the_measurement_set",
+        severity="warn" if tried >= 4 else "info",
+        title="The reported number is the best of a search on these same questions",
+        detail=(
+            f"{tried} other configuration(s) were run on {provenance.get('dataset_name')!r} "
+            f"before this one. A figure chosen after a search over a question set is partly "
+            "the search, and how much of it cannot be recovered from the figure."
+        ),
+        action="Report the number on a question set no configuration was chosen on, or say "
+               "how many were tried beside it.",
+    )
+
+
+def detect_fusion_constant_never_varied(run: dict[str, Any]) -> DiagnosticItem | None:
+    """A constant that was never anything else.
+
+    Rank fusion carries a constant whose only justification is the paper it
+    came from, and a value nobody has varied on this question set is a value
+    nobody has measured. It costs one run to find out, and the platform can
+    say whether that run was ever made.
+
+    Applies where the constant exists at all, so it stays silent for any
+    merge but rank fusion.
+    """
+    provenance = run.get("tuning_provenance") or {}
+    if provenance.get("merge_strategy") != "rrf":
+        return None
+    tried = list(provenance.get("fusion_constants_tried") or [])
+    if len(tried) != 1:
+        return None
+    return DiagnosticItem(
+        id="fusion_constant_never_varied",
+        severity="info",
+        title="The rank-fusion constant has never been anything else",
+        detail=(
+            f"Every rank-fusion run on {provenance.get('dataset_name')!r} used the same "
+            f"constant, {tried[0]}. It is the value the method was published with, and on "
+            "this corpus and these questions nobody has measured whether it is a good one."
+        ),
+        action="Run the same configuration once with a different fusion constant and compare, "
+               "so the value in use is a measured choice.",
+    )
+
+
 def detect_index_and_query_models_differ(run: dict[str, Any]) -> DiagnosticItem | None:
     """The vectors were built by one model and searched by another.
 
@@ -799,6 +859,8 @@ def run_detectors(run: dict[str, Any]) -> list[DiagnosticItem]:
         detect_chunk_id_collision(run),
         detect_metric_without_grounds(run),
         detect_index_and_query_models_differ(run),
+        detect_tuned_on_the_measurement_set(run),
+        detect_fusion_constant_never_varied(run),
         detect_unmeasured_stage_cost(run),
     ]
     return [c for c in candidates if c is not None]

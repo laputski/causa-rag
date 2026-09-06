@@ -1,107 +1,107 @@
 {
-"atlasPage": {
-      "applicable": "Applies to this point: {{shown}} of {{total}}",
-      "architecture": "Architecture",
-      "column": {
-        "id": "No.",
-        "severity": "Severity",
-        "stage": "Stage",
-        "state": "State",
-    "title": "What looks like it works"
-      },
-      "detail": {
-        "arises": "Arises",
-        "atlasRow": "document row",
-        "bait": "Bait",
-        "baitPending": "lives on a proving ground that does not exist yet, so the claim is unproven",
-        "becomesVisible": "Becomes visible",
-        "cost": "cost",
-        "instrument": "Instrument",
-        "prevalence": "prevalence",
-        "quiet": "quiet",
-        "scope": "Scope",
-        "scopeAny": "Possible in every architecture: it depends on no coordinate.",
-        "scopeCaveat": "Caveat",
-        "severity": "Severity",
-        "severityCaveat": "It orders and does not measure: cost and prevalence are judgement.",
-        "sharesSignals": "This entry's signals do not tell it apart from {{others}}: one firing is evidence for either and for neither in particular.",
-        "sideCore": "Computed on the server.",
-        "sideUi": "Computed in the interface, with no server counterpart.",
-        "stages": "Stages",
-        "whatDetects": "What detects it",
-        "whatIsMissing": "What is missing"
-      },
-      "entry": {
-    "F01": "Re-ingestion adds instead of updating",
-    "F02": "A lost source path makes chunk identifiers collide",
-    "F03": "The chosen segmentation strategy silently does nothing",
-    "F04": "The source export lost or overwrote documents",
-    "F05": "Fixed-size segmentation cuts through the middle of a thought",
-    "F06": "Chunks are too small to carry the grounds for an answer",
-    "F07": "The grounds are spread across chunks and no single one wins",
-    "F08": "Tables and lists are destroyed by naive splitting",
-    "F09": "A stale index: the documents changed and the index did not",
-    "F10": "A stub embedder indexes random vectors",
-    "F11": "Different models at indexing time and at query time",
-    "F12": "The model changed and the corpus was not reindexed",
-    "F13": "A document longer than the model window is silently truncated",
-    "F14": "The model does not cover the language of the corpus",
-    "F15": "Semantic search misses codes, names and numbers",
-    "F16": "Keyword search misses a paraphrase",
-    "F17": "Keyword search raises a document carrying a frequent word",
-    "F18": "The right fragment sits below the cut-off: the selection is too narrow",
-    "F19": "No confidence threshold: something is always returned",
-    "F20": "A metadata filter silently excludes everything",
-    "F21": "The halves are on incomparable scales and one of them rules the merge",
-    "F22": "The rank-fusion constant was chosen without measuring it",
-    "F23": "Both halves return the same thing: you pay for two",
-    "F24": "The reranker does not know the language of the corpus",
-    "F25": "The candidate window equals the selection: reordering is possible, rescue is not",
-    "F26": "Near-duplicates make the ranking unstable",
-    "F27": "The price in latency is not measured",
-    "F28": "A reasoning model spends its budget and returns nothing",
-    "F29": "The right fragment was found and the answer cites another one's number",
-    "F30": "An overfilled context: the middle is lost",
-    "F31": "The model answers from its own knowledge, ignoring the context",
-    "F32": "Refusal is calibrated badly in both directions",
-    "F33": "A metric's definition does not match its name",
-    "F34": "The read path loses data: the measured is blamed and the measurer is at fault",
-    "F35": "A metric is computed in a mode where it has no grounds",
-    "F36": "The golden set is too small and too uniform to expose a defect",
-    "F37": "Tuning was done on the same questions the measurement uses",
-    "F38": "Linking units by shared words builds an edge count that grows with the square of the vocabulary",
-    "F39": "Communities look like structure while the grouping follows frequent words and not meaning"
+  "atlasPage": {
+    "applicable": "Applies to this point: {{shown}} of {{total}}",
+    "architecture": "Architecture",
+    "column": {
+      "id": "No.",
+      "severity": "Severity",
+      "stage": "Stage",
+      "state": "State",
+      "title": "What looks like it works"
+    },
+    "detail": {
+      "arises": "Arises",
+      "atlasRow": "document row",
+      "bait": "Bait",
+      "baitPending": "lives on a proving ground that does not exist yet, so the claim is unproven",
+      "becomesVisible": "Becomes visible",
+      "cost": "cost",
+      "instrument": "Instrument",
+      "prevalence": "prevalence",
+      "quiet": "quiet",
+      "scope": "Scope",
+      "scopeAny": "Possible in every architecture: it depends on no coordinate.",
+      "scopeCaveat": "Caveat",
+      "severity": "Severity",
+      "severityCaveat": "It orders and does not measure: cost and prevalence are judgement.",
+      "sharesSignals": "This entry's signals do not tell it apart from {{others}}: one firing is evidence for either and for neither in particular.",
+      "sideCore": "Computed on the server.",
+      "sideUi": "Computed in the interface, with no server counterpart.",
+      "stages": "Stages",
+      "whatDetects": "What detects it",
+      "whatIsMissing": "What is missing"
+    },
+    "entry": {
+      "F01": "Re-ingestion adds instead of updating",
+      "F02": "A lost source path makes chunk identifiers collide",
+      "F03": "The chosen segmentation strategy silently does nothing",
+      "F04": "The source export lost or overwrote documents",
+      "F05": "Fixed-size segmentation cuts through the middle of a thought",
+      "F06": "Chunks are too small to carry the grounds for an answer",
+      "F07": "The grounds are spread across chunks and no single one wins",
+      "F08": "Tables and lists are destroyed by naive splitting",
+      "F09": "A stale index: the documents changed and the index did not",
+      "F10": "A stub embedder indexes random vectors",
+      "F11": "Different models at indexing time and at query time",
+      "F12": "The model changed and the corpus was not reindexed",
+      "F13": "A document longer than the model window is silently truncated",
+      "F14": "The model does not cover the language of the corpus",
+      "F15": "Semantic search misses codes, names and numbers",
+      "F16": "Keyword search misses a paraphrase",
+      "F17": "Keyword search raises a document carrying a frequent word",
+      "F18": "The right fragment sits below the cut-off: the selection is too narrow",
+      "F19": "No confidence threshold: something is always returned",
+      "F20": "A metadata filter silently excludes everything",
+      "F21": "The halves are on incomparable scales and one of them rules the merge",
+      "F22": "The rank-fusion constant was chosen without measuring it",
+      "F23": "Both halves return the same thing: you pay for two",
+      "F24": "The reranker does not know the language of the corpus",
+      "F25": "The candidate window equals the selection: reordering is possible, rescue is not",
+      "F26": "Near-duplicates make the ranking unstable",
+      "F27": "The price in latency is not measured",
+      "F28": "A reasoning model spends its budget and returns nothing",
+      "F29": "The right fragment was found and the answer cites another one's number",
+      "F30": "An overfilled context: the middle is lost",
+      "F31": "The model answers from its own knowledge, ignoring the context",
+      "F32": "Refusal is calibrated badly in both directions",
+      "F33": "A metric's definition does not match its name",
+      "F34": "The read path loses data: the measured is blamed and the measurer is at fault",
+      "F35": "A metric is computed in a mode where it has no grounds",
+      "F36": "The golden set is too small and too uniform to expose a defect",
+      "F37": "Tuning was done on the same questions the measurement uses",
+      "F38": "Linking units by shared words builds an edge count that grows with the square of the vocabulary",
+      "F39": "Communities look like structure while the grouping follows frequent words and not meaning"
     },
     "gapDetail": "Nothing is known about failures peculiar to them. That is a gap in the catalogue, not a clean bill of health.",
-      "gapTitle": "Some coordinates of this point are spoken about by no entry",
-      "instrument": {
-        "config": "a broken setting",
-        "corpus": "a broken corpus",
-        "faulty_rag": "a faulty RAG",
-        "platform": "platform code"
-      },
-      "lead": "Failures possible in a RAG whose coordinates admit them. The catalogue is read-only: an entry claims a failure is detected, and the build refuses such a claim without a bait.",
-      "notCaught": "{{count}} failures nothing catches",
-      "notCaughtHint": "expand to read what each one is missing",
-      "point": {
-        "dense": "Dense",
-        "graph": "Graph",
-        "hybrid": "Hybrid"
-      },
-      "schemaRelease": "coordinate schema {{release}}",
-      "stage": {
-        "chunking": "chunking",
-        "citation": "citation",
-        "data": "data",
-        "fusion": "fusion",
-        "generation": "generation",
-        "ingest": "ingest",
-        "measurement": "measurement",
-        "rerank": "rerank",
-        "retrieval": "retrieval",
-        "vectors": "vectors"
-      },
-      "signals": {
+    "gapTitle": "Some coordinates of this point are spoken about by no entry",
+    "instrument": {
+      "config": "a broken setting",
+      "corpus": "a broken corpus",
+      "faulty_rag": "a faulty RAG",
+      "platform": "platform code"
+    },
+    "lead": "Failures possible in a RAG whose coordinates admit them. The catalogue is read-only: an entry claims a failure is detected, and the build refuses such a claim without a bait.",
+    "notCaught": "{{count}} failures nothing catches",
+    "notCaughtHint": "expand to read what each one is missing",
+    "point": {
+      "dense": "Dense",
+      "graph": "Graph",
+      "hybrid": "Hybrid"
+    },
+    "schemaRelease": "coordinate schema {{release}}",
+    "stage": {
+      "chunking": "chunking",
+      "citation": "citation",
+      "data": "data",
+      "fusion": "fusion",
+      "generation": "generation",
+      "ingest": "ingest",
+      "measurement": "measurement",
+      "rerank": "rerank",
+      "retrieval": "retrieval",
+      "vectors": "vectors"
+    },
+    "signals": {
       "lead": "Every named judgement the platform makes, what raises it, and which failures it is evidence for.",
       "sharedTitle": "{{count}} signals do not tell apart the entries they stand for",
       "sharedDetail": "One firing is evidence for either and for neither in particular. Hiding that would let a reader take it for evidence about the entry in front of them.",
@@ -127,16 +127,16 @@
       "signals": "Signals"
     },
     "state": {
-        "caught": "caught",
-        "none": "not caught",
-        "unproven": "unproven",
-        "visible": "visible"
-      },
-      "title": "Failure atlas",
-      "undetermined": "{{count}} entries whose applicability is not established",
+      "caught": "caught",
+      "none": "not caught",
+      "unproven": "unproven",
+      "visible": "visible"
+    },
+    "title": "Failure atlas",
+    "undetermined": "{{count}} entries whose applicability is not established",
     "undeterminedHint": "this architecture records nothing about a coordinate they depend on",
     "unavailable": "The catalogue is unavailable."
-    },
+  },
   "app": {
     "title": "RAG Platform"
   },
@@ -246,9 +246,9 @@
         "detail": "A: {{dataset_before}}, {{count_before}} questions. B: {{dataset_after}}, {{count_after}} questions. The averages below are taken over different question sets."
       },
       "corpus_changed": {
-              "title": "The corpus changed between the two runs",
-              "detail": "Both runs name corpus {{corpus_id}} and the documents behind that name are not the same set: loaded {{loaded_before}} against {{loaded_after}}. A difference in the numbers below may be a difference in the documents.",
-              "action": "Compare runs made against one loading of the corpus, or load it once and run both configurations again."
+        "title": "The corpus changed between the two runs",
+        "detail": "Both runs name corpus {{corpus_id}} and the documents behind that name are not the same set: loaded {{loaded_before}} against {{loaded_after}}. A difference in the numbers below may be a difference in the documents.",
+        "action": "Compare runs made against one loading of the corpus, or load it once and run both configurations again."
       },
       "different_corpus": {
         "title": "The runs were made against different corpora",
@@ -306,6 +306,11 @@
       "generator_model_unrecorded": {
         "title": "Run {{side}} did not record which model generated its answers",
         "detail": "The other run used {{other}}. Whether the model changed between the two cannot be answered from what was stored."
+      },
+      "below_the_sets_resolution": {
+        "title": "The difference is smaller than these questions can resolve",
+        "detail": "{{metric}} moved, and on {{questions}} questions a difference smaller than the scatter of the questions themselves cannot be told apart. {{count}} metric(s) here are in that position.",
+        "action": "Add questions until the set resolves the difference you act on, or read only the differences larger than it can resolve."
       }
     }
   },
@@ -2072,7 +2077,9 @@
       "chunk_id_collision": "One fragment identifier, two fragments",
       "unmeasured_stage_cost": "A stage ran and reported no time",
       "metric_without_grounds": "A metric was computed where it has no grounds",
-      "index_and_query_models_differ": "The index and the query do not use the same model"
+      "index_and_query_models_differ": "The index and the query do not use the same model",
+      "tuned_on_the_measurement_set": "The reported number is the best of a search on these same questions",
+      "fusion_constant_never_varied": "The rank-fusion constant has never been anything else"
     },
     "findingAction": {
       "embedder_unverified": "Read the run's recall against its reference sources: a corpus indexed by a stub model retrieves at chance.",
@@ -2089,7 +2096,9 @@
       "chunk_id_collision": "Check how the identifier is derived at load time: a source path missing from the derivation collapses fragments of different documents onto one value.",
       "unmeasured_stage_cost": "Record a duration for every stage the pipeline runs, so its price can be compared with the gain it is kept for.",
       "metric_without_grounds": "Read each metric's declared preconditions and stop recording it where they do not hold, so the average is over the questions the number is about.",
-      "index_and_query_models_differ": "Query with the model the corpus was indexed by, or load the corpus again with the model the run uses."
+      "index_and_query_models_differ": "Query with the model the corpus was indexed by, or load the corpus again with the model the run uses.",
+      "tuned_on_the_measurement_set": "Report the number on a question set no configuration was chosen on, or say how many were tried beside it.",
+      "fusion_constant_never_varied": "Run the same configuration once with a different fusion constant and compare, so the value in use is a measured choice."
     },
     "traceGap": {
       "sources": {

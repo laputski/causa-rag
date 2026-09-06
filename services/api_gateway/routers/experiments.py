@@ -800,6 +800,12 @@ async def get_experiment(run_id: str) -> dict[str, Any]:
     payload = results[run_id].to_dict()
     payload["status"] = "done"
 
+    # How much searching this number is the best of. Computed here because it
+    # is a property of the run store and not of the run, and attached to the
+    # payload so the detectors stay pure: a check that went to the database
+    # itself would be a check nobody could run on a saved run.
+    payload["tuning_provenance"] = _tuning_provenance(run_id, results)
+
     # silent-degradation detectors, each carrying the catalogue entries it is
     # evidence for so a reader can tell a known failure from a bare sentence.
     from core.eval.detectors import run_detectors
@@ -1521,6 +1527,42 @@ def _diagnose_root_causes(
             ).to_dict()
         except Exception:
             continue  # one undiagnosable question must not cost the others
+
+
+def _tuning_provenance(run_id: str, results: dict[str, Any]) -> dict[str, Any]:
+    """What else was tried on these same questions before this run.
+
+    A number reported after a search over configurations is the best of that
+    search, and the more was tried the more of it is the search and the less
+    of it is the system. Nothing tied the two together, so a figure arrived with no
+    way of knowing whether it was the first thing anybody ran or the best of
+    forty.
+
+    Counted over the runs stored before this one on the same question set,
+    which is the same store the list endpoint already reads.
+    """
+    this = results.get(run_id)
+    if this is None:
+        return {}
+    dataset = this.dataset_name or this.config.dataset_name
+    if not dataset:
+        return {}
+    earlier = [
+        r for r in results.values()
+        if (r.dataset_name or r.config.dataset_name) == dataset
+        and r.started_at and this.started_at and r.started_at < this.started_at
+    ]
+    fusion_constants = {
+        getattr(r.config, "rrf_k", None) for r in [*earlier, this]
+        if getattr(r.config, "merge_strategy", "") == "rrf"
+    }
+    return {
+        "dataset_name": dataset,
+        "runs_before": len(earlier),
+        "configurations_before": len({r.config.config_hash for r in earlier}),
+        "fusion_constants_tried": sorted(c for c in fusion_constants if c is not None),
+        "merge_strategy": getattr(this.config, "merge_strategy", ""),
+    }
 
 
 async def _corpus_manifest(realm_id: str, corpus_id: str) -> dict[str, Any]:

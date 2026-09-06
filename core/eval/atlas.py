@@ -556,13 +556,14 @@ FAILURES: tuple[FailureMode, ...] = (
         stage_visible="retrieval",
         severity=Severity(3, 2, 3),
         origin="mechanism",
-        detection="none",
+        detection="detector",
         instrument="config",
         applies_when=(("C3", ("rrf",)),),
-        not_detected_reason=(
-            "no check reads the run history to ask whether the constant was ever varied on this "
-            "question set; the value itself is recorded on every run since it became a field"
-        ),
+        # A check reads the run history now: every rank-fusion run on one
+        # question set carrying the same constant is a constant nobody has
+        # measured here, whatever the paper it came from says.
+        signals=(Signal("detector", "fusion_constant_never_varied"),),
+        bait="tests/unit/test_atlas_baits.py::test_bait[F22]",
         scope_caveat=(
             "the schema does not tell fusion of sources from fusion of reformulations of one query, so applicability to a system with a single source is unverified"
         ),
@@ -783,12 +784,17 @@ FAILURES: tuple[FailureMode, ...] = (
         stage_visible="measurement",
         severity=Severity(3, 4, 3),
         origin="miracl",
-        detection="none",
+        detection="detector",
         instrument="platform",
         applies_when=(),
-        not_detected_reason=(
-            "nothing estimates the smallest difference the set can distinguish"
-        ),
+        # Something estimates it now, and it is asked where somebody is
+        # actually drawing a conclusion: a comparison. Asking it of a single
+        # run was tried first and rejected by measurement, because every one
+        # of the forty-three runs stored here falls at least three times
+        # short of the difference this platform calls a regression, and a
+        # signal that fires on everything distinguishes nothing.
+        signals=(Signal("compare", "below_the_sets_resolution"),),
+        bait="tests/unit/test_atlas_baits.py::test_bait[F36]",
     ),
     FailureMode(
         id="F37",
@@ -798,12 +804,15 @@ FAILURES: tuple[FailureMode, ...] = (
         stage_visible="measurement",
         severity=Severity(3, 3, 2),
         origin="mechanism",
-        detection="none",
+        detection="detector",
         instrument="platform",
         applies_when=(),
-        not_detected_reason=(
-            "no record ties a reported number to how many configurations were tried on the same set"
-        ),
+        # The record exists now, computed from the run store when a run is
+        # read: how many configurations were tried on this question set
+        # before it. A figure chosen after a search is partly the search,
+        # and how much of it cannot be recovered from the figure.
+        signals=(Signal("detector", "tuned_on_the_measurement_set"),),
+        bait="tests/unit/test_atlas_baits.py::test_bait[F37]",
     ),
     # ── Entries that grew from no row of the published atlas ──────────────────
     #

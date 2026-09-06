@@ -113,6 +113,48 @@ def _errored(result: ExperimentResult) -> int:
     return sum(1 for qr in result.question_results if qr.error)
 
 
+def _differences_the_set_cannot_see(
+    before: ExperimentResult, after: ExperimentResult,
+) -> list[dict[str, Any]]:
+    """Metrics whose movement is smaller than the questions can distinguish.
+
+    A number reported to three decimal places on twelve questions carries an
+    authority the twelve questions cannot support, and a difference between
+    two such numbers carries less still. What makes this checkable without
+    inventing a threshold is that the reader is already looking at a
+    difference: this asks whether that particular one is visible, and says
+    nothing about differences nobody is reading.
+
+    Sorted worst first, by how far the movement falls short.
+    """
+    from core.eval.sufficiency import resolution
+
+    def _values(result: ExperimentResult, metric: str) -> list[float]:
+        return [
+            value for qr in result.question_results
+            if isinstance(value := (qr.metrics or {}).get(metric), int | float)
+        ]
+
+    found: list[dict[str, Any]] = []
+    shared = set(before.aggregate_metrics) & set(after.aggregate_metrics)
+    for metric in sorted(shared):
+        delta = abs(after.aggregate_metrics[metric] - before.aggregate_metrics[metric])
+        widths = [w for w in (resolution(_values(before, metric)),
+                              resolution(_values(after, metric))) if w is not None]
+        if not widths:
+            continue
+        widest = max(widths)
+        # A movement of exactly nothing needs no warning: nobody reads "no
+        # change" as a change. The failure is a difference that looks real
+        # and is not, so it takes a difference to have one.
+        if 0 < delta < widest:
+            found.append({
+                "metric": metric, "delta": delta, "resolution": widest,
+                "questions": min(len(_values(before, metric)), len(_values(after, metric))),
+            })
+    return sorted(found, key=lambda row: row["delta"] - row["resolution"])
+
+
 def check_comparability(
     before: ExperimentResult,
     after: ExperimentResult,
@@ -181,6 +223,27 @@ def check_comparability(
             },
             action="Compare runs made against one loading of the corpus, or load it once and "
                    "run both configurations again.",
+        ))
+
+    unresolvable = _differences_the_set_cannot_see(before, after)
+    if unresolvable:
+        worst = unresolvable[0]
+        warns.append(CompatWarning(
+            id="below_the_sets_resolution", severity="warn",
+            title="The difference is smaller than these questions can resolve",
+            detail=(
+                f"{worst['metric']} moved by {worst['delta']:.3f}, and on {worst['questions']} "
+                f"questions a difference smaller than {worst['resolution']:.3f} cannot be told "
+                f"from the scatter of the questions themselves. "
+                f"{len(unresolvable)} metric(s) here are in that position."
+            ),
+            params={
+                "metric": worst["metric"],
+                "questions": str(worst["questions"]),
+                "count": str(len(unresolvable)),
+            },
+            action="Add questions until the set resolves the difference you act on, or read "
+                   "only the differences larger than it can resolve.",
         ))
 
     if before.config.dataset_name != after.config.dataset_name:

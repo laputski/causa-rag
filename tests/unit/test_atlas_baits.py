@@ -200,11 +200,21 @@ def _compare_ids() -> set[str]:
             ),
             dataset_name="handbook.v1.jsonl",
         )
+        # Scattered on purpose. Identical values per question give a
+        # resolution of zero, and a check about what a set can resolve can
+        # then never speak on this baseline, which would make its silence
+        # here prove nothing at all.
+        scores = [0.2, 0.9, 0.5, 0.8, 0.3, 0.95, 0.4, 0.7, 0.6, 0.85] * 2
         result.question_results = [
             QuestionResult(question_id=f"q{i}", question="?", reference_answer="",
-                           generated_answer="an answer", metrics={"retrieval_recall_at_k": 1.0})
-            for i in range(1, 21)
+                           generated_answer="an answer",
+                           metrics={"retrieval_recall_at_k": 1.0, "answer_similarity": score})
+            for i, score in enumerate(scores, start=1)
         ]
+        result.aggregate_metrics = {
+            "retrieval_recall_at_k": 1.0,
+            "answer_similarity": sum(scores) / len(scores),
+        }
         result.corpus_manifest = {
             "embedder_id": "bge_m3", "embedder_version": "1.0.0",
             "document_count": 20, "documents_digest": "a" * 64,
@@ -509,6 +519,59 @@ def bait_F09_the_corpus_changed_between_two_runs() -> set[str]:
     return {f"compare:{w.id}" for w in warnings}
 
 
+def bait_F37_the_number_is_the_best_of_a_search() -> set[str]:
+    """Forty configurations on one question set, and the figure reported from
+    the last of them is partly the search."""
+    run = clean_run()
+    run["tuning_provenance"] = {
+        "dataset_name": "handbook.v1.jsonl", "runs_before": 40,
+        "configurations_before": 40, "fusion_constants_tried": [60], "merge_strategy": "weighted",
+    }
+    return _detector_ids(run)
+
+
+def bait_F22_the_fusion_constant_was_never_varied() -> set[str]:
+    """Every rank-fusion run on this set used the published value, so nobody
+    has measured whether it is a good one here."""
+    run = clean_run()
+    run["tuning_provenance"] = {
+        "dataset_name": "handbook.v1.jsonl", "runs_before": 0,
+        "configurations_before": 0, "fusion_constants_tried": [60], "merge_strategy": "rrf",
+    }
+    return _detector_ids(run)
+
+
+def bait_F36_a_difference_the_questions_cannot_see() -> set[str]:
+    """A movement smaller than the scatter of the questions themselves,
+    reported to three decimals and read as a change."""
+    from core.experiment.compare import check_comparability
+    from core.experiment.config import ComponentRef, ExperimentConfig
+    from core.experiment.runner import ExperimentResult, QuestionResult
+
+    scores = [0.2, 0.9, 0.5, 0.8, 0.3, 0.95, 0.4, 0.7, 0.6, 0.85]
+
+    def _result(shift: float) -> ExperimentResult:
+        moved = [round(min(1.0, score + shift), 3) for score in scores]
+        result = ExperimentResult(
+            config=ExperimentConfig(
+                name="r", corpus_id="handbook", dataset_name="handbook.v1.jsonl",
+                chunking_strategy=ComponentRef(kind="chunker", component_id="fixed"),
+                embedder=ComponentRef(kind="embedder", component_id="bge_m3"),
+                generator=ComponentRef(kind="generator", component_id="ollama"),
+            ),
+            dataset_name="handbook.v1.jsonl",
+        )
+        result.question_results = [
+            QuestionResult(question_id=f"q{i}", question="?", reference_answer="",
+                           generated_answer="an answer", metrics={"answer_similarity": score})
+            for i, score in enumerate(moved, start=1)
+        ]
+        result.aggregate_metrics = {"answer_similarity": sum(moved) / len(moved)}
+        return result
+
+    return {f"compare:{w.id}" for w in check_comparability(_result(0.0), _result(0.01))}
+
+
 BAITS = {
     "F01": bait_F01_reingest_duplicates,
     "F02": bait_F02_one_identifier_two_fragments,
@@ -527,6 +590,7 @@ BAITS = {
     "F18": bait_F18_right_fragment_below_the_cutoff,
     "F21": bait_F21_incomparable_scales,
     "F40": bait_F40_one_half_is_absent,
+    "F22": bait_F22_the_fusion_constant_was_never_varied,
     "F24": bait_F24_reranker_does_not_know_the_language,
     "F27": bait_F27_the_reranker_costs_an_unknown_amount,
     "F28": bait_F28_reasoning_model_returns_nothing,
@@ -536,6 +600,8 @@ BAITS = {
     "F33": bait_F33_a_metric_declares_nothing,
     "F34": bait_F34_the_run_disagrees_with_its_own_questions,
     "F35": bait_F35_a_metric_computed_where_it_has_no_grounds,
+    "F36": bait_F36_a_difference_the_questions_cannot_see,
+    "F37": bait_F37_the_number_is_the_best_of_a_search,
 }
 
 _CLAIMED = [f for f in FAILURES if f.detection != "none"]
