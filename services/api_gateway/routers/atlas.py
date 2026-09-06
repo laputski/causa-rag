@@ -19,14 +19,24 @@ a separate path with a separate shape, and it does not put a row in here.
 """
 from __future__ import annotations
 
-from typing import Any
+import uuid
+from datetime import UTC, datetime
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
 from core.eval import atlas as catalogue
 from core.eval import rag_space
 
 router = APIRouter(prefix="/atlas", tags=["atlas"])
+
+#: Where a failure somebody met is written down before it is anything else.
+#: Deliberately not the catalogue: an entry there claims a signal catches the
+#: failure, and the build refuses that claim without a bait. A candidate makes
+#: no such claim, so it can be written from the interface, and the refusal
+#: keeps holding for everything that does.
+CANDIDATES = "atlas_candidates"
 
 
 def attach_failure_ids(items: list[dict[str, Any]], kind: str) -> None:
@@ -193,6 +203,153 @@ async def read_signals() -> dict[str, Any]:
     }
 
 
+class CandidateRequest(BaseModel):
+    """A failure somebody met, in the words of the person who met it."""
+
+    title: str = Field(min_length=8, max_length=200)
+    #: What the system looked like while it was failing. Asked for because a
+    #: failure nobody could have noticed is the only kind worth cataloguing,
+    #: and the answer is what a later reader needs to recognise it again.
+    looked_like: str = Field(min_length=8, max_length=2000)
+    #: Where it was seen: a run identifier, a corpus, a realm. Free text on
+    #: purpose, because a person who has just met a failure should not have
+    #: to know which of the platform's nouns applies to it.
+    observed_on: str = Field(default="", max_length=500)
+    #: What the reporter thinks would have caught it. Their guess, kept as
+    #: theirs, and never resolved against the signal registry here: a name
+    #: that does not resolve is worth reading, and rejecting the report for
+    #: it would lose the report.
+    suspected_signal: str = Field(default="", max_length=200)
+
+
+class CandidateDecision(BaseModel):
+    """The triage step: is this a failure of a served system, or of ours?"""
+
+    status: Literal["accepted", "rejected"]
+    #: Why. Required for a rejection, because "this belongs to the other
+    #: catalogue" is information the reporter needs and the next reader too.
+    note: str = Field(default="", max_length=2000)
+
+
+class CandidatePromotion(BaseModel):
+    """Which catalogue entry the candidate became."""
+
+    failure_id: str
+
+
+def _candidate(doc: dict[str, Any]) -> dict[str, Any]:
+    out = {k: v for k, v in doc.items() if k != "_id"}
+    # Said on every candidate, on every path out of here, because a candidate
+    # and an entry look alike on a screen and only one of them has been
+    # proven to be caught by anything.
+    out["confirmed_by_a_bait"] = False
+    return out
+
+
+@router.get("/candidates")
+async def list_candidates(realm_id: str | None = None, status: str | None = None) -> dict[str, Any]:
+    """Failures people have reported, never mixed with the catalogue itself."""
+    import adapters.mongodb as mdb
+
+    query: dict[str, Any] = {}
+    if realm_id is not None:
+        query["realm_id"] = realm_id
+    if status is not None:
+        query["status"] = status
+    docs = await mdb.find_many(CANDIDATES, query, sort=[("created_at", -1)])
+    return {"candidates": [_candidate(d) for d in docs]}
+
+
+@router.post("/candidates")
+async def create_candidate(body: CandidateRequest, realm_id: str = "") -> dict[str, Any]:
+    import adapters.mongodb as mdb
+
+    now = datetime.now(UTC).isoformat()
+    doc = {
+        "candidate_id": f"C{uuid.uuid4().hex[:8]}",
+        "realm_id": realm_id,
+        **body.model_dump(),
+        "status": "proposed",
+        "note": "",
+        "promoted_to": "",
+        "created_at": now,
+        "updated_at": now,
+    }
+    await mdb.insert_one(CANDIDATES, dict(doc))
+    return _candidate(doc)
+
+
+async def _candidate_or_404(candidate_id: str) -> dict[str, Any]:
+    import adapters.mongodb as mdb
+
+    doc = await mdb.find_one(CANDIDATES, {"candidate_id": candidate_id})
+    if doc is None:
+        raise HTTPException(status_code=404, detail=f"Unknown candidate {candidate_id!r}")
+    return doc
+
+
+@router.post("/candidates/{candidate_id}/decide")
+async def decide_candidate(candidate_id: str, body: CandidateDecision) -> dict[str, Any]:
+    """Accepted means a failure of a served system; rejected means ours.
+
+    The line is the one the catalogue itself draws, and drawing it is a
+    person's judgement: a report phrased without a single identifier of this
+    repository can still be about this repository, and one naming a module
+    can still be a universal failure somebody happened to describe in local
+    words.
+    """
+    import adapters.mongodb as mdb
+
+    if body.status == "rejected" and not body.note.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="A rejection needs a reason: the reporter and the next reader both need it.",
+        )
+    doc = dict(await _candidate_or_404(candidate_id))
+    doc.pop("_id", None)
+    doc["status"] = body.status
+    doc["note"] = body.note
+    doc["updated_at"] = datetime.now(UTC).isoformat()
+    await mdb.upsert_one(CANDIDATES, {"candidate_id": candidate_id}, doc)
+    return _candidate(doc)
+
+
+@router.post("/candidates/{candidate_id}/promoted")
+async def record_promotion(candidate_id: str, body: CandidatePromotion) -> dict[str, Any]:
+    """Records which entry a candidate became, once it is one.
+
+    Promotion itself is a change to the repository, and it has to be: an
+    entry arrives with a bait, and a bait is a test. What is recorded here is
+    the pointer, and only after the entry exists, so the candidate cannot
+    claim to have become something nobody wrote.
+    """
+    import adapters.mongodb as mdb
+
+    if catalogue.get(body.failure_id) is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"The catalogue holds no {body.failure_id!r}. Promotion is a change to the "
+                "repository: add the entry with its bait, then record the pointer here."
+            ),
+        )
+    doc = dict(await _candidate_or_404(candidate_id))
+    doc.pop("_id", None)
+    if doc.get("status") != "accepted":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Candidate {candidate_id!r} is {doc.get('status')!r}, so it was never accepted.",
+        )
+    doc["promoted_to"] = body.failure_id
+    doc["updated_at"] = datetime.now(UTC).isoformat()
+    await mdb.upsert_one(CANDIDATES, {"candidate_id": candidate_id}, doc)
+    return _candidate(doc)
+
+
+# Declared AFTER every literal path above. FastAPI takes the first route that
+# matches, so this one would otherwise answer "the failure whose id is
+# candidates" and return a 404 for the whole mechanism. The same trap caught
+# DELETE /experiments/baseline once already.
 @router.get("/{failure_id}")
 async def read_failure(failure_id: str) -> dict[str, Any]:
     failure = catalogue.get(failure_id)

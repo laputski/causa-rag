@@ -5377,6 +5377,237 @@
         }
       }
     },
+    "/atlas/candidates": {
+      "get": {
+        "tags": [
+          "atlas"
+        ],
+        "summary": "List Candidates",
+        "description": "Failures people have reported, never mixed with the catalogue itself.",
+        "operationId": "list_candidates_atlas_candidates_get",
+        "parameters": [
+          {
+            "name": "realm_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Realm Id"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response List Candidates Atlas Candidates Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "atlas"
+        ],
+        "summary": "Create Candidate",
+        "operationId": "create_candidate_atlas_candidates_post",
+        "parameters": [
+          {
+            "name": "realm_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Realm Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Create Candidate Atlas Candidates Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/atlas/candidates/{candidate_id}/decide": {
+      "post": {
+        "tags": [
+          "atlas"
+        ],
+        "summary": "Decide Candidate",
+        "description": "Accepted means a failure of a served system; rejected means ours.\n\nThe line is the one the catalogue itself draws, and drawing it is a\nperson's judgement: a report phrased without a single identifier of this\nrepository can still be about this repository, and one naming a module\ncan still be a universal failure somebody happened to describe in local\nwords.",
+        "operationId": "decide_candidate_atlas_candidates__candidate_id__decide_post",
+        "parameters": [
+          {
+            "name": "candidate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Candidate Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidateDecision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Decide Candidate Atlas Candidates  Candidate Id  Decide Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/atlas/candidates/{candidate_id}/promoted": {
+      "post": {
+        "tags": [
+          "atlas"
+        ],
+        "summary": "Record Promotion",
+        "description": "Records which entry a candidate became, once it is one.\n\nPromotion itself is a change to the repository, and it has to be: an\nentry arrives with a bait, and a bait is a test. What is recorded here is\nthe pointer, and only after the entry exists, so the candidate cannot\nclaim to have become something nobody wrote.",
+        "operationId": "record_promotion_atlas_candidates__candidate_id__promoted_post",
+        "parameters": [
+          {
+            "name": "candidate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Candidate Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidatePromotion"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Record Promotion Atlas Candidates  Candidate Id  Promoted Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/atlas/{failure_id}": {
       "get": {
         "tags": [
@@ -5966,6 +6197,79 @@
           "corpus_id"
         ],
         "title": "Body_ingest_qdrant_snapshot_corpus_ingest_qdrant_snapshot_post"
+      },
+      "CandidateDecision": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "rejected"
+            ],
+            "title": "Status"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Note",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "CandidateDecision",
+        "description": "The triage step: is this a failure of a served system, or of ours?"
+      },
+      "CandidatePromotion": {
+        "properties": {
+          "failure_id": {
+            "type": "string",
+            "title": "Failure Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "failure_id"
+        ],
+        "title": "CandidatePromotion",
+        "description": "Which catalogue entry the candidate became."
+      },
+      "CandidateRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 8,
+            "title": "Title"
+          },
+          "looked_like": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 8,
+            "title": "Looked Like"
+          },
+          "observed_on": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Observed On",
+            "default": ""
+          },
+          "suspected_signal": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Suspected Signal",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "looked_like"
+        ],
+        "title": "CandidateRequest",
+        "description": "A failure somebody met, in the words of the person who met it."
       },
       "CollectRequest": {
         "properties": {

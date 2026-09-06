@@ -17,6 +17,7 @@ which is how a gap becomes visible before the work begins.
     python3 -m tools.atlas_report
     python3 -m tools.atlas_report --point graph
     python3 -m tools.atlas_report --selectivity
+    python3 -m tools.atlas_report --scaffold C1a2b3c4d
 """
 from __future__ import annotations
 
@@ -158,6 +159,75 @@ def selectivity() -> str:
     return "\n".join(lines)
 
 
+def _next_free_id() -> str:
+    taken = {int(f.id[1:]) for f in FAILURES if f.id[1:].isdigit()}
+    return f"F{max(taken) + 1:02d}"
+
+
+def scaffold(candidate: dict[str, Any]) -> str:
+    """A draft entry and a draft bait, with every judgement left undone.
+
+    What it fills in is what the reporter already wrote. What it refuses to
+    fill in is everything a person has to decide: how loud the failure is,
+    which coordinates admit it, and above all whether any signal catches it.
+    A scaffold that guessed those would be a way of adding an unproven claim
+    to the catalogue with less typing, which is the one thing the whole
+    apparatus exists to prevent.
+    """
+    new_id = _next_free_id()
+    title = candidate.get("title", "").replace('"', "'")
+    lines = [
+        f"# Candidate {candidate.get('candidate_id')}, reported on "
+        f"{candidate.get('created_at', '')[:10]}, seen on "
+        f"{candidate.get('observed_on') or 'nothing recorded'}.",
+        "#",
+        "# What the reporter saw:",
+        *(f"#   {line}" for line in _wrapped(candidate.get("looked_like", ""))),
+        "#",
+        f"# Suspected signal, their guess and not a finding: "
+        f"{candidate.get('suspected_signal') or 'none named'}",
+        "",
+        "# ── into core/eval/atlas.py ───────────────────────────────────────",
+        "    FailureMode(",
+        f'        id="{new_id}",',
+        "        atlas_rows=(),  # DECIDE: the rows of the document this grew from, if any",
+        f'        title="{title}",',
+        '        stage_origin="",  # DECIDE: where it arises',
+        '        stage_visible="",  # DECIDE: the earliest stage a signal could exist',
+        "        severity=Severity(0, 0, 0),  # DECIDE: quiet, cost, prevalence",
+        '        origin="",  # DECIDE: ours-N | miracl | mechanism | industry',
+        '        detection="none",  # DECIDE, and a claim of anything else needs a bait below',
+        '        instrument="",  # DECIDE: corpus | config | ingest | faulty_rag | platform',
+        "        applies_when=(),  # DECIDE: the coordinates that admit it, empty means everywhere",
+        '        not_detected_reason="",  # REQUIRED while detection stays "none"',
+        "    ),",
+        "",
+        "# ── into tests/unit/test_atlas_baits.py, only if a signal is claimed ──",
+        f"def bait_{new_id}_() -> set[str]:  # NAME IT after the defect, not after the entry",
+        '    """One change to the clean baseline, and only one."""',
+        "    run = clean_run()",
+        "    # ... the single change that carries the defect",
+        "    return _detector_ids(run)",
+        "",
+        f'#   BAITS["{new_id}"] = bait_{new_id}_',
+        "#",
+        "# Both halves or neither: the bait must fire on the payload carrying the",
+        "# defect and stay silent on the clean baseline. The second half is the one",
+        "# that rots, and a detector firing on everything passes the first.",
+    ]
+    return "\n".join(lines)
+
+
+def _wrapped(text: str, width: int = 72) -> list[str]:
+    import textwrap
+    return textwrap.wrap(text, width) or [""]
+
+
+async def _read_candidate(candidate_id: str) -> dict[str, Any] | None:
+    import adapters.mongodb as mdb
+    return await mdb.find_one("atlas_candidates", {"candidate_id": candidate_id})
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--point", choices=sorted(POINTS), default=None,
@@ -165,7 +235,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--selectivity", action="store_true",
                         help="which entries share a signal")
     parser.add_argument("--json", action="store_true", help="machine-readable")
+    parser.add_argument("--scaffold", metavar="CANDIDATE_ID", default=None,
+                        help="draft an entry and a bait from a reported candidate")
     args = parser.parse_args(argv)
+
+    if args.scaffold:
+        import asyncio
+        candidate = asyncio.run(_read_candidate(args.scaffold))
+        if candidate is None:
+            print(f"No candidate {args.scaffold!r}. Reported ones are listed at "
+                  f"GET /atlas/candidates.")
+            return 1
+        print(scaffold(candidate))
+        return 0
 
     if args.selectivity:
         print(selectivity())
