@@ -299,6 +299,14 @@ export default function ComparisonPage() {
     queryKey: ['experiments', activeRealmId],
     queryFn: () => api.experiments.list({ realmId: activeRealmId }),
   })
+  // Newest first. The server sorts by run_id, which is a random identifier, so
+  // the two pickers arrived in an order that carries no meaning at all, and
+  // the run somebody wants to compare is almost always one of the last few.
+  // Timestamps are ISO 8601, so comparing them as strings orders them.
+  const runs = useMemo(
+    () => [...(experiments ?? [])].sort((a, b) => (b.started_at ?? '').localeCompare(a.started_at ?? '')),
+    [experiments],
+  )
   // A comparison can take minutes: contested questions are asked again, up to
   // forty pipeline runs. The client invents the identifier, because a socket
   // under that name is needed before the request's response arrives.
@@ -422,12 +430,12 @@ export default function ComparisonPage() {
           <span className="toolbar-label">{t('comparisonPage.runA')}</span>
           <SelectBox value={idA} onChange={e => setIdA(e.target.value)} aria-label={t('comparisonPage.runA')}>
             <option value="">{t('comparisonPage.selectPrompt')}</option>
-            {experiments?.map(e => <option key={e.run_id} value={e.run_id}>{runOptionLabel(e, t)}</option>)}
+            {runs.map(e => <option key={e.run_id} value={e.run_id}>{runOptionLabel(e, t)}</option>)}
           </SelectBox>
           <span className="toolbar-label">{t('comparisonPage.runB')}</span>
           <SelectBox value={idB} onChange={e => setIdB(e.target.value)} aria-label={t('comparisonPage.runB')}>
             <option value="">{t('comparisonPage.selectPrompt')}</option>
-            {experiments?.map(e => <option key={e.run_id} value={e.run_id}>{runOptionLabel(e, t)}</option>)}
+            {runs.map(e => <option key={e.run_id} value={e.run_id}>{runOptionLabel(e, t)}</option>)}
           </SelectBox>
           <button
             className="btn btn-sm btn-primary push"
