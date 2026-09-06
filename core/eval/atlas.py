@@ -667,7 +667,11 @@ FAILURES: tuple[FailureMode, ...] = (
         instrument="faulty_rag",
         applies_when=(("D2", ("top_k", "budget_aware")),),
         not_detected_reason=(
-            "position bias is computed on demand and is not surfaced as a signal"
+            "position bias is computed on demand and is not surfaced as a signal. A "
+            "proving-ground pair filled the context past what was asked for and answered "
+            "from its edges: the only thing that spoke was the funnel bottleneck, naming "
+            "the generation layer on ten of seventeen answerable questions, which every "
+            "failure of that layer raises and none of them is identified by"
         ),
     ),
     FailureMode(

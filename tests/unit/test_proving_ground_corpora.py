@@ -204,3 +204,42 @@ def test_the_two_question_sets_are_parallel() -> None:
         en_sections = [r.split("/")[-1] for r in en[qid]["article_refs"]]
         assert ru_sections == en_sections, f"{qid}: expects sections {ru_sections} and {en_sections}"
         assert ru[qid]["question"] != en[qid]["question"], f"{qid}: the same wording in both sets"
+
+
+def test_only_the_document_heading_carries_a_number_and_that_is_why_F29_is_unstaged() -> None:
+    """The measurement behind a catalogue entry that has no proving-ground pair.
+
+    F29, a citation naming a fragment other than the one the answer used,
+    is read by `citation_number_coverage`, which looks for the structural
+    number of the retrieved fragment occurring in the answer text. Here only
+    the top-level heading of each document is numbered; every subsection is a
+    bare title. Retrieval returns subsections, so the signal has no candidate
+    number to check and returns None, and a live run against a server that
+    moved every citation scored exactly like its control. Measured twice,
+    then traced to this.
+
+    So F29 stays unstaged, and the reason is the corpus and not the
+    instrument. Numbering the subsections would make it stageable and would
+    redden this test, which is why the number is written down.
+    """
+    label = re.compile(r"\[([^\]]+)\]")
+    number = re.compile(r"\d+(?:[.\-]\d+)*")
+    for language in LANGUAGES:
+        documents = sorted((GROUND / language).glob("*.md"))
+        numbered = total = 0
+        for path in documents:
+            document = Document(doc_id=path.stem, source=str(path),
+                                content=path.read_text(encoding="utf-8"), metadata={})
+            for chunk in StructureAwareChunkingStrategy().chunk(document):
+                total += 1
+                found = label.search(chunk.structural_path or "")
+                if found and number.findall(found.group(1)):
+                    numbered += 1
+        assert numbered == len(documents), (
+            f"{language}: {numbered} of {total} chunks carry a numbered label, one per "
+            "document expected. If this grew, F29 may now be stageable"
+        )
+        assert total > numbered * 4, (
+            f"{language}: {numbered} numbered of {total}, so a retrieved fragment is "
+            "usually unnumbered, which is the premise above"
+        )
