@@ -32,6 +32,17 @@ _LABEL_RE = re.compile(r"\[([^\]]+)\]")
 # either script) catches this without trying to enumerate every possible
 # typo.
 _FRAGMENT_MARKER_RE = re.compile(r"(?:Фрагмент|[ФF]?ragment)\s+(\d+)", re.IGNORECASE)
+# The plural, and the list that comes with it. Found live on the proving
+# ground: asked about four instruments at once the model wrote "(Фрагменты 2,
+# 3, 4, 5)", which the singular pattern above cannot match, because
+# "Фрагмент" is a prefix of "Фрагменты" and the \s+ that follows meets a
+# letter. The
+# marker reached the user verbatim, which substitute_fragment_markers' own
+# docstring calls structurally impossible. It was impossible only for the
+# form the model happened not to use.
+_FRAGMENT_LIST_RE = re.compile(
+    r"(?:Фрагмент\w*|[ФF]?ragments?)\s+(\d+(?:\s*(?:,|и|and|&)\s*\d+)+)", re.IGNORECASE)
+_LIST_NUMBER_RE = re.compile(r"\d+")
 # Compound numbering (e.g. "210.5", "16-9") — same convention already used
 # for this elsewhere in the codebase (core/chunking/structure_aware.py's
 # _BARE_NUMERAL_RE, a domain pack's structure parser regex).
@@ -200,6 +211,12 @@ def substitute_fragment_markers(answer_text: str, source_refs: list[SourceRef]) 
     An out-of-range index (model invented a fragment number beyond what
     was retrieved) is removed rather than left as a dangling raw marker —
     same reasoning as compute_citation_labels' out-of-range handling.
+
+    Both the singular marker and the plural list are substituted. The claim
+    of impossibility above was written when only the singular was handled,
+    and a run on the proving ground found the plural reaching the user
+    untouched; the claim is now true of the form that was observed as well
+    as the form that was anticipated.
     """
     def _replace(match: re.Match[str]) -> str:
         idx = int(match.group(1)) - 1
@@ -207,7 +224,19 @@ def substitute_fragment_markers(answer_text: str, source_refs: list[SourceRef]) 
             return _label_for(source_refs[idx])
         return ""
 
-    result = _FRAGMENT_MARKER_RE.sub(_replace, answer_text)
+    def _replace_list(match: re.Match[str]) -> str:
+        labels = []
+        for number in _LIST_NUMBER_RE.findall(match.group(1)):
+            idx = int(number) - 1
+            if 0 <= idx < len(source_refs):
+                labels.append(_label_for(source_refs[idx]))
+        return ", ".join(labels)
+
+    # The list first: the singular pattern would otherwise consume the head of
+    # "Фрагменты 2, 3" as far as it can and leave the rest of the list
+    # standing beside a substituted label.
+    result = _FRAGMENT_LIST_RE.sub(_replace_list, answer_text)
+    result = _FRAGMENT_MARKER_RE.sub(_replace, result)
     # Clean up now-empty "()" left behind when an out-of-range marker was
     # the sole content of a parenthetical, the dangling space before
     # punctuation that leaves, and any doubled whitespace.

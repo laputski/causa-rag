@@ -248,6 +248,39 @@ def test_no_source_refs_at_all_strips_any_marker() -> None:
     assert substitute_fragment_markers("An answer (Фрагмент 1).", []) == "An answer."
 
 
+def test_plural_marker_listing_several_fragments_is_substituted() -> None:
+    """Real bug found live on the proving ground: asked about four instruments
+    at once the model wrote "(Фрагменты 2, 3, 4, 5)", and the singular pattern
+    cannot match it: "Фрагмент" is a prefix of "Фрагменты", so the whitespace
+    it requires next meets a letter instead. The marker reached the user
+    verbatim, which this function's own docstring calls impossible."""
+    refs = [
+        _ref("document/article[Article 5. Application]"),
+        _ref("document/article[Article 6. Scope]"),
+        _ref("document/article[Article 7. Exceptions]"),
+    ]
+    result = substitute_fragment_markers("It applies (Фрагменты 1, 2, 3).", refs)
+    assert result == "It applies (Article 5. Application, Article 6. Scope, Article 7. Exceptions)."
+    assert "Фрагмент" not in result
+
+
+def test_plural_marker_joined_by_a_word_is_substituted() -> None:
+    """The other way a list is written, in either language."""
+    refs = [_ref("document/article[Article 5. Application]"),
+            _ref("document/article[Article 6. Scope]")]
+    assert "Фрагмент" not in substitute_fragment_markers("См. Фрагменты 1 и 2.", refs)
+    assert "ragment" not in substitute_fragment_markers("See Fragments 1 and 2.", refs)
+
+
+def test_a_plural_list_drops_only_the_index_that_is_out_of_range() -> None:
+    """The list is not all-or-nothing: an invented index is removed and the
+    real ones beside it still resolve, same as the singular case."""
+    refs = [_ref("document/article[Article 5. Application]")]
+    assert substitute_fragment_markers("It applies (Фрагменты 1, 9).", refs) == (
+        "It applies (Article 5. Application)."
+    )
+
+
 def test_latin_cyrillic_code_switched_marker_is_still_caught() -> None:
     """Real bug found live: the model wrote "Фragment 7" — Cyrillic Ф +
     Latin "ragment" — which the original Cyrillic-only regex missed
