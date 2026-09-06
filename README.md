@@ -271,15 +271,22 @@ tests/         unit, contract, integration, fitness, and the e2e walkthrough
 ## Tests
 
 ```bash
-make test        # unit and contract, no services needed
-make test-int    # integration, needs the stack up
-make test-e2e    # the full walkthrough over the demo realm
+make test                  # unit and contract, no services needed
+make test-int              # integration, needs the stack up
+make test-e2e              # the full walkthrough over the demo realm
+make test-proving-ground   # paired baits on a live stack, one run per half
 ```
 
 The e2e suite is the one that matters most for trusting a fresh install: it
 imports a realm, ingests the corpus, runs the golden set twice under different
 configurations, compares them, records feedback and a judgment, and prints the
 metrics it measured. It runs in an isolated realm and cleans up after itself.
+
+A test can only ask what somebody thought to ask, so there is one more check
+that a person makes: [checking it by hand](docs/manual-verification.md), seven
+steps with a screen and forty minutes. It ends by planting a named defect in a
+corpus and watching the same check stay silent on the healthy copy and speak on
+the damaged one.
 
 ## Contributing
 
