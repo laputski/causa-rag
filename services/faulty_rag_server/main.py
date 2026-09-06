@@ -64,10 +64,7 @@ REALM = os.getenv("RAG_REALM", "")
 
 _bound: dict[tuple[str, str, str], Any] = {}
 
-#: What the platform's own refusal pattern recognises. Written here and never
-#: imported, because this server plays the part of somebody else's system and
-#: has no business reading the platform's internals; and a wrong guess here
-#: would show up as a mode that stages nothing, which the tests would catch.
+#: A refusal, in the form the platform recognises as one.
 REFUSAL = "The context does not contain the answer to this question."
 CONFIDENT = "The regulation sets the interval at twelve months for every instrument class."
 
@@ -83,6 +80,15 @@ class Fault:
     describes: str
     #: Rewrites the response the honest pipeline produced. Never mutates it.
     apply: Callable[[dict[str, Any], ExternalRagRequest], dict[str, Any]]
+    #: Coordinates this mode moves the served system to, as (dimension,
+    #: value) pairs. Most modes move none: answering badly is not being a
+    #: different kind of system. One does. A system that never refuses has
+    #: no refusal policy, which is a coordinate and not a defect, and a
+    #: catalogue entry scoped to that coordinate can only be reproduced
+    #: against a system that carries it. Found by a guard, which refused
+    #: evidence for such an entry because every point the platform knew
+    #: declared a refusal policy.
+    moves: tuple[tuple[str, str], ...] = ()
 
 
 def _never_refuses(response: dict[str, Any], request: ExternalRagRequest) -> dict[str, Any]:
@@ -117,26 +123,58 @@ def _returns_nothing(response: dict[str, Any], request: ExternalRagRequest) -> d
     return {**response, "answer": ""}
 
 
+# The number a fragment is known by lives inside the bracketed label of its
+# structural path: "document/section[3 Калибровка]" is fragment 3. Both the
+# field and the label are part of the external contract, so reading them here
+# is reading what the platform was handed, not reaching into its internals.
+_LABEL_RE = re.compile(r"\[([^\]]+)\]")
+_NUMBER_RE = re.compile(r"\d+(?:[.\-]\d+)*")
+
+
+def _fragment_numbers(sources: list[dict[str, Any]]) -> list[str]:
+    """The structural numbers of the fragments returned, in order, no repeats."""
+    numbers: list[str] = []
+    for source in sources:
+        label = _LABEL_RE.search(source.get("structural_path") or "")
+        if not label:
+            continue
+        for number in _NUMBER_RE.findall(label.group(1)):
+            if number not in numbers:
+                numbers.append(number)
+    return numbers
+
+
 def _cites_the_wrong_fragment(response: dict[str, Any], request: ExternalRagRequest) -> dict[str, Any]:
-    """Move every citation marker one place along.
+    """Print, for each fragment cited, the number of a different one.
 
     The fragment that answers the question was found and is in the context;
-    the number printed beside the sentence belongs to a different one.
+    the number printed beside the sentence belongs to another fragment that
+    was also returned. Nothing about retrieval is touched: the sources go
+    back unchanged, and only the numbers written into the prose move.
+
+    The first version of this moved a "(Fragment N)" marker instead, on the
+    assumption that the generator writes one. Measurement refuted it, since no
+    such marker occurs in any of a hundred and sixty real answers, so the
+    mode replaced nothing and the run scored exactly like its control. What
+    the signal reads is the structural number itself occurring in the text,
+    and that is what moves now.
     """
-    sources = response.get("sources") or []
-    # Guarded against nothing to point at, and nothing else. With one source
-    # the arithmetic below already leaves the number where it was, which is
-    # the right answer: there is no other fragment to name. The guard was
-    # written for two and covered a case that needed no covering, which a bait
-    # found by leaving the test green with the guard removed.
-    if not sources:
+    numbers = _fragment_numbers(response.get("sources") or [])
+    # With fewer than two distinct numbers there is no other fragment to
+    # name, and the honest answer is to leave the text alone instead of
+    # inventing a number that was never retrieved.
+    if len(numbers) < 2:
         return dict(response)
 
-    def shift(match: re.Match[str]) -> str:
-        n = int(match.group(1))
-        return f"(Fragment {n % len(sources) + 1})"
+    moved = {n: numbers[(i + 1) % len(numbers)] for i, n in enumerate(numbers)}
 
-    return {**response, "answer": re.sub(r"\(Fragment (\d+)\)", shift, response["answer"])}
+    # One pass over the text, so a number moved into place is never moved
+    # again by a later rule; a number that belongs to no fragment is left
+    # exactly as the generator wrote it.
+    def shift(match: re.Match[str]) -> str:
+        return moved.get(match.group(0), match.group(0))
+
+    return {**response, "answer": _NUMBER_RE.sub(shift, response.get("answer") or "")}
 
 
 def _ignores_the_context(response: dict[str, Any], request: ExternalRagRequest) -> dict[str, Any]:
@@ -177,11 +215,19 @@ def _cuts_sources_mid_sentence(response: dict[str, Any], request: ExternalRagReq
     or ends inside a thought, so the grounds for the answer are split between
     two of them and neither carries them.
     """
+    # Cut from the end, and that is a measurement and not a preference.
+    # The first version kept a fixed window out of the middle, which staged a
+    # second failure: this corpus carries its distinctness in the opening of
+    # each fragment: 220 chunks, 220 distinct, but only 111 once the first
+    # sixty characters are dropped, so cutting the head left fragments
+    # byte-identical and the duplicate detector fired on a pair the mode had
+    # manufactured. Cutting the same width off the end leaves all 220
+    # distinct and still ends every fragment inside a thought.
     cut = 60
     sources = []
     for source in response.get("sources") or []:
         text = source.get("chunk_text") or ""
-        sources.append({**source, "chunk_text": text[cut : cut * 2]})
+        sources.append({**source, "chunk_text": text[:-cut] if len(text) > cut else text})
     return {**response, "sources": sources}
 
 
@@ -193,7 +239,8 @@ def _unchanged(response: dict[str, Any], request: ExternalRagRequest) -> dict[st
 FAULTS: tuple[Fault, ...] = (
     Fault("none", (), "answers honestly: the control half of every pair", _unchanged),
     Fault("F19_never_refuses", ("F19",),
-          "answers every question, including those the corpus does not cover", _never_refuses),
+          "answers every question, including those the corpus does not cover", _never_refuses,
+          moves=(("E4", "no_refusal"),)),
     Fault("F32_always_refuses", ("F32",),
           "refuses every question, including those the corpus answers plainly", _always_refuses),
     Fault("F28_returns_nothing", ("F28",),
@@ -212,8 +259,25 @@ _BY_NAME = {f.name: f for f in FAULTS}
 
 
 def _reads_as_refusal(answer: str) -> bool:
-    text = answer.lower()
-    return not text.strip() or "does not contain" in text or "не содержит" in text
+    """Whether the platform would read this answer as a refusal.
+
+    Asked of the platform's own pattern, and not of a phrase list kept here.
+    A list was the first version, on the reasoning that a server playing the
+    part of somebody else's system has no business reading this platform's
+    internals. The reasoning was wrong and the measurement said so: the
+    generator's real refusal, "в предоставленных документах информация по
+    данному вопросу отсутствует", matched none of the two phrases guessed
+    here, so the mode that exists to answer every question replaced nothing,
+    ran against nineteen questions, and scored exactly what the honest mode
+    scored.
+
+    What the mode has to recognise is what the platform will later count, so
+    the platform is what to ask. Anything else stages a failure the measurement
+    cannot see, which is the one thing this whole apparatus exists to stop.
+    """
+    from core.eval.detectors import NOT_FOUND_RE
+
+    return not answer.strip() or bool(NOT_FOUND_RE.search(answer))
 
 
 def active_fault() -> Fault:
@@ -297,6 +361,7 @@ async def capabilities() -> dict[str, Any]:
     declared["fault"] = fault.name
     declared["fault_describes"] = fault.describes
     declared["provokes"] = list(fault.provokes)
+    declared["moves_coordinates"] = {name: value for name, value in fault.moves}
     return declared
 
 

@@ -22,13 +22,16 @@ from services.reference_rag_server.main import ExternalRagRequest
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def _response(answer: str = "Calibration is every three months (Fragment 1).",
+def _response(answer: str = "Calibration is every three months, per section 2.",
               sources: int = 3) -> dict[str, Any]:
+    # structural_path carries the bracketed label the chunker writes, because
+    # that is what the platform is handed and what the citation signal reads.
     return {
         "answer": answer,
         "sources": [
             {"doc_id": f"base-ru/{n:02d}", "chunk_id": f"c{n}",
              "chunk_text": f"Section {n}. " + "text that runs on for a while " * 4,
+             "structural_path": f"document/section[{n} Section {n}]",
              "score": 1.0 - n / 10}
             for n in range(1, sources + 1)
         ],
@@ -81,9 +84,46 @@ def test_returning_nothing_leaves_the_sources_in_place() -> None:
 
 def test_the_wrong_citation_moves_the_number_and_keeps_the_sentence() -> None:
     out = _apply("F29_cites_the_wrong_fragment")
-    assert "(Fragment 2)" in out["answer"]
-    assert "(Fragment 1)" not in out["answer"]
+    assert "section 3" in out["answer"]
+    assert "section 2" not in out["answer"]
     assert "Calibration is every three months" in out["answer"]
+
+
+def test_the_wrong_citation_moves_what_the_signal_actually_reads() -> None:
+    """The half of this pair that rots is the mode going inert.
+
+    Its first version moved a "(Fragment N)" marker, which the generator
+    never writes and the signal never reads, so the broken run scored
+    exactly like its control and the pair proved nothing. Asserting against
+    the signal itself is what makes that failure visible here instead of
+    two minutes into a live run.
+    """
+    from core.citation import citation_number_coverage
+    from core.eval.retrieval_metrics import extract_ref_id
+    from core.models import SourceRef
+
+    original = _response()
+    refs = [SourceRef(doc_id=s["doc_id"], chunk_id=s["chunk_id"], chunk_text=s["chunk_text"],
+                      score=s["score"], structural_path=s["structural_path"])
+            for s in original["sources"]]
+    # Asked for, not written out: a hand-built ref id that the platform would
+    # never produce makes the metric return None and the assertion pass for
+    # a reason having nothing to do with the mode.
+    article_refs = [extract_ref_id(refs[1].model_dump())]
+
+    honest = citation_number_coverage(original["answer"], refs, article_refs)
+    broken = citation_number_coverage(
+        _apply("F29_cites_the_wrong_fragment", original)["answer"], refs, article_refs)
+    assert honest == 1.0, honest
+    assert broken == 0.0, broken
+
+
+def test_the_wrong_citation_leaves_numbers_belonging_to_no_fragment_alone() -> None:
+    """A year, a torque, a temperature: moving those would stage a second
+    failure, and the entry is about the citation and nothing else."""
+    out = _apply("F29_cites_the_wrong_fragment",
+                 _response(answer="Tighten to 40 Nm, per section 2."))
+    assert "40 Nm" in out["answer"]
 
 
 def test_the_wrong_citation_leaves_a_single_source_alone() -> None:
@@ -95,7 +135,7 @@ def test_the_wrong_citation_leaves_a_single_source_alone() -> None:
 def test_the_wrong_citation_survives_an_answer_with_no_sources() -> None:
     """A refusal carries none, and dividing by their count would raise inside
     a server whose whole job is to answer badly and keep answering."""
-    empty = {"answer": "Calibration is every three months (Fragment 1).", "sources": []}
+    empty = {"answer": "Calibration is every three months, per section 2.", "sources": []}
     assert _apply("F29_cites_the_wrong_fragment", empty) == empty
 
 
@@ -114,11 +154,30 @@ def test_burying_the_middle_answers_from_the_edges() -> None:
     assert len(out["sources"]) == 3
 
 
-def test_cutting_sources_leaves_them_starting_mid_thought() -> None:
+def test_cutting_sources_leaves_them_ending_mid_thought() -> None:
     out = _apply("F05_cuts_sources_mid_sentence")
-    for source in out["sources"]:
-        assert not source["chunk_text"].startswith("Section")
-        assert source["chunk_text"]
+    for before, after in zip(_response()["sources"], out["sources"], strict=True):
+        assert after["chunk_text"]
+        assert len(after["chunk_text"]) < len(before["chunk_text"])
+        assert not after["chunk_text"].rstrip().endswith(".")
+
+
+def test_cutting_sources_does_not_make_two_fragments_identical() -> None:
+    """The mode stages one failure and has to stage only one.
+
+    Its first version kept a fixed window out of the middle of each
+    fragment. The corpus this runs against carries its distinctness in the
+    opening, since every service card names its model there and then says the
+    same things about it, so dropping the head left fragments byte-identical
+    and a live run reported duplicates, which is a different entry, about a
+    corpus the mode had not touched. The fixture below has that shape.
+    """
+    original = _response()
+    for n, source in enumerate(original["sources"], start=1):
+        source["chunk_text"] = (f"Model KL-{n}00. " + "The rest of this card is the same "
+                                "sentence every card of this kind carries. ")
+    texts = [s["chunk_text"] for s in _apply("F05_cuts_sources_mid_sentence", original)["sources"]]
+    assert len(set(texts)) == len(texts), texts
 
 
 # ── the modes as a set ────────────────────────────────────────────────────────
@@ -249,3 +308,34 @@ def test_it_is_registered_in_the_proving_ground_and_nowhere_else() -> None:
     assert demo.get("external_rags") == [], "the demo realm registers an external system"
     assert Path(ROOT / "tools" / "seed_proving_ground.py").read_text(encoding="utf-8").count(
         "faulty-rag") >= 1
+
+
+def test_the_refusal_it_recognises_is_the_one_the_platform_counts() -> None:
+    """The mode that answers everything has to recognise the refusals the
+    platform will later count as refusals.
+
+    Written first against two phrases guessed here, on the reasoning that a
+    server playing the part of somebody else's system should not read this
+    platform's internals. Measured against the generator's real output, that
+    guess matched nothing: the mode replaced no answer, ran against nineteen
+    questions, and scored exactly what the honest mode scored. A distortion
+    that runs and provokes nothing is the failure this whole apparatus exists
+    to stop.
+    """
+    from core.eval.detectors import NOT_FOUND_RE
+
+    # Observed from the generator this proving ground runs, and not invented.
+    real = "В предоставленных документах информация по данному вопросу отсутствует."
+    assert NOT_FOUND_RE.search(real), "the platform no longer reads this as a refusal"
+    assert faulty._reads_as_refusal(real)
+    assert faulty._reads_as_refusal(faulty.REFUSAL)
+    assert faulty._reads_as_refusal("")
+    assert not faulty._reads_as_refusal("Калибровка выполняется раз в три месяца.")
+
+
+def test_never_refusing_replaces_the_generator_s_own_refusal() -> None:
+    """The pair of the test above, at the level of the mode."""
+    real = _response(answer="В предоставленных документах информация по данному вопросу отсутствует.")
+    out = _apply("F19_never_refuses", real)
+    assert out["answer"] != real["answer"]
+    assert not faulty._reads_as_refusal(out["answer"])
