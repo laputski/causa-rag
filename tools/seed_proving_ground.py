@@ -43,6 +43,12 @@ GROUND_DIR = REPO_ROOT / "corpus" / "proving-ground"
 GOLDEN_DIR = REPO_ROOT / "eval" / "golden"
 
 REALM_ID = "proving-ground"
+#: Where the server that answers badly on purpose listens.
+#:
+#: Written here as well as in that server, because importing it would pull the
+#: whole gateway into a seed that has no other need of it. A test asserts the
+#: two agree, so the duplication cannot drift into a record pointing at nothing.
+FAULTY_RAG_PORT = 8092
 STRATEGY = "structure_aware"
 
 # Corpus id, directory, the analyser its index is built with, and a description.
@@ -184,7 +190,26 @@ def build_bundle() -> dict[str, Any]:
             ],
             "created_at": "2026-01-01T00:00:00+00:00",
         },
-        "external_rags": [],
+        # The server that answers badly on purpose, registered here and nowhere
+        # else. Its own /health and /capabilities say that it distorts answers
+        # and name the mode in force, so a reader who reaches it through this
+        # record cannot mistake it for an ordinary system. It is not started by
+        # the seed: `make faulty-rag FAULT=<mode>` starts it, one mode per
+        # process, because a run is a hundred requests and a mode that could
+        # change between them would describe no system anybody operates.
+        "external_rags": [{
+            "id": "faulty-rag",
+            "name": "Faulty RAG (proving ground)",
+            "url": f"http://localhost:{FAULTY_RAG_PORT}/",
+            "retrieve_endpoint": f"http://localhost:{FAULTY_RAG_PORT}/retrieve",
+            "description": (
+                "Answers badly on purpose, one named way at a time. Start it with "
+                "`make faulty-rag FAULT=<mode>`; `make faulty-rag` alone gives the "
+                "control, which answers honestly and is the other half of every pair."
+            ),
+            "realm_id": REALM_ID,
+            "created_at": "2026-01-01T00:00:00+00:00",
+        }],
         "prompts": [{
             "id": "proving_ground_prompt_v1",
             "name": "Grounded handbook QA",

@@ -1,4 +1,4 @@
-.PHONY: help types quickstart doctor stop demo proving-ground up down infra api ui ingest install install-judges test test-unit test-proving-ground test-int test-eval test-e2e load logs ps clean bootstrap publish-check publish-export miracl-fetch miracl-ingest miracl-report
+.PHONY: help types quickstart doctor stop demo proving-ground reference-rag faulty-rag up down infra api ui ingest install install-judges test test-unit test-proving-ground test-int test-eval test-e2e load logs ps clean bootstrap publish-check publish-export miracl-fetch miracl-ingest miracl-report
 COMPOSE = docker compose -f deploy/compose/docker-compose.yml
 PORT    ?= 8081
 
@@ -74,6 +74,12 @@ test-int:       ## Integration tests (needs docker compose up)
 openapi:        ## Regenerate the governance/openapi.json snapshot (the API surface guard fitness test reads it)
 	python3 -c "import json,sys;sys.path.insert(0,'.');from services.api_gateway.main import app;f=open('governance/openapi.json','w');json.dump(app.openapi(),f,indent=2,ensure_ascii=False)" 2>/dev/null
 	@echo "✅  governance/openapi.json updated: $$(python3 -c 'import json;print(len(json.load(open("governance/openapi.json"))["paths"]))' 2>/dev/null) paths"
+
+reference-rag:  ## Run the reference RAG server, an honest implementation of the external contract
+	python3 -m services.reference_rag_server.main
+
+faulty-rag:     ## Run a RAG server that answers badly on purpose (RAG_FAULT=<mode>, see --help)
+	RAG_FAULT=$(or $(FAULT),none) python3 -m services.faulty_rag_server.main
 
 test-proving-ground: ## Paired baits on the proving ground (needs the stack, the real model and the loaded indexes)
 	./.venv/bin/python -m pytest tests/proving_ground -q -m proving_ground

@@ -299,3 +299,24 @@ async def retrieve(body: ExternalRagRequest) -> dict[str, Any]:
     from core.pipeline import _to_source_refs
 
     return {"sources": [sr.model_dump() for sr in _to_source_refs(chunks)]}
+
+PORT = 8091
+
+
+def main() -> None:
+    """A way to run it, which it did not have.
+
+    Nothing started this server: not the Makefile, not the installer, not the
+    compose file. It existed as a module under unit tests, so the contract it
+    was written to dog-food was dog-fooded only by importing it. A port of its
+    own keeps it clear of the server that answers badly on purpose, which runs
+    on the next one up.
+    """
+    import uvicorn
+
+    print(f"Reference RAG server on port {PORT}: an honest implementation of the contract.")
+    uvicorn.run(app, host="0.0.0.0", port=PORT)  # noqa: S104
+
+
+if __name__ == "__main__":
+    main()
