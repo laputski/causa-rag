@@ -76,3 +76,58 @@ def test_each_declaration_says_what_it_computes_and_over_which_questions() -> No
         if len(d.says.split()) < 5 or len(d.over.split()) < 2 or "question" not in d.over
     ]
     assert thin == [], f"declarations too thin to check a name against: {sorted(thin)}"
+
+
+@pytest.mark.fitness
+def test_every_metric_says_what_must_hold_before_it_means_anything() -> None:
+    """An empty list of preconditions is a claim, and it has to be made.
+
+    The same ambiguity the catalogue's coordinates carry: a field left at its
+    default reads as "computable anywhere" and as "nobody thought about it",
+    and only one of those is worth trusting. Every metric written today has
+    grounds, so an empty one is an omission until someone argues otherwise
+    here.
+    """
+    unconditioned = sorted(d.name for d in DEFINITIONS if not d.requires)
+    assert unconditioned == [], (
+        f"declared with no preconditions at all: {unconditioned}. If a metric really is "
+        "computable wherever it is written, say so here and name it."
+    )
+
+
+@pytest.mark.fitness
+def test_each_precondition_says_what_must_hold_in_words_a_reader_can_use() -> None:
+    """The sentence is printed inside the finding, so it has to survive
+    being read away from the code that produced it."""
+    thin = sorted({
+        precondition.says
+        for d in DEFINITIONS for precondition in d.requires
+        if len(precondition.says.split()) < 4
+    })
+    assert thin == [], f"preconditions too terse to read in a finding: {thin}"
+
+
+@pytest.mark.fitness
+def test_a_precondition_can_actually_fail() -> None:
+    """A predicate that is true of everything guards nothing.
+
+    Each is checked against a payload built to violate it, because a
+    precondition nobody can breach passes every run and proves nothing,
+    which is the shape of a guard that has quietly stopped working.
+    """
+    breaches = {
+        "the run reached the generator": ({"config": {"retrieval_only": True}}, {}),
+        "the question is one the corpus covers": ({}, {"answerability": "out_of_scope"}),
+        "retrieval found at least one source the question needs": (
+            {}, {"metrics": {"retrieval_recall_at_k": 0.0}}),
+    }
+    for d in DEFINITIONS:
+        for precondition in d.requires:
+            assert precondition.says in breaches, (
+                f"{d.name} declares {precondition.says!r} and no breach of it is written here, "
+                "so nothing shows it can fail"
+            )
+            run, question = breaches[precondition.says]
+            assert precondition.holds(run, question) is False, (
+                f"{precondition.says!r} holds even on a payload built to violate it"
+            )

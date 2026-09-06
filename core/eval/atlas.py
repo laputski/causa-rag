@@ -751,12 +751,15 @@ FAILURES: tuple[FailureMode, ...] = (
         stage_visible="measurement",
         severity=Severity(3, 3, 2),
         origin="miracl",
-        detection="none",
+        detection="detector",
         instrument="platform",
         applies_when=(),
-        not_detected_reason=(
-            "a metric's preconditions are enforced in one place by hand and are not declared anywhere a check could read"
-        ),
+        # They were enforced in one place by hand, inside the evaluator,
+        # where a reader could not see them and nothing could read them.
+        # Declared beside each metric now, in core/eval/metric_definitions.py,
+        # and a detector reads them.
+        signals=(Signal("detector", "metric_without_grounds"),),
+        bait="tests/unit/test_atlas_baits.py::test_bait[F35]",
     ),
     FailureMode(
         id="F36",

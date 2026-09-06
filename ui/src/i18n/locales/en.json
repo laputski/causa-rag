@@ -2065,7 +2065,8 @@
       "undeclared_metric": "A metric carries no definition",
       "aggregate_disagrees": "The run's numbers are not its questions' numbers",
       "chunk_id_collision": "One fragment identifier, two fragments",
-      "unmeasured_stage_cost": "A stage ran and reported no time"
+      "unmeasured_stage_cost": "A stage ran and reported no time",
+      "metric_without_grounds": "A metric was computed where it has no grounds"
     },
     "findingAction": {
       "embedder_unverified": "Read the run's recall against its reference sources: a corpus indexed by a stub model retrieves at chance.",
@@ -2080,7 +2081,8 @@
       "undeclared_metric": "Declare each metric beside its name, saying what it computes and over which questions, so the name can be checked against it.",
       "aggregate_disagrees": "Compare what the run wrote with what a read of it returns; a question lost on the way out moves the aggregate and leaves everything else looking correct.",
       "chunk_id_collision": "Check how the identifier is derived at load time: a source path missing from the derivation collapses fragments of different documents onto one value.",
-      "unmeasured_stage_cost": "Record a duration for every stage the pipeline runs, so its price can be compared with the gain it is kept for."
+      "unmeasured_stage_cost": "Record a duration for every stage the pipeline runs, so its price can be compared with the gain it is kept for.",
+      "metric_without_grounds": "Read each metric's declared preconditions and stop recording it where they do not hold, so the average is over the questions the number is about."
     },
     "traceGap": {
       "sources": {

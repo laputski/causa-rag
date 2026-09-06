@@ -386,6 +386,19 @@ def bait_F34_the_run_disagrees_with_its_own_questions() -> set[str]:
     return _detector_ids(run)
 
 
+def bait_F35_a_metric_computed_where_it_has_no_grounds() -> set[str]:
+    """A recall recorded for a question the corpus does not cover.
+
+    Nothing was retrievable, so the zero is not a measurement of retrieval;
+    averaged into the run it is a confident number about something nobody
+    measured.
+    """
+    run = clean_run()
+    for qr in run["question_results"]:
+        qr["answerability"] = "out_of_scope"
+    return _detector_ids(run)
+
+
 BAITS = {
     "F01": bait_F01_reingest_duplicates,
     "F02": bait_F02_one_identifier_two_fragments,
@@ -409,6 +422,7 @@ BAITS = {
     "F32": bait_F32_refusal_calibrated_badly,
     "F33": bait_F33_a_metric_declares_nothing,
     "F34": bait_F34_the_run_disagrees_with_its_own_questions,
+    "F35": bait_F35_a_metric_computed_where_it_has_no_grounds,
 }
 
 _CLAIMED = [f for f in FAILURES if f.detection != "none"]

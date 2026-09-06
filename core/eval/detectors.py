@@ -516,6 +516,55 @@ def detect_aggregate_disagrees_with_questions(run: dict[str, Any]) -> Diagnostic
     )
 
 
+def detect_metric_without_grounds(run: dict[str, Any]) -> DiagnosticItem | None:
+    """A number computed where it has nothing to be about.
+
+    Not a wrong number, which could be argued with: a confident number about
+    something nobody measured. A retrieval-only run scored for the quality of
+    an answer it never generated, a recall computed for a question the corpus
+    does not cover, a citation judged correct against sources that were never
+    found.
+
+    The evaluator enforces one of these by hand, inside itself, where a
+    reader cannot see it and nothing can check it. The preconditions are
+    declared beside each metric now, and this reads them.
+    """
+    from core.eval.metric_definitions import definition_of
+
+    questions = run.get("question_results") or []
+    ungrounded: dict[str, tuple[str, int]] = {}
+    for question in questions:
+        for name in (question.get("metrics") or {}):
+            definition = definition_of(name)
+            if definition is None:
+                continue
+            for precondition in definition.requires:
+                if precondition.holds(run, question):
+                    continue
+                says, count = ungrounded.get(name, (precondition.says, 0))
+                ungrounded[name] = (says, count + 1)
+                break
+
+    if not ungrounded:
+        return None
+    told = "; ".join(
+        f"{name} on {count} question(s) where {says} does not hold"
+        for name, (says, count) in sorted(ungrounded.items())
+    )
+    return DiagnosticItem(
+        id="metric_without_grounds",
+        severity="error",
+        title="A metric was computed where it has no grounds",
+        detail=(
+            f"{len(ungrounded)} metric(s) of this run were recorded against questions that "
+            f"cannot support them: {told}. Averaged into the run's numbers, these are "
+            "confident values about something nobody measured."
+        ),
+        action="Read each metric's declared preconditions and stop recording it where they "
+               "do not hold, so the average is over the questions the number is about.",
+    )
+
+
 def detect_chunk_id_collision(run: dict[str, Any]) -> DiagnosticItem | None:
     """One identifier standing for two different fragments.
 
@@ -659,6 +708,7 @@ def run_detectors(run: dict[str, Any]) -> list[DiagnosticItem]:
         detect_undeclared_metric(run),
         detect_aggregate_disagrees_with_questions(run),
         detect_chunk_id_collision(run),
+        detect_metric_without_grounds(run),
         detect_unmeasured_stage_cost(run),
     ]
     return [c for c in candidates if c is not None]
