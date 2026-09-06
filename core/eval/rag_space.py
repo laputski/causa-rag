@@ -194,21 +194,35 @@ def satisfies(predicate: Predicate, point: Point) -> bool | None:
 # Values are taken from the published registry's records for the same shapes,
 # so the platform and the registry describe a hybrid the same way, never
 # each in its own words.
+#
+# E3 and E4 are the exception, and they are measured here instead of copied.
+# The registry's records for these shapes leave both at their defaults, no
+# citation and no refusal, because they describe the retrieval architecture and
+# not what a prompt does on top of it. This platform does both: every answer
+# carries per-fragment labels, substituted for the model's positional markers
+# before it is returned (core/citation.py), and the active prompt makes the
+# model say when the corpus does not cover the question, which is what
+# `correct_refusal` measures at 1.0 on a healthy run. The rule of the space is
+# that a coordinate says what is applied and not what was accepted, so
+# leaving these at the defaults would have said the platform never refuses
+# while a proving-ground pair was reproducing a badly calibrated refusal on it
+# on it. That is how the divergence was found: a guard refused evidence for a
+# failure that these coordinates said could not occur.
 POINTS: dict[str, Point] = {
     "dense": {
         "A1": "passage", "A2": "fixed", "A4": "flat", "A5": "dense_single",
         "C1": "ann", "C3": "none", "D1": "none", "D2": "top_k",
-        "E1": "single_pass", "E3": "none", "E4": "no_refusal",
+        "E1": "single_pass", "E3": "fragment_level", "E4": "domain_policy",
     },
     "hybrid": {
         "A1": "passage", "A2": "fixed", "A4": "flat", "A5": "dense_single",
         "C1": "ann", "C3": "rrf", "D1": "cross_encoder", "D2": "top_k",
-        "E1": "single_pass", "E3": "none", "E4": "no_refusal",
+        "E1": "single_pass", "E3": "fragment_level", "E4": "domain_policy",
     },
     "graph": {
         "A1": "passage", "A2": "fixed", "A3": "extracted_triples", "A4": "graph",
         "A5": "dense_single", "A8": "extracted", "C1": "graph_traversal",
         "C3": "score_normalization", "D1": "none", "D2": "top_k",
-        "E1": "single_pass", "E3": "none", "E4": "no_refusal",
+        "E1": "single_pass", "E3": "fragment_level", "E4": "domain_policy",
     },
 }

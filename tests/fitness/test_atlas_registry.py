@@ -676,6 +676,26 @@ def test_every_additional_instrument_is_a_known_one() -> None:
     assert bad == [], f"unknown additional instrument: {bad}"
 
 
+def _every_point_the_proving_ground_reaches() -> list[dict[str, str]]:
+    """The platform's own pipelines, and the systems its instruments make.
+
+    A mode of the faulty RAG server can move a coordinate: a system that
+    never refuses has no refusal policy, and that is a different point, not a
+    worse system of the same kind. Evidence recorded against such a system
+    belongs to the point the mode moved to, so the points it can reach are
+    part of what "a point the platform knows" means.
+    """
+    from services.faulty_rag_server.main import FAULTS
+
+    points = [dict(point) for point in rag_space.POINTS.values()]
+    for fault in FAULTS:
+        if not fault.moves:
+            continue
+        for point in list(points):
+            points.append({**point, **dict(fault.moves)})
+    return points
+
+
 def test_no_entry_is_recorded_as_reproduced_where_it_cannot_occur() -> None:
     """Evidence of a live run has to belong to a point the entry applies to.
 
@@ -697,7 +717,7 @@ def test_no_entry_is_recorded_as_reproduced_where_it_cannot_occur() -> None:
         pytest.skip("NOT RUN: the evidence directory is empty")
 
     anywhere: set[str] = set()
-    for point in rag_space.POINTS.values():
+    for point in _every_point_the_proving_ground_reaches():
         applicable, _ = applicable_to(point)
         anywhere |= {f.id for f in applicable}
 
