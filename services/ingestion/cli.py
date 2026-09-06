@@ -233,6 +233,44 @@ def ingest(
     }
 
 
+def _register_in_the_realm(realm_id: str, corpus_id: str, result: dict[str, Any]) -> str:
+    """Tell the realm about the corpus that was just loaded into it.
+
+    A load names a realm and, until now, the realm learned nothing: the index
+    existed, every metric could be computed against it, and it appeared in no
+    list on any screen. Found while writing a manual check of the proving
+    ground, where a deliberately damaged corpus was loaded and then could not
+    be selected to look at, which is half of what that realm is for.
+
+    The registry record is what the interface lists, and the helper that
+    writes it declares itself idempotent and safe to call on every successful
+    load. It is called here for the same reason the gateway's own ingest route
+    calls it: whoever names a realm means it.
+
+    Failure to register is reported and does not fail the load. The documents
+    are in the index either way, and a load that succeeded is not undone by a
+    database that was unreachable a second later.
+    """
+    import asyncio
+
+    from services.api_gateway.routers import corpus as corpus_router
+
+    backends: dict[str, dict[str, Any]] = {}
+    if result.get("qdrant_collection"):
+        backends["qdrant"] = {"collection": result["qdrant_collection"], "embedder_id": "bge_m3"}
+    if result.get("opensearch_index"):
+        backends["opensearch"] = {"index": result["opensearch_index"]}
+    try:
+        asyncio.run(corpus_router._register_corpus(
+            realm_id=realm_id, corpus_id=corpus_id,
+            storage_type="hybrid" if "opensearch" in backends else "dense_only",
+            backends=backends, owner="platform",
+        ))
+    except Exception as exc:
+        return f"Loaded, and not registered in realm {realm_id!r}: {exc}"
+    return f"Registered as corpus {corpus_id!r} of realm {realm_id!r}"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Ingest documents into RAG platform")
     sub = parser.add_subparsers(dest="command")
@@ -288,6 +326,8 @@ def main() -> None:
             realm_id=args.realm_id,
         )
         print(f"Ingested {result['chunks']} chunks | cache hit ratio: {result['hit_ratio']:.2%}")
+        if args.realm_id:
+            print(_register_in_the_realm(args.realm_id, args.corpus_id, result))
     else:
         parser.print_help()
         sys.exit(1)
