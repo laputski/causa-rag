@@ -321,12 +321,17 @@ FAILURES: tuple[FailureMode, ...] = (
         stage_visible="retrieval",
         severity=Severity(3, 3, 3),
         origin="industry",
-        detection="none",
+        detection="detector",
         instrument="platform",
         applies_when=(),
-        not_detected_reason=(
-            "no fingerprint of the source is recorded at ingest, so a reindexed corpus is indistinguishable from a fresh one"
-        ),
+        # The fingerprint is recorded now. Every document's content hash was
+        # computed at load time and thrown away; a digest over the set is
+        # kept on the corpus record and carried onto every run, so two runs
+        # naming one corpus can be asked whether they queried the same
+        # documents. check_comparability named this gap in its own docstring
+        # for as long as it existed.
+        signals=(Signal("compare", "corpus_changed"),),
+        bait="tests/unit/test_atlas_baits.py::test_bait[F09]",
     ),
     FailureMode(
         id="F10",
@@ -350,12 +355,18 @@ FAILURES: tuple[FailureMode, ...] = (
         stage_visible="retrieval",
         severity=Severity(3, 3, 2),
         origin="mechanism",
-        detection="none",
+        detection="detector",
         instrument="ingest",
         applies_when=(("A5", ("dense_single", "dense_multi_late_interaction")),),
-        not_detected_reason=(
-            "the embedder a corpus was indexed with is not recorded, so it cannot be compared with the one a run queries with"
-        ),
+        # Recorded at load time and read off what actually ran, never off the
+        # configuration: its embedder field is accepted and never applied, so
+        # a check reading it would compare an intention with a record.
+        signals=(Signal("detector", "index_and_query_models_differ"),),
+        # One observation, two entries. The model that queries differing from
+        # the model that indexed is the same sentence whichever of them moved,
+        # and the two are told apart by which one is meant to be right.
+        shares_signals_with=("F12",),
+        bait="tests/unit/test_atlas_baits.py::test_bait[F11]",
     ),
     FailureMode(
         id="F12",
@@ -365,12 +376,15 @@ FAILURES: tuple[FailureMode, ...] = (
         stage_visible="retrieval",
         severity=Severity(3, 3, 2),
         origin="industry",
-        detection="none",
+        detection="detector",
         instrument="ingest",
         applies_when=(("A5", ("dense_single", "dense_multi_late_interaction")),),
-        not_detected_reason=(
-            "same missing record as the entry above"
-        ),
+        # The harder half of the same comparison: the name stays and the
+        # weights change, so nothing about it reaches a collection name. The
+        # manifest records the version for this reason alone.
+        signals=(Signal("detector", "index_and_query_models_differ"),),
+        shares_signals_with=("F11",),
+        bait="tests/unit/test_atlas_baits.py::test_bait[F12]",
     ),
     FailureMode(
         id="F13",

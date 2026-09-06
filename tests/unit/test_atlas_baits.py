@@ -156,6 +156,14 @@ def test_the_clean_corpus_baseline_is_actually_clean() -> None:
     assert fired == [], f"the clean corpus baseline is not clean: {fired}"
 
 
+def test_two_runs_differing_in_nothing_are_called_comparable() -> None:
+    """The third baseline, and it was missing until a comparison signal
+    needed one. A warning fired on two identical runs would have made every
+    bait in this file pass while proving nothing about it."""
+    fired = sorted(_compare_ids())
+    assert fired == [], f"two identical runs are reported as incomparable: {fired}"
+
+
 # ── the baits ─────────────────────────────────────────────────────────────────
 #
 # Each returns the set of signal ids that fired. The harness compares it
@@ -168,6 +176,43 @@ def _detector_ids(run: dict[str, Any]) -> set[str]:
 
 def _health_ids(chunks: list[dict[str, Any]]) -> set[str]:
     return {f"health:{i.id}" for i in analyze(chunks).items if i.id != "ok"}
+
+
+def _compare_ids() -> set[str]:
+    """What comparability says about two runs that differ in nothing.
+
+    The silent half for a signal of this kind, and it was missing: the quiet
+    baseline was built out of detectors and corpus health alone, so a
+    comparison signal firing on two identical runs would have passed every
+    bait in this file.
+    """
+    from core.experiment.compare import check_comparability
+    from core.experiment.config import ComponentRef, ExperimentConfig
+    from core.experiment.runner import ExperimentResult, QuestionResult
+
+    def _result() -> ExperimentResult:
+        result = ExperimentResult(
+            config=ExperimentConfig(
+                name="r", corpus_id="handbook", dataset_name="handbook.v1.jsonl",
+                chunking_strategy=ComponentRef(kind="chunker", component_id="fixed"),
+                embedder=ComponentRef(kind="embedder", component_id="bge_m3"),
+                generator=ComponentRef(kind="generator", component_id="ollama"),
+            ),
+            dataset_name="handbook.v1.jsonl",
+        )
+        result.question_results = [
+            QuestionResult(question_id=f"q{i}", question="?", reference_answer="",
+                           generated_answer="an answer", metrics={"retrieval_recall_at_k": 1.0})
+            for i in range(1, 21)
+        ]
+        result.corpus_manifest = {
+            "embedder_id": "bge_m3", "embedder_version": "1.0.0",
+            "document_count": 20, "documents_digest": "a" * 64,
+            "loaded_at": "2026-09-01T10:00:00Z",
+        }
+        return result
+
+    return {f"compare:{w.id}" for w in check_comparability(_result(), _result())}
 
 
 def bait_F01_reingest_duplicates() -> set[str]:
@@ -399,6 +444,71 @@ def bait_F35_a_metric_computed_where_it_has_no_grounds() -> set[str]:
     return _detector_ids(run)
 
 
+def _run_with(manifest: dict[str, Any], applied: dict[str, Any]) -> dict[str, Any]:
+    run = clean_run()
+    run["corpus_manifest"] = manifest
+    run["applied"] = applied
+    return run
+
+
+_HEALTHY_MANIFEST = {
+    "embedder_id": "bge_m3", "embedder_version": "1.0.0",
+    "embedder_is_real_model": True, "document_count": 20,
+    "documents_digest": "a" * 64, "loaded_at": "2026-09-01T10:00:00Z",
+}
+_HEALTHY_APPLIED = {
+    "query_embedder_id": "bge_m3", "query_embedder_version": "1.0.0",
+    "query_embedder_is_real_model": True, "index_embedder_id": "bge_m3",
+}
+
+
+def bait_F11_indexed_by_one_model_queried_by_another() -> set[str]:
+    """A query vector from one model against vectors from another. Every
+    score still arrives and describes a comparison of two coordinate
+    systems that have nothing to do with each other."""
+    return _detector_ids(_run_with(
+        {**_HEALTHY_MANIFEST, "embedder_id": "e5_large"}, _HEALTHY_APPLIED))
+
+
+def bait_F12_the_model_changed_and_the_corpus_did_not() -> set[str]:
+    """The name is the same and the weights are not, so nothing about the
+    mismatch appears in a collection name or in a setting."""
+    return _detector_ids(_run_with(
+        {**_HEALTHY_MANIFEST, "embedder_version": "0.9.0"}, _HEALTHY_APPLIED))
+
+
+def bait_F09_the_corpus_changed_between_two_runs() -> set[str]:
+    """One corpus name over two different sets of documents. A difference in
+    the numbers is then a difference in the documents, and the platform said
+    for a long time that it could not tell."""
+    from core.experiment.compare import check_comparability
+    from core.experiment.config import ComponentRef, ExperimentConfig
+    from core.experiment.runner import ExperimentResult, QuestionResult
+
+    def _result(digest: str, loaded: str) -> ExperimentResult:
+        result = ExperimentResult(
+            config=ExperimentConfig(
+                name="r", corpus_id="handbook", dataset_name="handbook.v1.jsonl",
+                chunking_strategy=ComponentRef(kind="chunker", component_id="fixed"),
+                embedder=ComponentRef(kind="embedder", component_id="bge_m3"),
+                generator=ComponentRef(kind="generator", component_id="ollama"),
+            ),
+            dataset_name="handbook.v1.jsonl",
+        )
+        result.question_results = [
+            QuestionResult(question_id=f"q{i}", question="?", reference_answer="",
+                           generated_answer="an answer", metrics={"retrieval_recall_at_k": 1.0})
+            for i in range(1, 21)
+        ]
+        result.corpus_manifest = {**_HEALTHY_MANIFEST, "documents_digest": digest,
+                                  "loaded_at": loaded}
+        return result
+
+    warnings = check_comparability(
+        _result("a" * 64, "2026-09-01T10:00:00Z"), _result("b" * 64, "2026-09-04T10:00:00Z"))
+    return {f"compare:{w.id}" for w in warnings}
+
+
 BAITS = {
     "F01": bait_F01_reingest_duplicates,
     "F02": bait_F02_one_identifier_two_fragments,
@@ -406,7 +516,10 @@ BAITS = {
     "F04": bait_F04_export_lost_documents,
     "F06": bait_F06_chunks_too_small,
     "F07": bait_F07_grounds_spread_across_chunks,
+    "F09": bait_F09_the_corpus_changed_between_two_runs,
     "F10": bait_F10_stub_embedder,
+    "F11": bait_F11_indexed_by_one_model_queried_by_another,
+    "F12": bait_F12_the_model_changed_and_the_corpus_did_not,
     "F14": bait_F14_model_does_not_cover_the_language,
     "F15": bait_F15_semantic_search_misses_an_identifier,
     "F16": bait_F16_keyword_search_misses_a_paraphrase,
@@ -457,7 +570,7 @@ def test_bait_stays_silent_on_the_clean_baseline(failure: Any) -> None:
     reachable = [s for s in failure.signals if s.id not in STAND_ONLY]
     if not reachable:
         pytest.skip(f"{failure.id}: baited on the proving ground")
-    quiet = _detector_ids(clean_run()) | _health_ids(clean_chunks())
+    quiet = _detector_ids(clean_run()) | _health_ids(clean_chunks()) | _compare_ids()
     still_firing = {s.id for s in reachable} & quiet
     assert not still_firing, (
         f"{failure.id}: {sorted(still_firing)} fires on a healthy payload, so it "

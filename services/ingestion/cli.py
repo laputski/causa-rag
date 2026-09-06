@@ -14,6 +14,7 @@ import hashlib
 import os
 import re
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -173,11 +174,19 @@ def ingest(
             log.warning("ingest.graph_unavailable", error=str(exc))
 
     total_chunks = 0
+    # The fingerprint of what was loaded, kept this time. Every
+    # document's content hash was computed at read time and dropped on the
+    # floor: the field existed, one line assigned it, and nothing stored it.
+    # Three catalogue entries were uncatchable for exactly that, because
+    # "this corpus was reindexed" and "this is a different corpus" are the
+    # same absence of a record.
+    document_hashes: list[str] = []
     for path in files:
         doc = _read_file(path, structure_parser_fn=structure_parser_fn)
         chunks = chunker.chunk(doc)
         if not chunks:
             continue
+        document_hashes.append(doc.content_hash)
 
         # Dense
         texts = [c.text for c in chunks]
@@ -230,6 +239,45 @@ def ingest(
         "files": len(files), "chunks": total_chunks, **stats,
         "qdrant_collection": qdrant._collection,
         "opensearch_index": opensearch._index if opensearch else None,
+        "manifest": _manifest(embedder, strategy_id, chunk_size, overlap,
+                              document_hashes, total_chunks),
+    }
+
+
+def _manifest(
+    embedder: Any, strategy_id: str, chunk_size: int, overlap: int,
+    document_hashes: list[str], chunk_count: int,
+) -> dict[str, Any]:
+    """What this index was built from and built by.
+
+    Recorded because three questions have no answer without it, and each of
+    them looks from the outside like a silence and not like a gap: whether the
+    documents changed since the index was built, whether the model that
+    indexed them is the model that queries them, and whether the vectors came
+    from a model at all.
+
+    That last one is the sharpest. The embedder's id and version are class
+    constants, identical for the working model and for the stub that hashes
+    text into a vector, so a corpus indexed by either is described the same
+    way afterwards. Asking the embedder here, where the indexing happens, is
+    the only place the answer exists.
+
+    The digest is over the documents' own hashes, sorted, so it is a property
+    of the set and not of the order the files were walked in.
+    """
+    return {
+        "embedder_id": getattr(embedder, "embedder_id", ""),
+        "embedder_version": getattr(embedder, "version", ""),
+        "embedder_is_real_model": bool(getattr(embedder, "is_real_model", False)),
+        "chunking_strategy": strategy_id,
+        "chunk_size": chunk_size,
+        "overlap": overlap,
+        "document_count": len(document_hashes),
+        "chunk_count": chunk_count,
+        "documents_digest": hashlib.sha256(
+            "".join(sorted(document_hashes)).encode()
+        ).hexdigest(),
+        "loaded_at": datetime.now(UTC).isoformat(),
     }
 
 
@@ -255,16 +303,24 @@ def _register_in_the_realm(realm_id: str, corpus_id: str, result: dict[str, Any]
 
     from services.api_gateway.routers import corpus as corpus_router
 
+    manifest = result.get("manifest") or {}
     backends: dict[str, dict[str, Any]] = {}
     if result.get("qdrant_collection"):
-        backends["qdrant"] = {"collection": result["qdrant_collection"], "embedder_id": "bge_m3"}
+        # The embedder is read from what indexed, never written down here.
+        # It used to be the literal "bge_m3", which was true of every load
+        # anybody had run and would have gone on being recorded whatever
+        # indexed the next one.
+        backends["qdrant"] = {
+            "collection": result["qdrant_collection"],
+            "embedder_id": manifest.get("embedder_id", ""),
+        }
     if result.get("opensearch_index"):
         backends["opensearch"] = {"index": result["opensearch_index"]}
     try:
         asyncio.run(corpus_router._register_corpus(
             realm_id=realm_id, corpus_id=corpus_id,
             storage_type="hybrid" if "opensearch" in backends else "dense_only",
-            backends=backends, owner="platform",
+            backends=backends, owner="platform", manifest=manifest,
         ))
     except Exception as exc:
         return f"Loaded, and not registered in realm {realm_id!r}: {exc}"

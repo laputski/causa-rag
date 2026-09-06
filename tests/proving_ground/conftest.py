@@ -176,7 +176,47 @@ def run_on(embedder: Any, config: Any, base_corpus: str, language: str,
         config, dataset, realm_id=REALM,
         evaluator=_CompositeEvaluator(querying, top_k=config.top_k),
     )
+    # The gateway attaches this on the runs it starts, and these do not go
+    # through the gateway. Attaching it here is what makes a bait read the
+    # same payload a person on the screen would: without it every check that
+    # consults the load record would stay silent for a reason having nothing
+    # to do with the failure under test.
+    result.corpus_manifest = corpus_manifest(config.corpus_id)
     return result.to_dict()
+
+
+def corpus_manifest(corpus_id: str) -> dict[str, Any]:
+    """The load record for one corpus of the proving ground, or nothing.
+
+    Nothing is a real answer, and the callers treat it as one: a corpus
+    loaded before manifests existed has no record, and a check comparing a
+    run against a record that was never written would compare it with a
+    guess.
+
+    A client of its own, and not the module's cached one. The cached client
+    binds to the first event loop it sees, and every call here opens a new
+    one, so the second read of a session raises "Event loop is closed". The
+    first version of this caught that and returned nothing, which is how a
+    bait reading the load record passed while reading no record at all: the
+    silent fallback is exactly the failure this whole apparatus exists to
+    stop, written into the helper whose job was to make a bait honest.
+    """
+    import asyncio
+    import os
+
+    async def _read() -> dict[str, Any]:
+        from motor.motor_asyncio import AsyncIOMotorClient
+
+        client = AsyncIOMotorClient(os.getenv("MONGODB_URL", "mongodb://localhost:27017"))
+        try:
+            database = client[os.getenv("MONGODB_DB", "ragplatform")]
+            doc = await database["corpora"].find_one(
+                {"realm_id": REALM, "corpus_id": corpus_id})
+            return dict((doc or {}).get("manifest") or {})
+        finally:
+            client.close()
+
+    return asyncio.run(_read())
 
 
 def retrieval_only(config: Any) -> Any:

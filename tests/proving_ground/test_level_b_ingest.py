@@ -129,19 +129,24 @@ def test_F10_a_stub_embedder_indexes_vectors_that_mean_nothing(embedder: Any) ->
            reranker_hid_it_completely=masked)
 
 
-def test_F11_and_F12_a_model_mismatch_ruins_retrieval_and_nothing_speaks(
+def test_F11_and_F12_a_model_mismatch_ruins_retrieval_and_the_load_record_names_it(
     embedder: Any,
 ) -> None:
     """Loaded by one model, questioned by another.
 
-    The reverse bait. Both models write vectors of the same width into a
-    collection whose name carries the model's identifier and not the model, so
-    nothing refuses the mixture. Two catalogue entries share this arrangement
-    and are told apart only by their history: one is two models used at once,
-    the other is one model replaced after the corpus was loaded. The index is
-    identical in both cases, and the platform records neither the model a
-    corpus was loaded with nor when it changed. That absence is why both are
-    undetectable, and this is that absence made observable.
+    This was a reverse bait, on the reading that the platform recorded
+    neither the model a corpus was loaded with nor when it changed. It
+    records both now, on the corpus and on every run that queries it, so the
+    pair shows a cause being named where it used to show a silence.
+
+    What names it here is the load record, and not the comparison of two
+    identifiers. That is worth stating plainly: the stub and
+    the working model share an identifier and a version, both being class
+    constants, so this staging cannot move the identifier comparison at all.
+    Staging that would need two genuinely different embedders, and this
+    platform has one. The comparison is proven at the unit level, on a
+    payload where the identifiers differ, and this pair proves the other
+    half: that a corpus whose vectors came from no model is said to be one.
     """
     healthy = _against(embedder, CORPUS)
     mismatched = _against(embedder, f"{CORPUS}-mismatched", real_model=True)
@@ -149,26 +154,26 @@ def test_F11_and_F12_a_model_mismatch_ruins_retrieval_and_nothing_speaks(
         f"the mismatch cost nothing: {recall_before_rerank(mismatched)} "
         f"against {recall_before_rerank(healthy)}"
     )
-    # What speaks, and what it says. On a corpus of forty-nine chunks nothing
-    # spoke at all. At two hundred and twenty the generic layer signal fires:
-    # it says the run fails at retrieval, which is true and is as far as it
-    # goes. Nothing names a model, compares two of them, or reads back what the
-    # corpus was embedded with, because none of that is recorded. The entries
-    # stay undetectable in the sense that matters, and this pair now shows the
-    # exact shape of that: the platform can say where and cannot say why.
-    spoke = detector_signals(mismatched) - {"detector:embedder_unverified"}
-    names_the_cause = spoke - {"detector:layer_bottleneck"}
-    assert names_the_cause == set(), (
-        f"a signal now names the cause of a model mismatch, and the catalogue says none does: "
-        f"{sorted(names_the_cause)}"
+    spoke = detector_signals(mismatched)
+    assert "detector:stub_embedder" in spoke, (
+        "the corpus was loaded by the stub and its own load record did not say so: "
+        f"{sorted(spoke)}. A run carrying no manifest cannot know, so check that the "
+        "distorted corpus was loaded after manifests existed."
+    )
+    assert "detector:embedder_unverified" not in spoke, (
+        "the check was made and the run still reports that it could not be made"
     )
     for failure_id in ("F11", "F12"):
         record(failure_id,
-               "loaded by one model and questioned by another: the layer is named, the cause is not",
+               "loaded by one model and questioned by another: the load record names the cause",
                pre_rerank_healthy=recall_before_rerank(healthy),
                pre_rerank_mismatched=recall_before_rerank(mismatched),
                final_healthy=recall(healthy), final_mismatched=recall(mismatched),
-               signals=sorted(spoke), signals_naming_the_cause=sorted(names_the_cause))
+               signals=sorted(spoke),
+               identifier_comparison_not_exercised=(
+                   "the stub and the model share an identifier and a version, so this "
+                   "staging cannot move that comparison; it is baited at the unit level"
+               ))
 
 
 def test_F16_the_wrong_analyser_costs_the_lexical_half_its_word_forms(

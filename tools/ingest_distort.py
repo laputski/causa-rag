@@ -267,12 +267,6 @@ DISTORTIONS: tuple[IngestDistortion, ...] = (
         "index_and_query_with_different_models",
         "the corpus is embedded by one model and questioned by another",
         ("F11", "F12"), _index_and_query_with_different_models,
-        proves="silence",
-        proves_note=(
-            "nothing records the model a corpus was loaded with, so the two models cannot be "
-            "compared and no signal can speak; the evidence sought is that every signal stays "
-            "quiet while retrieval is demonstrably ruined"
-        ),
     ),
     IngestDistortion(
         "index_under_the_other_analyser",

@@ -79,7 +79,9 @@ def _generated_answers(run: dict[str, Any]) -> list[str]:
 
 # ── individual detectors ───────────────────────────────────────────────────────
 
-def detect_stub_embedder(refs: list[dict[str, Any]]) -> DiagnosticItem | None:
+def detect_stub_embedder(
+    refs: list[dict[str, Any]], manifest: dict[str, Any] | None = None,
+) -> DiagnosticItem | None:
     """Dense scores at the floor ⇒ the corpus was indexed with random vectors.
 
     The check is only possible when the run recorded a per-signal score split
@@ -104,17 +106,46 @@ def detect_stub_embedder(refs: list[dict[str, Any]]) -> DiagnosticItem | None:
     So the check says which of the three it is. Split recorded and dense side
     collapsed: a fault. Split recorded and dense side alive: silence. No split
     recorded: an explicit `embedder_unverified`, because a reader must be able
-    to tell "not checked" from "checked and fine". The reliable evidence is a
-    record of which model the corpus was actually indexed with, which nothing
-    keeps yet.
+    to tell "not checked" from "checked and fine".
+
+    The reliable evidence is a record of which model the corpus was actually
+    indexed with, and there is one now. A corpus manifest is written at load
+    time and carried onto the run, and it answers the question outright
+    without inferring it from scores: the embedder's identifier and
+    version are class constants shared by the working model and the stub, so
+    the manifest asks the embedder itself, at the only moment anybody can
+    tell. A run carrying one is decided by it and the heuristic below is not
+    consulted; a run without one is a run loaded before manifests existed,
+    and it gets the same honest answer it got before.
 
     The rule reads the data instead of the configuration, so it needs no
     special case for an external system: a run that reports no split gets the
     same honest "could not check" whoever produced it.
     """
+    indexed_by_a_model = (manifest or {}).get("embedder_is_real_model")
+    if indexed_by_a_model is False:
+        return DiagnosticItem(
+            id="stub_embedder",
+            severity="error",
+            title="The corpus was indexed without a model",
+            detail=(
+                "The load record for this corpus says its vectors were produced by the stub, "
+                f"which hashes text into a vector of the right width and no meaning "
+                f"(loaded {(manifest or {}).get('loaded_at', 'at an unrecorded time')}). Every "
+                "similarity in this run is between a real query vector and a hash."
+            ),
+            action="Load the corpus again with the embedding model switched on.",
+        )
+
     dense = [r.get("dense_score") or 0.0 for r in refs]
     sparse = [r.get("sparse_score") or 0.0 for r in refs]
     if not dense:
+        return None
+
+    if indexed_by_a_model is True:
+        # The question was answered at load time, so no verdict is owed and
+        # no "could not check" either: this is the checked-and-fine case the
+        # third branch below exists to be distinguishable from.
         return None
 
     split_recorded = any(d > 0 for d in dense) or any(s > 0 for s in sparse)
@@ -516,6 +547,64 @@ def detect_aggregate_disagrees_with_questions(run: dict[str, Any]) -> Diagnostic
     )
 
 
+def detect_index_and_query_models_differ(run: dict[str, Any]) -> DiagnosticItem | None:
+    """The vectors were built by one model and searched by another.
+
+    Every score still arrives, every metric is still computable, and the
+    numbers describe a comparison between two coordinate systems that have
+    nothing to do with each other. It happens two ways and neither leaves a
+    mark: a run configured against the wrong index, and a model upgraded
+    while the corpus stayed as it was.
+
+    Read from what ran and from what loaded, never from the configuration:
+    `config.embedder` is accepted and never applied, so it states an
+    intention. Silent when either record is missing, which is a different
+    finding about a corpus loaded before manifests existed.
+    """
+    applied = run.get("applied") or {}
+    manifest = run.get("corpus_manifest") or {}
+    querying = applied.get("query_embedder_id")
+    indexing = manifest.get("embedder_id") or applied.get("index_embedder_id")
+    if not querying or not indexing:
+        return None
+
+    if querying != indexing:
+        return DiagnosticItem(
+            id="index_and_query_models_differ",
+            severity="error",
+            title="The index and the query do not use the same model",
+            detail=(
+                f"The corpus was indexed by {indexing!r} and this run embedded its queries with "
+                f"{querying!r}. A query vector from one model compared against vectors from "
+                "another describes nothing, and every score in this run is such a comparison."
+            ),
+            action="Query with the model the corpus was indexed by, or load the corpus again "
+                   "with the model the run uses.",
+        )
+
+    indexed_version = manifest.get("embedder_version")
+    querying_version = applied.get("query_embedder_version")
+    if indexed_version and querying_version and indexed_version != querying_version:
+        return DiagnosticItem(
+            id="index_and_query_models_differ",
+            severity="error",
+            # The same title as the case above, deliberately. The interface
+            # translates a finding by its identifier, so two titles under one
+            # identifier would render as whichever was translated, and this
+            # one is true of both: a different version is not the same model.
+            # What separates them is the detail, which carries the values.
+            title="The index and the query do not use the same model",
+            detail=(
+                f"The corpus was indexed by {indexing} {indexed_version} and this run queried "
+                f"with {querying} {querying_version}. The name is the same and the vectors are "
+                "not, so nothing about the mismatch appears in a collection name or a setting."
+            ),
+            action="Load the corpus again with the model in use now, so its vectors and the "
+                   "query's come from the same weights.",
+        )
+    return None
+
+
 def detect_metric_without_grounds(run: dict[str, Any]) -> DiagnosticItem | None:
     """A number computed where it has nothing to be about.
 
@@ -697,7 +786,7 @@ def run_detectors(run: dict[str, Any]) -> list[DiagnosticItem]:
         # from whether the run recorded a per-signal split at all, which is the
         # same question the special case was standing in for, asked of the data
         # instead of the configuration.
-        detect_stub_embedder(refs),
+        detect_stub_embedder(refs, run.get("corpus_manifest")),
         detect_duplicates(run),
         detect_header_only(refs),
         None if is_external else detect_bm25_dominance(refs),
@@ -709,6 +798,7 @@ def run_detectors(run: dict[str, Any]) -> list[DiagnosticItem]:
         detect_aggregate_disagrees_with_questions(run),
         detect_chunk_id_collision(run),
         detect_metric_without_grounds(run),
+        detect_index_and_query_models_differ(run),
         detect_unmeasured_stage_cost(run),
     ]
     return [c for c in candidates if c is not None]

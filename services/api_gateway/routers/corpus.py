@@ -60,6 +60,7 @@ async def _register_corpus(
     backends: dict[str, dict[str, Any]],
     owner: str = "platform",
     description: str = "",
+    manifest: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Upsert one (realm_id, corpus_id) registry record — idempotent, safe to
     call on every successful ingest (re-ingesting the same corpus just
@@ -80,6 +81,12 @@ async def _register_corpus(
         "updated_at": datetime.now(UTC).isoformat(),
         "deleted_at": None,
     }
+    # What the index was built from and built by. Omitted, never written
+    # empty, when a caller has none: an empty manifest on a record
+    # that had a real one would replace knowledge with a claim of ignorance,
+    # and re-registering a corpus is the commonest thing that happens to one.
+    if manifest:
+        doc["manifest"] = manifest
     existing = await mdb.find_one(_CORPORA_COLLECTION, {"realm_id": realm_id, "corpus_id": corpus_id})
     if existing:
         await mdb.update_one(_CORPORA_COLLECTION, {"realm_id": realm_id, "corpus_id": corpus_id}, {"$set": doc})

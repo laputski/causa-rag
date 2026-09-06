@@ -34,6 +34,19 @@ class BgeM3Embedder:
     embedder_id = "bge_m3"
     version = "1.0.0"
 
+    @property
+    def is_real_model(self) -> bool:
+        """Whether the vectors come from the model or from a hash.
+
+        The id and the version above are class constants, so a corpus indexed
+        by the stub and one indexed by the model are indistinguishable by
+        either: the record says bge_m3 1.0.0 in both cases. That is why the
+        catalogue's entry about a stub embedder had no reliable evidence, and
+        this is the evidence, recorded where the indexing happened and never
+        inferred from scores afterwards.
+        """
+        return self._use_real_model
+
     def __init__(self, use_real_model: bool | None = None) -> None:
         """`use_real_model` unset reads the environment; passed, it decides.
 

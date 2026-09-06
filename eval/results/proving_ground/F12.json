@@ -1,15 +1,16 @@
 {
   "failure_id": "F12",
-  "recorded_at": "2026-09-05T16:47:06.491787+00:00",
-  "claim": "loaded by one model and questioned by another: the layer is named, the cause is not",
+  "recorded_at": "2026-09-06T10:59:41.295898+00:00",
+  "claim": "loaded by one model and questioned by another: the load record names the cause",
   "measured": {
     "pre_rerank_healthy": 1.0,
     "pre_rerank_mismatched": 0.0,
     "final_healthy": 0.9411764705882353,
     "final_mismatched": 0.6470588235294118,
     "signals": [
-      "detector:layer_bottleneck"
+      "detector:layer_bottleneck",
+      "detector:stub_embedder"
     ],
-    "signals_naming_the_cause": []
+    "identifier_comparison_not_exercised": "the stub and the model share an identifier and a version, so this staging cannot move that comparison; it is baited at the unit level"
   }
 }

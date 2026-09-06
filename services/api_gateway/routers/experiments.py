@@ -1523,6 +1523,24 @@ def _diagnose_root_causes(
             continue  # one undiagnosable question must not cost the others
 
 
+async def _corpus_manifest(realm_id: str, corpus_id: str) -> dict[str, Any]:
+    """The registry's record of how this corpus was loaded.
+
+    Empty when there is none, and empty is the honest answer: a corpus
+    loaded before manifests existed, or by something that does not write
+    one, has no record, and inventing one would let a check compare a run
+    against a guess.
+    """
+    try:
+        import adapters.mongodb as mdb
+        doc = await mdb.find_one("corpora", {"realm_id": realm_id, "corpus_id": corpus_id})
+    except Exception as exc:
+        log = __import__("structlog").get_logger()
+        log.warning("experiment.manifest.unreachable", corpus_id=corpus_id, error=str(exc))
+        return {}
+    return dict((doc or {}).get("manifest") or {})
+
+
 async def _run_experiment_background(
     run_id: str, cfg: ExperimentConfig, dataset: Any, evaluator: Any, runner: ExperimentRunner,
     realm_id: str = "",
@@ -1564,6 +1582,12 @@ async def _run_experiment_background(
         _running.discard(run_id)
         result.run_id = run_id
         result.realm_id = realm_id
+        # What the corpus this run queried was built from and built by. Read
+        # here because core/ may not reach the registry, and recorded on the
+        # run because a detector reads a run and nothing else: a check that
+        # went to the database at read time would answer differently every
+        # time the corpus was reloaded, about a run that had already happened.
+        result.corpus_manifest = await _corpus_manifest(realm_id, cfg.corpus_id)
         # Record whether answerability was verified against the
         # index or merely trusted from the dataset's refs, so
         # core/eval/detectors.py#detect_unverified_coverage can say so

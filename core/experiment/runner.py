@@ -25,6 +25,39 @@ if TYPE_CHECKING:
 log = structlog.get_logger()
 
 
+def _what_actually_ran(pipeline: Any) -> dict[str, Any]:
+    """The embedder that queries, and the one whose vectors are searched.
+
+    Two different things, and the whole point of recording them. The index a
+    retriever reads is namespaced by the embedder that built it, so the
+    retriever knows which model's vectors it is searching; the pipeline holds
+    the model the query is embedded with. When those disagree, a query vector
+    is being compared with vectors from another model, and every score is
+    meaningless while every number still arrives.
+
+    Read off the objects that will do the work, never off the configuration:
+    four of its fields are accepted and never applied, so a record taken from
+    it would state an intention. Empty for what cannot be known, an external
+    system in particular, which embeds nothing here.
+    """
+    embedder = getattr(pipeline, "_embedder", None)
+    retriever = getattr(pipeline, "_retriever", None)
+    # A hybrid wraps two retrievers; the dense half is the one namespaced by
+    # an embedder, and the sparse half never is.
+    dense = getattr(retriever, "_dense", retriever)
+    applied: dict[str, Any] = {}
+    if embedder is not None:
+        applied["query_embedder_id"] = getattr(embedder, "embedder_id", "")
+        applied["query_embedder_version"] = getattr(embedder, "version", "")
+        real = getattr(embedder, "is_real_model", None)
+        if real is not None:
+            applied["query_embedder_is_real_model"] = bool(real)
+    if dense is not None:
+        applied["index_embedder_id"] = getattr(dense, "_embedder_id", "")
+        applied["index_chunking_strategy"] = getattr(dense, "_strategy_id", "")
+    return {k: v for k, v in applied.items() if v != ""}
+
+
 def _rebind_corpus_id(
     retriever: Any, corpus_id: str,
     realm_id: str | None = None, qdrant_cfg: dict[str, Any] | None = None,
@@ -393,6 +426,15 @@ class ExperimentResult:
     # empty dict means a run stored before this field existed, which the
     # detector treats as "nothing to say" rather than as a problem.
     coverage_check: dict[str, Any] = field(default_factory=dict)
+    # What actually ran, as opposed to what the configuration asked for. The
+    # two differ today: `config.embedder` is accepted and never applied, both
+    # branches of the build take the registry's own embedder, so a check
+    # reading the configuration would compare an intention with a record and
+    # neither would be what happened.
+    applied: dict[str, Any] = field(default_factory=dict)
+    # What the corpus this run queried was built from and built by. Filled by
+    # the services layer, which can reach the registry; core may not.
+    corpus_manifest: dict[str, Any] = field(default_factory=dict)
     # Components this run's configuration named and the registry could not
     # produce. The pipeline builder degrades to running without them, on
     # purpose: an uninstalled reranker extra should not fail a whole run. What
@@ -422,6 +464,8 @@ class ExperimentResult:
             "stopped": self.stopped,
             "generator_model": self.generator_model,
             "coverage_check": self.coverage_check,
+            "applied": self.applied,
+            "corpus_manifest": self.corpus_manifest,
             "unavailable_components": self.unavailable_components,
             "aggregate_metrics": self.aggregate_metrics,
             "question_results": [
@@ -684,6 +728,7 @@ class ExperimentRunner:
             n_questions=len(dataset.questions),
             dataset_name=dataset.name,
             unavailable_components=unavailable,
+            applied=_what_actually_ran(pipeline),
         )
 
         # retrieval_only calls the cheaper retrieve() path

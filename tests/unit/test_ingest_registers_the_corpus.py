@@ -91,3 +91,57 @@ def test_the_command_line_calls_it_only_when_a_realm_was_named() -> None:
         encoding="utf-8")
     assert "if args.realm_id:" in source
     assert "_register_in_the_realm(args.realm_id" in source
+
+
+# ── the manifest ──────────────────────────────────────────────────────────────
+
+def test_the_manifest_records_whether_a_model_or_a_hash_made_the_vectors() -> None:
+    """The sharpest thing in it, and the only place the answer exists.
+
+    The embedder's id and version are class constants, identical for the
+    working model and for the stub that hashes text into a vector, so a
+    corpus indexed by either is described the same way everywhere
+    afterwards. Asking at load time is not a convenience; it is the only
+    moment anybody can tell.
+    """
+    from adapters.bge_m3 import BgeM3Embedder
+    from services.ingestion.cli import _manifest
+
+    stub = _manifest(BgeM3Embedder(use_real_model=False), "fixed", 800, 100, ["a", "b"], 12)
+    assert stub["embedder_is_real_model"] is False
+    assert stub["embedder_id"] == "bge_m3"
+    assert stub["embedder_version"] == "1.0.0"
+
+
+def test_the_digest_is_a_property_of_the_set_and_not_of_the_walk() -> None:
+    """Two loads of the same documents in a different file order describe
+    one corpus, and a digest that said otherwise would report a corpus
+    changed every time the directory was read in another order."""
+    from adapters.bge_m3 import BgeM3Embedder
+    from services.ingestion.cli import _manifest
+
+    embedder = BgeM3Embedder(use_real_model=False)
+    one = _manifest(embedder, "fixed", 800, 100, ["h1", "h2", "h3"], 9)
+    other = _manifest(embedder, "fixed", 800, 100, ["h3", "h1", "h2"], 9)
+    assert one["documents_digest"] == other["documents_digest"]
+
+
+def test_a_changed_document_changes_the_digest() -> None:
+    from adapters.bge_m3 import BgeM3Embedder
+    from services.ingestion.cli import _manifest
+
+    embedder = BgeM3Embedder(use_real_model=False)
+    before = _manifest(embedder, "fixed", 800, 100, ["h1", "h2"], 6)
+    after = _manifest(embedder, "fixed", 800, 100, ["h1", "h2-edited"], 6)
+    assert before["documents_digest"] != after["documents_digest"]
+
+
+def test_the_registry_record_reads_the_embedder_off_what_indexed() -> None:
+    """It used to be the literal "bge_m3", true of every load anybody had
+    run and recorded regardless of what indexed the next one."""
+    from pathlib import Path as _Path
+
+    source = _Path(__file__).resolve().parents[2] / "services" / "ingestion" / "cli.py"
+    text = source.read_text(encoding="utf-8")
+    assert '"embedder_id": "bge_m3"' not in text
+    assert 'manifest.get("embedder_id"' in text

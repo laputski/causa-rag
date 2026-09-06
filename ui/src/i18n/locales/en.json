@@ -245,6 +245,11 @@
         "title": "The runs were made on different datasets",
         "detail": "A: {{dataset_before}}, {{count_before}} questions. B: {{dataset_after}}, {{count_after}} questions. The averages below are taken over different question sets."
       },
+      "corpus_changed": {
+              "title": "The corpus changed between the two runs",
+              "detail": "Both runs name corpus {{corpus_id}} and the documents behind that name are not the same set: loaded {{loaded_before}} against {{loaded_after}}. A difference in the numbers below may be a difference in the documents.",
+              "action": "Compare runs made against one loading of the corpus, or load it once and run both configurations again."
+      },
       "different_corpus": {
         "title": "The runs were made against different corpora",
         "detail": "A: {{corpus_before}}. B: {{corpus_after}}. Retrieval metrics here measure two different indexes."
@@ -2066,7 +2071,8 @@
       "aggregate_disagrees": "The run's numbers are not its questions' numbers",
       "chunk_id_collision": "One fragment identifier, two fragments",
       "unmeasured_stage_cost": "A stage ran and reported no time",
-      "metric_without_grounds": "A metric was computed where it has no grounds"
+      "metric_without_grounds": "A metric was computed where it has no grounds",
+      "index_and_query_models_differ": "The index and the query do not use the same model"
     },
     "findingAction": {
       "embedder_unverified": "Read the run's recall against its reference sources: a corpus indexed by a stub model retrieves at chance.",
@@ -2082,7 +2088,8 @@
       "aggregate_disagrees": "Compare what the run wrote with what a read of it returns; a question lost on the way out moves the aggregate and leaves everything else looking correct.",
       "chunk_id_collision": "Check how the identifier is derived at load time: a source path missing from the derivation collapses fragments of different documents onto one value.",
       "unmeasured_stage_cost": "Record a duration for every stage the pipeline runs, so its price can be compared with the gain it is kept for.",
-      "metric_without_grounds": "Read each metric's declared preconditions and stop recording it where they do not hold, so the average is over the questions the number is about."
+      "metric_without_grounds": "Read each metric's declared preconditions and stop recording it where they do not hold, so the average is over the questions the number is about.",
+      "index_and_query_models_differ": "Query with the model the corpus was indexed by, or load the corpus again with the model the run uses."
     },
     "traceGap": {
       "sources": {

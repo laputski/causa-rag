@@ -126,11 +126,17 @@ def check_comparability(
 
     Ordered by severity, because the caller renders the list as it arrives.
 
-    Two kinds of incompatibility are undetectable from run data alone, and
-    this function stays silent about both, so it never implies it checked them:
-    a corpus re-indexed between the two runs under the same `corpus_id`, and
+    One kind of incompatibility is still undetectable from run data alone,
+    and this function stays silent about it, so it never implies it checked:
     a question whose text was edited while keeping its id (question ids are
     the only key the pairing has, see core/eval/regression.py:paired_diff).
+
+    A corpus reloaded between the two runs under the same `corpus_id` used to
+    be the second of those, and is not any more: a run records the manifest of
+    the corpus it queried, so two runs naming one corpus can be asked whether
+    they queried the same documents. When either run carries no manifest the
+    silence returns, and it is the same silence as before, never a verdict
+    of "unchanged".
     """
     errors: list[CompatWarning] = []
     warns: list[CompatWarning] = []
@@ -150,6 +156,31 @@ def check_comparability(
             ),
             params={"side": empty_label},
             action="Check why that run produced no results, then run it again.",
+        ))
+
+    before_corpus = (before.corpus_manifest or {}).get("documents_digest")
+    after_corpus = (after.corpus_manifest or {}).get("documents_digest")
+    if (before_corpus and after_corpus and before_corpus != after_corpus
+            and before.config.corpus_id == after.config.corpus_id):
+        errors.append(CompatWarning(
+            id="corpus_changed", severity="error",
+            title="The corpus changed between the two runs",
+            detail=(
+                f"Both runs name corpus {before.config.corpus_id!r} and the documents behind "
+                f"that name are not the same set: "
+                f"{(before.corpus_manifest or {}).get('document_count', '?')} documents loaded at "
+                f"{(before.corpus_manifest or {}).get('loaded_at', 'an unrecorded time')} against "
+                f"{(after.corpus_manifest or {}).get('document_count', '?')} loaded at "
+                f"{(after.corpus_manifest or {}).get('loaded_at', 'an unrecorded time')}. "
+                "A difference in the numbers below may be a difference in the documents."
+            ),
+            params={
+                "corpus_id": before.config.corpus_id,
+                "loaded_before": (before.corpus_manifest or {}).get("loaded_at", ""),
+                "loaded_after": (after.corpus_manifest or {}).get("loaded_at", ""),
+            },
+            action="Compare runs made against one loading of the corpus, or load it once and "
+                   "run both configurations again.",
         ))
 
     if before.config.dataset_name != after.config.dataset_name:
