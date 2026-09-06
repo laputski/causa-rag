@@ -14,12 +14,16 @@ import { useTranslation } from 'react-i18next'
  */
 export const PROVING_GROUND = 'proving_ground'
 
-export function RealmPurposeBadge({ purpose }: { purpose?: string }) {
+export function RealmPurposeBadge({ purpose, compact }: { purpose?: string; compact?: boolean }) {
   const { t } = useTranslation()
   if (purpose !== PROVING_GROUND) return null
+  // `compact` is for the realm switcher, where the row is a name wide and the
+  // full wording wrapped onto a second line. The explanation stays on the
+  // title either way, so the short form loses nothing a reader can only get
+  // from the label.
   return (
     <span className="badge badge-warn realm-purpose" title={t('realm.provingGround.hint')}>
-      {t('realm.provingGround.label')}
+      {t(compact ? 'realm.provingGround.short' : 'realm.provingGround.label')}
     </span>
   )
 }

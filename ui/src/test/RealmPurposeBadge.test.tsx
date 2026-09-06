@@ -81,3 +81,36 @@ describe('the wording exists in both languages', () => {
     expect(en.realm.provingGround.label).not.toEqual(ru.realm.provingGround.label)
   })
 })
+
+describe('the compact form for the realm switcher', () => {
+  it('shows a shorter label, because the row is one name wide', () => {
+    // Reported from the running interface: the full wording wrapped onto a
+    // second line in the switcher's menu.
+    render(<RealmPurposeBadge purpose={PROVING_GROUND} compact />)
+    expect(screen.getByText(en.realm.provingGround.short)).toBeTruthy()
+    expect(en.realm.provingGround.short.length).toBeLessThan(en.realm.provingGround.label.length)
+  })
+
+  it('keeps the explanation, which is what the label would otherwise carry', () => {
+    render(<RealmPurposeBadge purpose={PROVING_GROUND} compact />)
+    expect(screen.getByTitle(en.realm.provingGround.hint)).toBeTruthy()
+  })
+
+  it('is short in both languages, since the row is the same width in each', () => {
+    for (const [name, bundle] of [['en', en], ['ru', ru]] as const) {
+      expect(bundle.realm.provingGround.short.length, `${name} is not short`).toBeLessThan(12)
+    }
+  })
+
+  it('the switcher asks for the compact form in both of its places', () => {
+    const source = readFileSync(join(__dirname, '..', 'App.tsx'), 'utf8')
+    expect(source.split('<RealmPurposeBadge').length - 1).toBe(2)
+    expect(source.split('compact').length - 1).toBeGreaterThanOrEqual(2)
+  })
+
+  it('the overview does not, because its title has room', () => {
+    const source = readFileSync(join(__dirname, '..', 'pages/OverviewPage.tsx'), 'utf8')
+    expect(source).toContain('<RealmPurposeBadge')
+    expect(source).not.toContain('compact')
+  })
+})

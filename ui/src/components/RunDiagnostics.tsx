@@ -82,8 +82,17 @@ function DetectorPanelItem({ item }: { item: DetectorItem }) {
             </Link>
           ))}
         </div>
+        {/* The detail carries the numbers the detector measured, interpolated
+            into a sentence on the server, so it cannot be translated by
+            identifier the way the title and the action are: the numbers would
+            have to arrive separately for that. It stays in the server's
+            English, and this is the one line of a finding that does. */}
         <p className="find-detail">{item.detail}</p>
-        {item.action && <p className="find-detail find-action">{item.action}</p>}
+        {item.action && (
+          <p className="find-detail find-action">
+            {t(`runDiagnostics.findingAction.${item.id}`, { defaultValue: item.action })}
+          </p>
+        )}
       </div>
     </div>
   )
@@ -113,9 +122,19 @@ function TraceGaps({ run }: Props) {
             <div key={gap.field} className="find-row">
               <span className="find-dot find-info" aria-hidden="true" />
               <div>
-                <div className="find-title mono-sm">{gap.field}</div>
-                <p className="find-detail">{gap.unavailable}</p>
-                <p className="find-detail find-action">{gap.remedy}</p>
+                {/* Named for a reader, with the field it stands for beside
+                    it. It used to show the field alone: a person reading a run
+                    met `candidate_source_refs` and two English sentences. */}
+                <div className="find-title">
+                  {t(`runDiagnostics.traceGap.${gap.field}.label`, { defaultValue: gap.field })}
+                  <span className="mono-sm ml-8 text-muted">{gap.field}</span>
+                </div>
+                <p className="find-detail">
+                  {t(`runDiagnostics.traceGap.${gap.field}.unavailable`, { defaultValue: gap.unavailable })}
+                </p>
+                <p className="find-detail find-action">
+                  {t(`runDiagnostics.traceGap.${gap.field}.remedy`, { defaultValue: gap.remedy })}
+                </p>
               </div>
             </div>
           ))}

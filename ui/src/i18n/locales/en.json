@@ -1807,6 +1807,7 @@
   },
   "realm": {
     "provingGround": {
+      "short": "broken",
       "label": "broken on purpose",
       "hint": "The data and settings of this realm carry defects on purpose. A red diagnostic here is the expected outcome and not a broken installation."
     },
@@ -2061,6 +2062,39 @@
       "incorrect_refusals": "Refusal decisions are going the wrong way",
       "layer_bottleneck": "A bottleneck in the funnel",
       "unverified_coverage": "Corpus coverage was not verified"
+    },
+    "findingAction": {
+      "embedder_unverified": "Read the run's recall against its reference sources: a corpus indexed by a stub model retrieves at chance.",
+      "stub_embedder": "Re-index the corpus with the real embedding model switched on.",
+      "duplicates": "Check that chunk_id is deterministic, then drop the collection and re-index.",
+      "header_only": "Raise min_chars, or switch to sentence or paragraph chunking.",
+      "bm25_dominance": "Compare the two halves' own recall separately before changing the merge.",
+      "empty_answers": "Check corpus coverage, and whether the model's thinking mode is consuming the num_predict budget.",
+      "incorrect_refusals": "Read each question's answerability class (core.eval.answerability). A question with no reference sources is out of scope and should be refused.",
+      "layer_bottleneck": "Open the individual questions carrying this verdict on the run page to see the specific failures and decide what to fix.",
+      "unverified_coverage": "Check that the index for this corpus is reachable, then re-run to get verified classes."
+    },
+    "traceGap": {
+      "sources": {
+        "label": "Sources of the answer",
+        "unavailable": "No retrieval metric can be computed, so recall, precision and whether the answer is grounded in a source all stay unknown.",
+        "remedy": "Return a list of sources in the answer to every question."
+      },
+      "stage_trace": {
+        "label": "Time by stage",
+        "unavailable": "The per-stage latency breakdown is unavailable, so which stage spends the time cannot be said.",
+        "remedy": "Return a stage_trace field carrying each stage's duration."
+      },
+      "pre_rerank_source_refs": {
+        "label": "The list before reranking",
+        "unavailable": "A rerank failure is indistinguishable from a retrieval failure: whether the required source was found and then discarded cannot be established.",
+        "remedy": "Return the candidate list as it stood before reranking, whenever reranking runs."
+      },
+      "candidate_source_refs": {
+        "label": "The candidate window",
+        "unavailable": "The gain from a different context size cannot be estimated: nothing records where the reference source ranked beyond the selection boundary.",
+        "remedy": "Return a candidate window wider than the final context, meaning fetch more than is passed into the answer."
+      }
     },
     "traceGaps": "What this run made impossible to check",
     "noTraceGaps": "The run recorded everything every check needs.",

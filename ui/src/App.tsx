@@ -72,7 +72,7 @@ function RealmSwitcher() {
         <span className="realm-switcher-label">
           <span className="realm-switcher-name">
             {activeRealm?.name ?? '…'}
-            <RealmPurposeBadge purpose={activeRealm?.purpose} />
+            <RealmPurposeBadge purpose={activeRealm?.purpose} compact />
           </span>
           {activeRealm && (
             <span className="realm-switcher-id">
@@ -94,7 +94,7 @@ function RealmSwitcher() {
               >
                 <span className="realm-switcher-dot active" />
                 {r.name}
-                <RealmPurposeBadge purpose={r.purpose} />
+                <RealmPurposeBadge purpose={r.purpose} compact />
               </div>
             ))}
             <div className="realm-switcher-footer">
