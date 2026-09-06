@@ -38,6 +38,13 @@ PROVOKES = {
     "repeat_a_structural_number": "duplicate_structural_numbers",
     "shrink_to_fragments": "too_short",
     "add_a_second_language": "mixed_language",
+    # None, and deliberately. This defect's whole effect is on the graph: a
+    # keyword shared by every unit joins each to all the others, so the edges
+    # a link step produces grow with the square of the corpus. Corpus health
+    # reads documents and chunks and knows nothing of a graph, so the honest
+    # expectation here is silence, and the pair that proves the defect lives
+    # in tests/proving_ground against a loaded graph.
+    "repeat_a_phrase_in_every_document": None,
 }
 
 
@@ -132,6 +139,12 @@ def test_the_base_corpus_can_carry_every_defect(defect, corpus) -> None:
         pytest.fail(f"the base corpus cannot carry {defect.name}: {refusal}")
     expected = PROVOKES[defect.name]
     fired = _findings(broken, code)
+    if expected is None:
+        assert fired == set(), (
+            f"{defect.name} on {code} is declared invisible to corpus health and provoked "
+            f"{sorted(fired)}, so either the declaration or the defect is wrong"
+        )
+        return
     assert expected in fired, (
         f"{defect.name} on {code}: expected {expected}, saw {sorted(fired) or 'nothing'}"
     )

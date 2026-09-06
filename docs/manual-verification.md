@@ -149,8 +149,8 @@ Open <http://localhost:5173/atlas?realm=proving-ground>.
 
 **You should see** an architecture chosen by its coordinates, each coordinate
 linking to its definition at ragworld.org, and a count of the entries that
-apply to that architecture: 36 of 40 for the hybrid point, 28 for the dense
-one, 34 for the graph one. Switching the architecture changes the count and the
+apply to that architecture: 36 of 41 for the hybrid point, 28 for the dense
+one, 35 for the graph one. Switching the architecture changes the count and the
 list, and never shows a total across all three.
 
 **Every entry carries one of four states.** Caught by a named signal. Visible

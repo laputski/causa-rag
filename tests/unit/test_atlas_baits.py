@@ -156,6 +156,14 @@ def test_the_clean_corpus_baseline_is_actually_clean() -> None:
     assert fired == [], f"the clean corpus baseline is not clean: {fired}"
 
 
+def test_the_healthy_graph_baseline_is_actually_healthy() -> None:
+    """The fourth baseline. Its numbers are the proving ground's own graph,
+    measured and not chosen: 220 units with 3756 lexical edges between
+    them."""
+    fired = sorted(_graph_ids(*_HEALTHY_GRAPH))
+    assert fired == [], f"a healthy graph is reported as broken: {fired}"
+
+
 def test_two_runs_differing_in_nothing_are_called_comparable() -> None:
     """The third baseline, and it was missing until a comparison signal
     needed one. A warning fired on two identical runs would have made every
@@ -585,6 +593,24 @@ def bait_F36_a_difference_the_questions_cannot_see() -> set[str]:
     return {f"compare:{w.id}" for w in check_comparability(_result(0.0), _result(0.01))}
 
 
+def _graph_ids(units: int, edges: int) -> set[str]:
+    from core.eval.graph_health import analyze as analyze_graph
+    return {f"health:{f.id}" for f in analyze_graph(units, edges)}
+
+
+#: A graph of the shape the proving ground's own corpus produces: two hundred
+#: and twenty units with seventeen lexical edges each. Measured, never chosen.
+_HEALTHY_GRAPH = (220, 3756)
+
+
+def bait_F41_the_guard_left_no_edges_at_all() -> set[str]:
+    """The entry above's own prevention misfiring: every unit's keywords went
+    over the frequency cap at once, the link step produced nothing, and the
+    node count, the community count and a perfect modularity are all still
+    reported."""
+    return _graph_ids(220, 0)
+
+
 BAITS = {
     "F01": bait_F01_reingest_duplicates,
     "F02": bait_F02_one_identifier_two_fragments,
@@ -615,6 +641,7 @@ BAITS = {
     "F35": bait_F35_a_metric_computed_where_it_has_no_grounds,
     "F36": bait_F36_a_difference_the_questions_cannot_see,
     "F37": bait_F37_the_number_is_the_best_of_a_search,
+    "F41": bait_F41_the_guard_left_no_edges_at_all,
 }
 
 _CLAIMED = [f for f in FAILURES if f.detection != "none"]
@@ -649,7 +676,8 @@ def test_bait_stays_silent_on_the_clean_baseline(failure: Any) -> None:
     reachable = [s for s in failure.signals if s.id not in STAND_ONLY]
     if not reachable:
         pytest.skip(f"{failure.id}: baited on the proving ground")
-    quiet = _detector_ids(clean_run()) | _health_ids(clean_chunks()) | _compare_ids()
+    quiet = (_detector_ids(clean_run()) | _health_ids(clean_chunks()) | _compare_ids()
+             | _graph_ids(*_HEALTHY_GRAPH))
     still_firing = {s.id for s in reachable} & quiet
     assert not still_firing, (
         f"{failure.id}: {sorted(still_firing)} fires on a healthy payload, so it "

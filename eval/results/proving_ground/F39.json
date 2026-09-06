@@ -1,0 +1,15 @@
+{
+  "failure_id": "F39",
+  "recorded_at": "2026-09-06T15:34:39.551228+00:00",
+  "claim": "not staged here: the linker drops a keyword once it passes its frequency cap, so a shared phrase empties the graph instead of filling it",
+  "measured": {
+    "edges_per_unit_control": 17.07,
+    "edges_per_unit_broken": 0.0,
+    "keyword_frequency_cap": 50,
+    "keywords_per_unit": 8,
+    "largest_community_control": 35,
+    "documents_in_largest_control": 35,
+    "documents": 40,
+    "community_check_withdrawn": "counting the documents a large community draws on was refuted by this control: a corpus of procedures on one subject groups across its documents, so the number does not separate the failure from health"
+  }
+}

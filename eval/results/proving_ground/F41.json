@@ -1,0 +1,19 @@
+{
+  "failure_id": "F41",
+  "recorded_at": "2026-09-06T15:34:39.550417+00:00",
+  "claim": "one sentence under every heading, and the link step produced nothing",
+  "measured": {
+    "units": 220,
+    "documents": 40,
+    "edges_control": 3756,
+    "edges_broken": 0,
+    "edges_per_unit_control": 17.07,
+    "edges_per_unit_broken": 0.0,
+    "modularity_control": 0.7261736564060514,
+    "modularity_broken": null,
+    "signals": [
+      "health:graph_has_no_edges"
+    ],
+    "signals_on_the_control": []
+  }
+}

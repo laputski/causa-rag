@@ -91,6 +91,10 @@ def known_signal_ids() -> set[str]:
     return (
         {f"detector:{i}" for i in _literal_ids(core / "eval" / "detectors.py", {"DiagnosticItem"})}
         | {f"health:{i}" for i in _literal_ids(core / "eval" / "corpus_health.py", {"HealthItem"})}
+        # A graph index says things about itself that a corpus of documents
+        # cannot: whether the units were linked at all, and whether a
+        # community drew on the whole corpus. Same kind, second module.
+        | {f"health:{i}" for i in _literal_ids(core / "eval" / "graph_health.py", {"GraphFinding"})}
         | {f"compare:{i}" for i in _literal_ids(core / "experiment" / "compare.py", {"CompatWarning"})}
         | {f"funnel:{i}" for i in typing.get_args(Layer)}
         | {f"cause:{i}" for i in typing.get_args(Cause)}
@@ -774,10 +778,11 @@ def _signals_the_platform_emits() -> set[str]:
     import inspect
     import re
 
-    from core.eval import corpus_health, detectors
+    from core.eval import corpus_health, detectors, graph_health
 
     found: set[str] = set()
-    for side, module in (("detector", detectors), ("health", corpus_health)):
+    for side, module in (("detector", detectors), ("health", corpus_health),
+                         ("health", graph_health)):
         for match in re.finditer(r'id="([a-z_]+)"', inspect.getsource(module)):
             if match.group(1) != "ok":
                 found.add(f"{side}:{match.group(1)}")

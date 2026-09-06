@@ -848,8 +848,11 @@ FAILURES: tuple[FailureMode, ...] = (
                       ("A8", ("extracted", "computed", "extracted_and_computed"))),
         not_detected_reason=(
             "nothing counts the edges a link step produces against the units it "
-            "produced them from, so a link rule that is quadratic in a frequent "
-            "word is indistinguishable from one that is not"
+            "produced them from. A check for it was written and withdrawn: what a "
+            "single graph can show is its consequence and never the growth itself: a unit "
+            "reaching a large share of the corpus in one step, and the healthy "
+            "proving-ground graph sits close enough to any such ratio to make the "
+            "number a matter of taste"
         ),
     ),
     FailureMode(
@@ -865,10 +868,40 @@ FAILURES: tuple[FailureMode, ...] = (
         applies_when=(("A4", ("graph", "community_hierarchy")),
                       ("A8", ("extracted", "computed", "extracted_and_computed"))),
         not_detected_reason=(
-            "a plausible modularity is reported and nothing beside it reports how "
-            "many distinct documents a large community mixes, so a grouping by "
-            "shared frequent words reads exactly like a grouping by meaning"
+            "a plausible modularity is reported and nothing beside it separates a "
+            "grouping by meaning from a grouping by a shared word. Counting the "
+            "documents a large community draws on was tried and refuted by the "
+            "control: on a healthy proving-ground graph the largest community holds "
+            "thirty-five units from thirty-five of forty documents, because a corpus "
+            "of procedures on one subject genuinely groups across its documents"
         ),
+    ),
+    FailureMode(
+        id="F41",
+        atlas_rows=(),
+        title="The guard against a runaway link step leaves a graph with no edges at all",
+        stage_origin="ingest",
+        stage_visible="retrieval",
+        severity=Severity(3, 3, 2),
+        origin="ours-17",
+        detection="detector",
+        instrument="corpus",
+        applies_when=(("A4", ("graph", "hypergraph", "community_hierarchy")),
+                      ("A8", ("extracted", "computed", "extracted_and_computed"))),
+        # Found on the proving ground while trying to stage the entry above,
+        # and it is that entry's own prevention misfiring. Units are linked by
+        # the keywords they share, and a keyword occurring in more units than
+        # a frequency cap allows is excluded before linking, precisely because
+        # one such keyword contributes N×(N−1)/2 edges by itself. One ordinary
+        # sentence repeated under every heading puts every unit's keywords
+        # over that cap at once, and the link step then produces nothing.
+        #
+        # The graph still exists. Its nodes are counted, its communities are
+        # counted, and its modularity is perfect, because every node is its
+        # own community. A graph retrieval walks to neighbours that are not
+        # there and returns what a plain search would have returned.
+        signals=(Signal("health", "graph_has_no_edges"),),
+        bait="tests/unit/test_atlas_baits.py::test_bait[F41]",
     ),
 )
 

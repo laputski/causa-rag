@@ -43,6 +43,13 @@ PROVOKES = {
     "repeat_a_structural_number": "duplicate_structural_numbers",
     "shrink_to_fragments": "too_short",
     "add_a_second_language": "mixed_language",
+    # None, and deliberately. This defect's whole effect is on the graph: a
+    # keyword shared by every unit joins each to all the others, so the edges
+    # a link step produces grow with the square of the corpus. Corpus health
+    # reads documents and chunks and knows nothing of a graph, so the honest
+    # expectation here is silence, and the pair that proves the defect lives
+    # in tests/proving_ground against a loaded graph.
+    "repeat_a_phrase_in_every_document": None,
 }
 
 
@@ -83,6 +90,12 @@ def test_a_defect_provokes_the_signal_it_claims(defect, healthy: Corpus) -> None
         pytest.skip(f"{defect.name} needs a corpus that {defect.requires}")
     expected = PROVOKES[defect.name]
     fired = _findings(broken)
+    if expected is None:
+        assert fired == set(), (
+            f"{defect.name} is declared invisible to corpus health and provoked "
+            f"{sorted(fired)}, so either the declaration or the defect is wrong"
+        )
+        return
     assert expected in fired, (
         f"{defect.name} changed the corpus and the checks did not notice: "
         f"expected {expected}, saw {sorted(fired) or 'nothing'}"
@@ -103,6 +116,7 @@ def test_a_defect_provokes_nothing_else(defect, healthy: Corpus) -> None:
     except CorpusCannotCarryDefect:
         pytest.skip(f"{defect.name} needs a corpus that {defect.requires}")
     extra = _findings(broken) - {PROVOKES[defect.name]}
+    extra.discard(None)  # a defect declared invisible here subtracts nothing
     assert extra == set(), (
         f"{defect.name} also provoked {sorted(extra)}, so a bait on it would "
         "prove two things at once and neither in particular"

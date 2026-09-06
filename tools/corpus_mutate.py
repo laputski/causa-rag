@@ -279,6 +279,67 @@ def _add_a_second_language(corpus: Corpus) -> Corpus:
     return out
 
 
+def _repeat_a_phrase_in_every_document(corpus: Corpus) -> Corpus:
+    """Put one identical sentence under every heading of every document.
+
+    What a handbook acquires when a template, a disclaimer or a page footer is
+    pasted throughout. Nothing about it looks wrong: the sentence is the
+    corpus's own prose, every document still reads correctly, and no length,
+    number or heading moves.
+
+    The sentence is lifted from the corpus and never written here, which is
+    not a convenience. A phrase of this module's own choosing is a phrase in
+    this module's own language, and a Russian sentence pasted into an English
+    handbook stages a language failure and not a graph one. A guard found
+    exactly that.
+
+    Under *every* heading, and that is a measurement. Under the first only,
+    the phrase reached forty-one of two hundred and twenty units, and the
+    graph came back with fewer edges than the control: keywords are the first
+    eight distinct words of a unit, so a sentence at the top of a unit
+    displaces the unit's own keywords and does not add to them. Under every
+    heading it reaches every unit, all eight keywords of every unit exceed the
+    linker's frequency cap at once, and the link step produces nothing.
+
+    So what this stages is not the runaway link step it was written for. It is
+    that step's own prevention misfiring, which is a failure of its own and
+    now an entry of its own.
+    """
+    phrase = _longest_sentence(corpus)
+    if not phrase:
+        return dict(corpus)
+    return {name: _insert_under_every_heading(text, phrase) for name, text in corpus.items()}
+
+
+def _longest_sentence(corpus: Corpus) -> str:
+    """The longest ordinary sentence in the corpus, which carries the most
+    keywords to share and is by construction in the corpus's own language."""
+    best = ""
+    for text in corpus.values():
+        for line in text.splitlines():
+            if line.startswith("#") or line.startswith("-") or line.startswith("|"):
+                continue
+            for sentence in re.split(r"(?<=[.!?])\s+", line):
+                sentence = sentence.strip()
+                if len(sentence) > len(best):
+                    best = sentence
+    return best
+
+
+def _insert_under_every_heading(text: str, phrase: str) -> str:
+    """Put the phrase under each heading, where a template would sit."""
+    out: list[str] = []
+    seen_heading = False
+    for line in text.splitlines():
+        out.append(line)
+        if line.startswith("#"):
+            seen_heading = True
+            out += ["", phrase]
+    if not seen_heading:
+        return phrase + "\n\n" + text
+    return "\n".join(out)
+
+
 DEFECTS: tuple[Defect, ...] = (
     Defect("flatten_headings",
            "no document carries a heading, so nothing can build a structural tree",
@@ -302,6 +363,11 @@ DEFECTS: tuple[Defect, ...] = (
     Defect("add_a_second_language",
            "documents of a second language sit beside the first",
            ("F14", "F24"), _add_a_second_language),
+    Defect("repeat_a_phrase_in_every_document",
+           "one ordinary sentence sits under every heading, as a template would",
+           ("F41",), _repeat_a_phrase_in_every_document,
+           requires="carries headings, since the phrase is placed under the first of them",
+           admits=lambda corpus: any("#" in text for text in corpus.values())),
 )
 
 _BY_NAME = {d.name: d for d in DEFECTS}
