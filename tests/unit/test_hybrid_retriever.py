@@ -114,3 +114,45 @@ def test_top_k_respected():
 
     results = h.retrieve("document", k=3)
     assert len(results) <= 3
+
+
+# ── what each half cost ───────────────────────────────────────────────────────
+
+def test_it_reports_what_each_half_and_the_merge_cost():
+    """Measured where it happens, because the caller cannot see inside.
+
+    The pipeline used to infer the split from the identifier the merged
+    results carry. Those carry "hybrid", never "qdrant_dense" or
+    "opensearch", so the condition was false on every hybrid run ever
+    recorded: the whole retrieval time went down as the dense half's, the
+    sparse half's was zero, and the merge's was a quarter of the total that
+    nobody had measured.
+    """
+    hybrid, dense, sparse = _make_hybrid()
+    emb = BgeM3Embedder()
+    _index_both(dense, sparse, [_chunk(f"Section {i} on calibration") for i in range(1, 8)], emb)
+
+    timings: dict[str, float] = {}
+    hybrid.retrieve(query="calibration", k=3, timings=timings)
+
+    assert set(timings) == {"dense_ms", "sparse_ms", "merge_ms", "n_dense", "n_sparse"}
+    for stage in ("dense_ms", "sparse_ms", "merge_ms"):
+        assert timings[stage] >= 0.0, timings
+    assert timings["n_dense"] > 0 and timings["n_sparse"] > 0, timings
+
+
+def test_it_asks_for_nowhere_to_report_and_still_retrieves():
+    """A caller that wants no timings passes none, and nothing changes."""
+    hybrid, dense, sparse = _make_hybrid()
+    emb = BgeM3Embedder()
+    _index_both(dense, sparse, [_chunk(f"Section {i} on calibration") for i in range(1, 8)], emb)
+
+    assert hybrid.retrieve(query="calibration", k=3)
+
+
+def test_it_keeps_no_timing_of_its_own():
+    """One retriever answers many queries at once, so a field on it would
+    report whichever query finished last. The caller owns the mapping."""
+    hybrid, _, _ = _make_hybrid()
+    leftovers = [name for name in vars(hybrid) if "ms" in name or "timing" in name]
+    assert leftovers == [], leftovers

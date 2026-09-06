@@ -201,3 +201,53 @@ def test_a_window_narrower_than_the_context_is_ignored() -> None:
     pipeline = _pipeline(top_k=5, fetch_k=2)
     pipeline.run(QueryRequest(text="q", top_k=5, trace_id="t"))
     assert pipeline._retriever.asked_for == [5]
+
+
+# ── what the trace says about the two halves ──────────────────────────────────
+
+def _hybrid_pipeline() -> tuple[NaivePipeline, BgeM3Embedder]:
+    from adapters.opensearch import OpenSearchRetrieverStub
+    from core.retrieval.hybrid import HybridRetriever
+
+    emb = BgeM3Embedder()
+    dense, sparse = QdrantRetrieverStub(), OpenSearchRetrieverStub()
+    chunks = [Chunk(doc_id="d1", text=f"Section {i} sets out the calibration procedure.")
+              for i in range(1, 8)]
+    dense.upsert(chunks, emb.embed([c.text for c in chunks]))
+    sparse.index_chunks(chunks)
+    hybrid = HybridRetriever(dense_retriever=dense, sparse_retriever=sparse, embedder=emb)
+    return NaivePipeline(retriever=hybrid, embedder=emb, generator=GeneratorStub()), emb
+
+
+def test_a_hybrid_run_records_what_each_half_cost():
+    """The split is read from the retriever that did the work.
+
+    It used to be inferred from the identifier on the merged results, which
+    is "hybrid" on every one of them, so the whole retrieval time was
+    written down as the dense half's on every hybrid run ever recorded.
+    """
+    pipeline, _ = _hybrid_pipeline()
+    trace = pipeline.run(QueryRequest(text="calibration procedure")).stage_trace
+
+    assert trace.n_dense > 0, "the dense half returned nothing, or its count was never recorded"
+    assert trace.n_sparse > 0, "the sparse half returned nothing, or its count was never recorded"
+    assert trace.sparse_retrieve_ms >= 0.0
+    assert trace.merge_ms >= 0.0
+
+
+def test_the_merge_time_is_not_a_fraction_of_the_retrieval_time():
+    """It was `retrieve_ms / 4`: a number nobody measured, presented beside
+    numbers that were. Worse than an absent number, because it reads as one."""
+    pipeline, _ = _hybrid_pipeline()
+    trace = pipeline.run(QueryRequest(text="calibration procedure")).stage_trace
+    total = trace.dense_retrieve_ms + trace.sparse_retrieve_ms
+    assert trace.merge_ms != round(total / 4, 1) or trace.merge_ms == 0.0
+
+
+def test_a_dense_only_run_claims_no_split_it_does_not_have():
+    """A retriever that measures no stages leaves them empty, and that is the
+    honest report: it says nothing, and does not say zero milliseconds."""
+    pipeline = _make_pipeline()
+    trace = pipeline.run(QueryRequest(text="a question")).stage_trace
+    assert trace.sparse_retrieve_ms == 0.0
+    assert trace.merge_ms == 0.0

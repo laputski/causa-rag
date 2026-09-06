@@ -6,6 +6,7 @@ Two merge strategies:
 """
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from core.models import ScoredChunk
@@ -24,6 +25,16 @@ class HybridRetriever:
     """
 
     retriever_id = "hybrid"
+
+    #: Fills a `timings` mapping when the caller passes one, so what each
+    #: half cost is measured where it happens. The pipeline used to infer
+    #: the split from the identifier carried by the merged results, and
+    #: those carry "hybrid": the condition was false on every hybrid run
+    #: ever recorded, so the whole retrieval time was written down as the
+    #: dense half's, the sparse half's time was zero, and the merge's was a
+    #: quarter of the total, which nobody had measured. A detector looking
+    #: for a stage that ran and reported no time found it.
+    reports_stage_timings = True
 
     def __init__(
         self,
@@ -50,22 +61,42 @@ class HybridRetriever:
         filters: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> list[ScoredChunk]:
+        # A mapping the caller owns, filled here and never held on this
+        # object: one retriever answers many queries at once, and a field
+        # on it would report whichever query finished last.
+        timings = kwargs.get("timings")
         query_vec = self._embedder.embed([query])[0]
         fetch_k = max(k * 2, 20)
 
+        started = time.perf_counter()
         dense_results = self._dense.retrieve(
             query=query, k=fetch_k, filters=filters, query_vector=query_vec
         )
+        dense_ms = (time.perf_counter() - started) * 1000
+
+        started = time.perf_counter()
         sparse_results = self._sparse.retrieve(query=query, k=fetch_k, filters=filters)
+        sparse_ms = (time.perf_counter() - started) * 1000
 
         # tag pre-merge scores into metadata for tracing
         dense_score_map = {sc.chunk.chunk_id: sc.score for sc in dense_results}
         sparse_score_map = {sc.chunk.chunk_id: sc.score for sc in sparse_results}
 
+        started = time.perf_counter()
         if self._merge == "rrf":
             merged = self._merge_rrf(dense_results, sparse_results, k)
         else:
             merged = self._merge_weighted(dense_results, sparse_results, k)
+        merge_ms = (time.perf_counter() - started) * 1000
+
+        if timings is not None:
+            timings.update({
+                "dense_ms": round(dense_ms, 1),
+                "sparse_ms": round(sparse_ms, 1),
+                "merge_ms": round(merge_ms, 1),
+                "n_dense": len(dense_results),
+                "n_sparse": len(sparse_results),
+            })
 
         # annotate merged chunks with pre-merge scores
         for sc in merged:

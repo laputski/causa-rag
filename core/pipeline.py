@@ -187,21 +187,34 @@ class NaivePipeline:
                 query_vec = self._embedder.embed([request.text])[0]
                 trace.embed_ms = round((time.perf_counter() - t0) * 1000, 1)
 
+                # A retriever that measures its own stages fills this; one
+                # that does not leaves it empty and says so by leaving it
+                # empty. The split used to be inferred from the identifier
+                # the merged results carry, which is "hybrid" on every one
+                # of them, so the condition was false on every hybrid run
+                # ever recorded: the whole retrieval time was written down
+                # as the dense half's, the sparse half's was zero, and the
+                # merge's was a quarter of the total that nobody had
+                # measured. A number nobody measured is worse than a number
+                # nobody has.
+                timings: dict[str, float] = {}
+                extra: dict[str, Any] = {"query_vector": query_vec}
+                if getattr(self._retriever, "reports_stage_timings", False):
+                    extra["timings"] = timings
                 t0 = time.perf_counter()
                 scored = self._retriever.retrieve(
                     query=request.text,
                     k=fetch,
                     filters=request.filters or None,
-                    query_vector=query_vec,  # type: ignore[call-arg]
+                    **extra,
                 )
                 retrieve_ms = round((time.perf_counter() - t0) * 1000, 1)
-                # detect hybrid vs dense — hybrid sets retriever_id on sub-results
-                has_dense = any(getattr(sc, "retriever_id", "") == "qdrant_dense" for sc in scored)
-                has_sparse = any(getattr(sc, "retriever_id", "") in ("opensearch", "sparse") for sc in scored)
-                if has_dense and has_sparse:
-                    trace.dense_retrieve_ms = retrieve_ms / 2
-                    trace.sparse_retrieve_ms = retrieve_ms / 2
-                    trace.merge_ms = retrieve_ms / 4
+                if timings:
+                    trace.dense_retrieve_ms = timings["dense_ms"]
+                    trace.sparse_retrieve_ms = timings["sparse_ms"]
+                    trace.merge_ms = timings["merge_ms"]
+                    trace.n_dense = int(timings["n_dense"])
+                    trace.n_sparse = int(timings["n_sparse"])
                 else:
                     trace.dense_retrieve_ms = retrieve_ms
                 trace.n_merged = len(scored)
