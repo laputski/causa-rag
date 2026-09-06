@@ -18,14 +18,22 @@ import { join } from 'node:path'
 const source = (relative: string) =>
   readFileSync(join(__dirname, '..', relative), 'utf8')
 
-const DETECTORS = [
-  'embedder_unverified', 'stub_embedder', 'duplicates', 'header_only',
-  'bm25_dominance', 'empty_answers', 'incorrect_refusals', 'layer_bottleneck',
-  'unverified_coverage',
-]
+// Read out of the detectors themselves, never listed here. The list used to
+// be typed out, and a detector added afterwards was covered by nothing: its
+// title and its action reached the reader in English while everything around
+// them was translated, and no test said so.
+const DETECTORS = Array.from(
+  readFileSync(join(__dirname, '..', '..', '..', 'core', 'eval', 'detectors.py'), 'utf8')
+    .matchAll(/DiagnosticItem\(\s*\n\s*id="([a-z_]+)"/g),
+).map(match => match[1])
 const GAPS = ['sources', 'stage_trace', 'pre_rerank_source_refs', 'candidate_source_refs']
 
 describe('a finding speaks the reader’s language', () => {
+  it('finds the detectors to check, so a new one cannot slip past', () => {
+    expect(DETECTORS.length).toBeGreaterThanOrEqual(9)
+    expect(DETECTORS).toContain('unverified_coverage')
+  })
+
   it.each(DETECTORS)('%s has a title and an action in both languages', (id) => {
     for (const [name, bundle] of [['en', en], ['ru', ru]] as const) {
       expect((bundle.runDiagnostics.finding as Record<string, string>)[id], `${name} title`).toBeTruthy()

@@ -425,6 +425,198 @@ def detect_unverified_coverage(run: dict[str, Any]) -> DiagnosticItem | None:
     )
 
 
+def detect_undeclared_metric(run: dict[str, Any]) -> DiagnosticItem | None:
+    """A number reaches the reader with a name and nothing else.
+
+    A metric whose definition drifts from its name reads perfectly well: the
+    name is the only thing on the screen, and the name still says what it
+    always said. Nothing here decides that a name is right. What it reports
+    is the state in which the question cannot be asked at all, which is the
+    state every such drift hides in.
+
+    Silent for a run with no aggregate at all: a run that measured nothing
+    is not a run whose measurements are undeclared.
+    """
+    from core.eval.metric_definitions import definition_of
+
+    aggregate = run.get("aggregate_metrics") or {}
+    undeclared = sorted(name for name in aggregate if definition_of(name) is None)
+    if not undeclared:
+        return None
+    return DiagnosticItem(
+        id="undeclared_metric",
+        severity="warn",
+        title="A metric carries no definition",
+        detail=(
+            f"{len(undeclared)} of {len(aggregate)} metrics in this run declare nothing about "
+            f"what they compute or over which questions: {', '.join(undeclared)}. Their names "
+            "are all a reader has, so a name that stopped matching its definition would look "
+            "exactly like this run does."
+        ),
+        action="Declare each metric beside its name, saying what it computes and over which "
+               "questions, so the name can be checked against it.",
+    )
+
+
+def detect_aggregate_disagrees_with_questions(run: dict[str, Any]) -> DiagnosticItem | None:
+    """The run-level number is not the number the questions carry.
+
+    Every aggregate here is the mean of the per-question values, and nothing
+    ever compared the two, so a question lost between writing the run and
+    reading it moves the number on screen and moves nothing else: the reader
+    blames what was measured and the fault is in the measuring.
+
+    Measured across the forty-one runs stored when this was written, every
+    aggregate equalled the mean of its per-question values to within a
+    millionth, so the tolerance below is an observation. A metric declared
+    as something other than a mean is skipped instead of guessed at, which
+    is why the declaration carries the operation and not only the name.
+    """
+    from core.eval.metric_definitions import definition_of
+
+    aggregate = run.get("aggregate_metrics") or {}
+    questions = run.get("question_results") or []
+    if not aggregate or not questions:
+        return None
+
+    disagreements: list[str] = []
+    for name, recorded in sorted(aggregate.items()):
+        definition = definition_of(name)
+        if definition is not None and definition.aggregated_by != "mean":
+            continue
+        if not isinstance(recorded, int | float):
+            continue
+        values = [
+            value for qr in questions
+            if isinstance(value := (qr.get("metrics") or {}).get(name), int | float)
+        ]
+        if not values:
+            disagreements.append(f"{name}: {recorded:.4f} in the run and on no question at all")
+            continue
+        mean = sum(values) / len(values)
+        if abs(mean - recorded) > 1e-6:
+            disagreements.append(
+                f"{name}: {recorded:.4f} in the run and {mean:.4f} across the "
+                f"{len(values)} questions carrying it"
+            )
+
+    if not disagreements:
+        return None
+    return DiagnosticItem(
+        id="aggregate_disagrees",
+        severity="error",
+        title="The run's numbers are not its questions' numbers",
+        detail=(
+            f"{len(disagreements)} of {len(aggregate)} metrics do not survive being recomputed "
+            f"from the questions of this same run: {'; '.join(disagreements)}. Whatever these "
+            "numbers describe, it is not what the questions recorded."
+        ),
+        action="Compare what the run wrote with what a read of it returns; a question lost on "
+               "the way out moves the aggregate and leaves everything else looking correct.",
+    )
+
+
+def detect_chunk_id_collision(run: dict[str, Any]) -> DiagnosticItem | None:
+    """One identifier standing for two different fragments.
+
+    An identifier is derived from where a fragment came from, and a lost
+    source path collapses two derivations onto one value. Retrieval then
+    returns the wrong text under the right identifier, deduplication drops a
+    fragment that was never a duplicate, and every metric keyed on the
+    identifier agrees with itself while describing the wrong fragment.
+
+    Read off the fragments a run returned, so no index access is needed: two
+    fragments carrying one identifier and different text is the collision
+    itself and not a symptom of it. Silent across forty-six thousand
+    identifiers in the runs stored when this was written.
+    """
+    texts: dict[str, set[str]] = {}
+    for qr in run.get("question_results", []):
+        for key in ("source_refs", "pre_rerank_source_refs", "candidate_source_refs"):
+            for ref in qr.get(key) or []:
+                chunk_id = ref.get("chunk_id")
+                if not chunk_id:
+                    continue
+                # A prefix is enough to tell two fragments apart and keeps a
+                # long run from holding every fragment's full text at once.
+                texts.setdefault(chunk_id, set()).add((ref.get("chunk_text") or "")[:400])
+
+    colliding = sorted(chunk_id for chunk_id, seen in texts.items() if len(seen) > 1)
+    if not colliding:
+        return None
+    return DiagnosticItem(
+        id="chunk_id_collision",
+        severity="error",
+        title="One fragment identifier, two fragments",
+        detail=(
+            f"{len(colliding)} of {len(texts)} fragment identifiers in this run stand for more "
+            f"than one text, the first being {colliding[0]}. Anything keyed on the identifier "
+            "is describing whichever fragment it saw last."
+        ),
+        action="Check how the identifier is derived at load time: a source path missing from "
+               "the derivation collapses fragments of different documents onto one value.",
+    )
+
+
+#: A stage of the pipeline, the evidence that it ran, and the field that
+#: would say what it cost. Only stages the platform times itself are listed:
+#: a system reporting no trace at all is a different finding, and
+#: core/eval/trace_completeness.py already makes it.
+_TIMED_STAGES: tuple[tuple[str, str, str], ...] = (
+    ("reranking", "n_reranked", "rerank_ms"),
+    ("generation", "output_tokens", "generate_ms"),
+    # The sparse half having returned anything is what says a merge
+    # happened. `n_merged` is not: it is set to the size of whatever
+    # retrieval produced, on every pipeline, merge or no merge, so reading
+    # it as evidence made this detector report every run ever stored.
+    ("merging the two halves", "n_sparse", "merge_ms"),
+)
+
+
+def detect_unmeasured_stage_cost(run: dict[str, Any]) -> DiagnosticItem | None:
+    """A stage that ran and reported no time.
+
+    What a stage costs is the whole of the argument for keeping it, and a
+    stage whose cost is not recorded is defended by nobody and questioned by
+    nobody. The reranker is the usual one: it improves the ranking, it is
+    kept, and how many milliseconds it adds to every question is a number
+    nobody has.
+
+    Deliberately silent when the run carries no stage trace whatsoever.
+    That is a system reporting nothing about itself, which is a wider
+    finding, already named by the trace-completeness gaps; repeating it here
+    would put two sentences about one absence on the same screen.
+    """
+    traces = [qr.get("stage_trace") or {} for qr in run.get("question_results", [])]
+    traces = [trace for trace in traces if trace]
+    if not traces:
+        return None
+
+    unmeasured: list[str] = []
+    for label, evidence, timing in _TIMED_STAGES:
+        ran = sum(1 for trace in traces if float(trace.get(evidence) or 0) > 0)
+        if not ran:
+            continue
+        timed = sum(1 for trace in traces if float(trace.get(timing) or 0) > 0)
+        if timed == 0:
+            unmeasured.append(f"{label}, which ran on {ran} of {len(traces)} questions")
+
+    if not unmeasured:
+        return None
+    return DiagnosticItem(
+        id="unmeasured_stage_cost",
+        severity="warn",
+        title="A stage ran and reported no time",
+        detail=(
+            f"{len(unmeasured)} stage(s) of this run left no duration behind: "
+            f"{'; '.join(unmeasured)}. What the stage costs cannot be weighed against what it "
+            "buys, so keeping it is a decision nobody can check."
+        ),
+        action="Record a duration for every stage the pipeline runs, so its price can be "
+               "compared with the gain it is kept for.",
+    )
+
+
 def run_detectors(run: dict[str, Any]) -> list[DiagnosticItem]:
     """Run all silent-degradation detectors over a finished run dict."""
     refs = _all_source_refs(run)
@@ -464,5 +656,9 @@ def run_detectors(run: dict[str, Any]) -> list[DiagnosticItem]:
         detect_incorrect_refusals(run),
         detect_layer_bottleneck(run),
         detect_unverified_coverage(run),
+        detect_undeclared_metric(run),
+        detect_aggregate_disagrees_with_questions(run),
+        detect_chunk_id_collision(run),
+        detect_unmeasured_stage_cost(run),
     ]
     return [c for c in candidates if c is not None]

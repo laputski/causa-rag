@@ -336,8 +336,59 @@ def bait_F24_reranker_does_not_know_the_language() -> set[str]:
     return bait_F14_model_does_not_cover_the_language()
 
 
+def bait_F02_one_identifier_two_fragments() -> set[str]:
+    """A source path lost at load time collapses two derivations onto one
+    value, so retrieval returns the wrong text under the right identifier."""
+    run = clean_run()
+    for qr in run["question_results"]:
+        qr["source_refs"][1]["chunk_id"] = qr["source_refs"][0]["chunk_id"]
+    return _detector_ids(run)
+
+
+def bait_F27_the_reranker_costs_an_unknown_amount() -> set[str]:
+    """The reranker ran on every question and no question says what it cost.
+
+    The trace is otherwise present, which is the point: a system reporting
+    nothing at all is a different finding, already named elsewhere, and a
+    detector that could not tell the two apart would say the wider thing
+    whenever the narrower one was true.
+    """
+    run = clean_run()
+    for qr in run["question_results"]:
+        qr["stage_trace"] = {
+            "embed_ms": 4.0, "dense_retrieve_ms": 20.0, "generate_ms": 900.0,
+            "output_tokens": 120, "n_reranked": 5, "rerank_ms": 0.0, "total_ms": 930.0,
+        }
+    return _detector_ids(run)
+
+
+def bait_F33_a_metric_declares_nothing() -> set[str]:
+    """A number reaches the reader carrying a name and nothing else, so
+    whether the name still matches what it computes cannot be asked."""
+    run = clean_run()
+    run["aggregate_metrics"] = {"retrieval_recall_at_k": 1.0, "answer_precision": 0.9}
+    # Carried by the questions as well, so the only thing wrong with it is
+    # that it declares nothing. A number in the run and on no question is a
+    # different failure, and letting both stand would make this pair
+    # evidence for either.
+    for qr in run["question_results"]:
+        qr["metrics"]["answer_precision"] = 0.9
+    return _detector_ids(run)
+
+
+def bait_F34_the_run_disagrees_with_its_own_questions() -> set[str]:
+    """The number on the screen is not the number the questions carry: a
+    question lost between writing the run and reading it moves the aggregate
+    and leaves everything else looking correct."""
+    run = clean_run()
+    run["aggregate_metrics"] = {"retrieval_recall_at_k": 1.0}
+    run["question_results"][0]["metrics"]["retrieval_recall_at_k"] = 0.0
+    return _detector_ids(run)
+
+
 BAITS = {
     "F01": bait_F01_reingest_duplicates,
+    "F02": bait_F02_one_identifier_two_fragments,
     "F03": bait_F03_segmentation_did_nothing,
     "F04": bait_F04_export_lost_documents,
     "F06": bait_F06_chunks_too_small,
@@ -351,10 +402,13 @@ BAITS = {
     "F21": bait_F21_incomparable_scales,
     "F40": bait_F40_one_half_is_absent,
     "F24": bait_F24_reranker_does_not_know_the_language,
+    "F27": bait_F27_the_reranker_costs_an_unknown_amount,
     "F28": bait_F28_reasoning_model_returns_nothing,
     "F29": bait_F29_wrong_number_in_the_citation,
     "F31": bait_F31_answer_from_parametric_knowledge,
     "F32": bait_F32_refusal_calibrated_badly,
+    "F33": bait_F33_a_metric_declares_nothing,
+    "F34": bait_F34_the_run_disagrees_with_its_own_questions,
 }
 
 _CLAIMED = [f for f in FAILURES if f.detection != "none"]

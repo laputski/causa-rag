@@ -216,12 +216,15 @@ FAILURES: tuple[FailureMode, ...] = (
         stage_visible="retrieval",
         severity=Severity(3, 2, 1),
         origin="ours-6",
-        detection="none",
+        detection="detector",
         instrument="platform",
         applies_when=(("A2", ("fixed", "structure_aware", "late_chunking", "semantic")),),
-        not_detected_reason=(
-            "no signal reports a chunk-identifier collision: nothing observes how an identifier was derived"
-        ),
+        # Written as caught by nothing on the reading that catching it would
+        # need to observe how an identifier was derived. It does not: two
+        # fragments carrying one identifier and different text is the
+        # collision itself, and a run already returns both.
+        signals=(Signal("detector", "chunk_id_collision"),),
+        bait="tests/unit/test_atlas_baits.py::test_bait[F02]",
     ),
     FailureMode(
         id="F03",
@@ -620,12 +623,15 @@ FAILURES: tuple[FailureMode, ...] = (
         stage_visible="rerank",
         severity=Severity(1, 2, 3),
         origin="industry",
-        detection="none",
+        detection="detector",
         instrument="platform",
         applies_when=(),
-        not_detected_reason=(
-            "the absence of a stage trace is computed but is not surfaced as a signal"
-        ),
+        # The absence of a whole trace was computed and never surfaced, and
+        # the narrower thing was not computed at all: a trace that is present
+        # and silent about a stage that ran. That is the state the price
+        # hides in, and it is now named.
+        signals=(Signal("detector", "unmeasured_stage_cost"),),
+        bait="tests/unit/test_atlas_baits.py::test_bait[F27]",
     ),
     FailureMode(
         id="F28",
@@ -710,12 +716,15 @@ FAILURES: tuple[FailureMode, ...] = (
         stage_visible="measurement",
         severity=Severity(3, 3, 3),
         origin="ours-5",
-        detection="none",
+        detection="detector",
         instrument="platform",
         applies_when=(),
-        not_detected_reason=(
-            "no metric declares what it computes in a form anything could check against its name"
-        ),
+        # Nothing decides that a name is right. What is reported is the state
+        # in which the question cannot be asked at all, which is the state
+        # every such drift hides in: a number whose definition is declared
+        # nowhere. The declarations live in core/eval/metric_definitions.py.
+        signals=(Signal("detector", "undeclared_metric"),),
+        bait="tests/unit/test_atlas_baits.py::test_bait[F33]",
     ),
     FailureMode(
         id="F34",
@@ -725,12 +734,14 @@ FAILURES: tuple[FailureMode, ...] = (
         stage_visible="measurement",
         severity=Severity(3, 3, 2),
         origin="ours-9",
-        detection="none",
+        detection="detector",
         instrument="platform",
         applies_when=(),
-        not_detected_reason=(
-            "nothing compares what a run wrote with what a read of it returns"
-        ),
+        # Something compares them now, and within one document: every
+        # aggregate is the mean of the values its own questions carry, so a
+        # question lost on the way out moves the aggregate and nothing else.
+        signals=(Signal("detector", "aggregate_disagrees"),),
+        bait="tests/unit/test_atlas_baits.py::test_bait[F34]",
     ),
     FailureMode(
         id="F35",

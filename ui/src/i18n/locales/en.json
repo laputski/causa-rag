@@ -2061,7 +2061,11 @@
       "empty_answers": "Many empty or refused answers",
       "incorrect_refusals": "Refusal decisions are going the wrong way",
       "layer_bottleneck": "A bottleneck in the funnel",
-      "unverified_coverage": "Corpus coverage was not verified"
+      "unverified_coverage": "Corpus coverage was not verified",
+      "undeclared_metric": "A metric carries no definition",
+      "aggregate_disagrees": "The run's numbers are not its questions' numbers",
+      "chunk_id_collision": "One fragment identifier, two fragments",
+      "unmeasured_stage_cost": "A stage ran and reported no time"
     },
     "findingAction": {
       "embedder_unverified": "Read the run's recall against its reference sources: a corpus indexed by a stub model retrieves at chance.",
@@ -2072,7 +2076,11 @@
       "empty_answers": "Check corpus coverage, and whether the model's thinking mode is consuming the num_predict budget.",
       "incorrect_refusals": "Read each question's answerability class (core.eval.answerability). A question with no reference sources is out of scope and should be refused.",
       "layer_bottleneck": "Open the individual questions carrying this verdict on the run page to see the specific failures and decide what to fix.",
-      "unverified_coverage": "Check that the index for this corpus is reachable, then re-run to get verified classes."
+      "unverified_coverage": "Check that the index for this corpus is reachable, then re-run to get verified classes.",
+      "undeclared_metric": "Declare each metric beside its name, saying what it computes and over which questions, so the name can be checked against it.",
+      "aggregate_disagrees": "Compare what the run wrote with what a read of it returns; a question lost on the way out moves the aggregate and leaves everything else looking correct.",
+      "chunk_id_collision": "Check how the identifier is derived at load time: a source path missing from the derivation collapses fragments of different documents onto one value.",
+      "unmeasured_stage_cost": "Record a duration for every stage the pipeline runs, so its price can be compared with the gain it is kept for."
     },
     "traceGap": {
       "sources": {
