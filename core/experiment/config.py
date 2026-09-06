@@ -41,6 +41,8 @@ _BACKCOMPAT_DEFAULTS: dict[str, Any] = {
     "retrieval_pins_enabled": False,
     "fetch_k": None,
     "rrf_k": None,
+    "graph_weight": None,
+    "hops": None,
 }
 
 
@@ -88,6 +90,20 @@ class ExperimentConfig(BaseModel):
     # the retriever was constructed with, which leaves every historical config
     # hash unchanged (see _BACKCOMPAT_DEFAULTS above).
     rrf_k: int | None = None
+
+    # The two parameters of the graph point, and the only two it has. A graph
+    # pipeline mixes what the graph reached with what the base retriever
+    # found, and `graph_weight` decides how much of the ranking the graph
+    # gets while `hops` decides how far from a matched unit it is allowed to
+    # walk. Neither had a field here, so the graph pipeline could be chosen
+    # and could not be varied: every run of it used whatever the gateway had
+    # constructed at start-up, and no comparison of two graph runs could
+    # differ in anything a person had set.
+    #
+    # None keeps the constructed value, so every historical config hash is
+    # unchanged, the same convention rrf_k above follows.
+    graph_weight: float | None = None
+    hops: int | None = None
 
     # Eval
     dataset_name: str = ""

@@ -25,6 +25,33 @@ if TYPE_CHECKING:
 log = structlog.get_logger()
 
 
+def _rebind_graph(retriever: Any, graph_weight: float | None, hops: int | None) -> Any:
+    """Apply the two parameters the graph point has, or leave it alone.
+
+    They had no fields on the configuration at all, so the graph pipeline
+    could be chosen and could not be varied: every run of it used whatever
+    the gateway constructed at start-up, and two graph runs could not differ
+    in anything a person had set. A pipeline nobody can vary is a pipeline on
+    which no failure can be staged by a setting.
+
+    None means "keep what was constructed", which is what leaves every
+    historical run's configuration hash where it was.
+    """
+    if graph_weight is None and hops is None:
+        return retriever
+    if type(retriever).__name__ != "GraphHybridRetriever":
+        return retriever
+
+    from core.retrieval.graph_hybrid import GraphHybridRetriever
+
+    return GraphHybridRetriever(
+        graph_retriever=retriever._graph,
+        base_retriever=retriever._base,
+        graph_weight=retriever._graph_weight if graph_weight is None else graph_weight,
+        hops=retriever._hops if hops is None else hops,
+    )
+
+
 def _what_actually_ran(pipeline: Any) -> dict[str, Any]:
     """The embedder that queries, and the one whose vectors are searched.
 
@@ -115,6 +142,9 @@ def _rebind_corpus_id(
         return GraphHybridRetriever(
             graph_retriever=retriever._graph,  # shared graph — not rebindable
             base_retriever=_rebind_corpus_id(retriever._base, corpus_id, realm_id, qdrant_cfg, opensearch_cfg),
+            # Carried over, never chosen here: this function binds a corpus and
+            # nothing else, and the two graph parameters are applied by
+            # _rebind_graph below, after this has run.
             graph_weight=retriever._graph_weight, hops=retriever._hops,
         )
 
@@ -621,6 +651,9 @@ class ExperimentRunner:
         # After the corpus rebind, so the merge wrapper is rebuilt
         # around retrievers already bound to the right corpus.
         retriever = _rebind_merge(retriever, config.merge_strategy, config.merge_alpha, config.rrf_k)
+        # After the corpus rebind for the same reason the merge is: the graph
+        # wrapper is rebuilt around a base already bound to the right corpus.
+        retriever = _rebind_graph(retriever, config.graph_weight, config.hops)
         generator = _rebind_generator(base._generator, (config.params or {}).get("model"))
 
         if (config.reranker is None and config.grounding is None and config.route_policy is None

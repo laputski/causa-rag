@@ -5825,6 +5825,32 @@
         }
       }
     },
+    "/pipelines": {
+      "get": {
+        "summary": "Describe Pipelines",
+        "description": "What each pipeline is made of, read off the built objects.\n\nThe new-run form is documented as building itself from the registry, and\nit did for the list of pipelines and for nothing else: the retriever it\nrecorded came from `pipeline_id === 'graph' ? 'graph_hybrid' :\n'qdrant_dense'` and the merge from `pipeline_id === 'hybrid_weighted' ?\n'weighted' : 'rrf'`. A pipeline outside those three names was recorded as\na dense retriever fusing by rank, whatever it actually was, and one of\nthose two fields is applied to the run.\n\nDerived here instead, from the objects the registry holds, so an\narchitecture registered tomorrow describes itself without an edit to the\nform.",
+        "operationId": "describe_pipelines_pipelines_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "type": "object"
+                  },
+                  "type": "object",
+                  "title": "Response Describe Pipelines Pipelines Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/panels": {
       "get": {
         "summary": "Get Panels",

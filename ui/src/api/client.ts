@@ -479,6 +479,13 @@ export interface RegistryEntry {
   [kind: string]: string[]
 }
 
+export interface PipelineDescription {
+  retriever: string
+  /** Empty for a retriever that merges nothing, which is not the same as
+   *  fusing by rank and must not be recorded as it. */
+  merge_strategy: string
+}
+
 export interface Dataset {
   name: string
   version: string
@@ -896,6 +903,9 @@ export const api = {
   // realm_id the form offers another realm's packs' internals.
   registry: (realmId?: string | null) =>
     req<RegistryEntry>(`/registry${realmId ? `?realm_id=${encodeURIComponent(realmId)}` : ''}`),
+  // What each pipeline is made of, read off the objects the server holds.
+  // The new-run form used to derive this from a list of three known names.
+  pipelines: () => req<Record<string, PipelineDescription>>('/pipelines'),
   datasets: {
     list: (realmId?: string | null, sourceRagId?: string | null) => {
       const qs = new URLSearchParams()

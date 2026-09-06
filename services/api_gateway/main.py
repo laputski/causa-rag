@@ -617,6 +617,38 @@ async def get_registry(realm_id: str | None = None) -> dict[str, list[str]]:
     return components_outside_packs(registry, settings_doc.get("active_packs", []))
 
 
+@app.get("/pipelines")
+async def describe_pipelines() -> dict[str, dict[str, str]]:
+    """What each pipeline is made of, read off the built objects.
+
+    The new-run form is documented as building itself from the registry, and
+    it did for the list of pipelines and for nothing else: the retriever it
+    recorded came from `pipeline_id === 'graph' ? 'graph_hybrid' :
+    'qdrant_dense'` and the merge from `pipeline_id === 'hybrid_weighted' ?
+    'weighted' : 'rrf'`. A pipeline outside those three names was recorded as
+    a dense retriever fusing by rank, whatever it actually was, and one of
+    those two fields is applied to the run.
+
+    Derived here instead, from the objects the registry holds, so an
+    architecture registered tomorrow describes itself without an edit to the
+    form.
+    """
+    described: dict[str, dict[str, str]] = {}
+    for pipeline_id in registry.list_all().get("pipeline", []):
+        try:
+            pipeline = registry.resolve("pipeline", pipeline_id)
+        except KeyError:
+            continue
+        retriever = getattr(pipeline, "_retriever", None)
+        described[pipeline_id] = {
+            "retriever": getattr(retriever, "retriever_id", "") or "",
+            # Empty for a retriever that merges nothing, which is not the
+            # same as fusing by rank and must not be recorded as it.
+            "merge_strategy": getattr(retriever, "_merge", "") or "",
+        }
+    return described
+
+
 @app.get("/panels")
 async def get_panels() -> dict[str, str]:
     """Return URLs for third-party UI panels."""

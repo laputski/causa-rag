@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import type { PipelineDescription } from '../api/client'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useTranslation, Trans } from 'react-i18next'
 import GuideLink from '../components/GuideLink'
@@ -100,7 +101,7 @@ function _buildParams(form: Record<string, string>): Record<string, unknown> | u
   return Object.keys(params).length > 0 ? params : undefined
 }
 
-function buildConfig(form: Record<string, string>) {
+function buildConfig(form: Record<string, string>, pipelines: Record<string, PipelineDescription> = {}) {
   // 'Retrieval type' IS pipeline_id directly now — no more deriving it from two
   // separate selects (retriever + merge). That old scheme could never
   // produce 'naive' (the plain select always had a truthy merge value), so
@@ -122,7 +123,11 @@ function buildConfig(form: Record<string, string>) {
     seed: 42,
     chunking_strategy: { kind: 'chunker', component_id: 'fixed' },
     embedder: { kind: 'embedder', component_id: 'bge_m3' },
-    retrievers: [{ kind: 'retriever', component_id: pipeline_id === 'graph' ? 'graph_hybrid' : 'qdrant_dense' }],
+    // Read from what the server holds under this pipeline id, never derived
+    // from the id itself: the old expression named a dense retriever for
+    // every pipeline but the graph one, so a hybrid run was recorded as
+    // dense and any architecture registered later would be too.
+    retrievers: [{ kind: 'retriever', component_id: pipelines[pipeline_id]?.retriever || 'qdrant_dense' }],
     generator: { kind: 'generator', component_id: 'ollama' },
     top_k: parseInt(form.top_k || '5', 10),
     pipeline_id,
@@ -164,13 +169,15 @@ function buildConfig(form: Record<string, string>) {
     return cfg
   }
 
-  // merge_strategy is bookkeeping only (see the design notes) —
-  // _build_pipeline resolves the whole pipeline object by pipeline_id
-  // (hybrid_rrf/hybrid_weighted are two separately pre-built registry
-  // entries), it never reads config.merge_strategy to pick a merge at
-  // request time. Kept in sync with pipeline_id so the record isn't
-  // internally contradictory, not because anything downstream reads it.
-  cfg.merge_strategy = pipeline_id === 'hybrid_weighted' ? 'weighted' : 'rrf'
+  // merge_strategy is not bookkeeping any more, and the comment that said so
+  // outlived the change: `_rebind_merge` applies it, rebuilding the hybrid
+  // wrapper around the same two retrievers. So the old expression, which
+  // wrote 'rrf' for every pipeline but hybrid_weighted, applied rank fusion
+  // to anything new that arrived. Taken from what the pipeline was actually
+  // built with, and omitted when the retriever merges nothing: a dense
+  // pipeline fuses no sources, and 'rrf' would record a fusion it never did.
+  const merge = pipelines[pipeline_id]?.merge_strategy
+  if (merge) cfg.merge_strategy = merge
   cfg.corpus_id = form.corpus_id || 'default'
   // Optional, config-driven steps. Omitted when unset so config_hash
   // stays backward compatible with historical runs.
@@ -360,6 +367,12 @@ export default function NewExperimentPage() {
     queryKey: ['registry', activeRealmId],
     queryFn: () => api.registry(activeRealmId),
   })
+  // What each pipeline is made of. One per process and not per realm, since
+  // the registry is one per process.
+  const { data: pipelines } = useQuery({
+    queryKey: ['pipelines'],
+    queryFn: () => api.pipelines(),
+  })
   const { data: datasets } = useQuery({
     queryKey: ['datasets', activeRealmId],
     queryFn: () => api.datasets.list(activeRealmId),
@@ -510,7 +523,7 @@ export default function NewExperimentPage() {
       // dropdown actually showed. An empty dataset_name makes
       // _load_dataset() degrade to a 5-question stub dataset instead —
       // honest (small, obviously synthetic) rather than silently wrong.
-      const result = await api.experiments.create(buildConfig(form), form.dataset, activeRealmId)
+      const result = await api.experiments.create(buildConfig(form, pipelines ?? {}), form.dataset, activeRealmId)
       setRunId(result.run_id)
       // Navigation now happens from ProgressWidget's onDone once the WS
       // reports the backgrounded run actually finished —
