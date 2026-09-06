@@ -547,6 +547,37 @@ def detect_aggregate_disagrees_with_questions(run: dict[str, Any]) -> Diagnostic
     )
 
 
+def detect_segmentation_did_not_do_what_it_says(run: dict[str, Any]) -> DiagnosticItem | None:
+    """The strategy on the setting is not the strategy that ran.
+
+    A segmentation named for structure that produced none has done exactly
+    what the plain fixed-window strategy does, under another name. Nothing
+    else about the load says so: the fragments are well-formed, the index
+    accepts them, retrieval works, and the setting on the screen still reads
+    `structure_aware`.
+
+    The promise is the strategy's own, checked at load time and recorded on
+    the corpus, because only the strategy knows what its name committed it
+    to. A rule written here would be this module's reading of that name,
+    which is the thing in dispute.
+    """
+    unmet = list((run.get("corpus_manifest") or {}).get("post_conditions_unmet") or [])
+    if not unmet:
+        return None
+    manifest = run.get("corpus_manifest") or {}
+    return DiagnosticItem(
+        id="segmentation_broke_its_promise",
+        severity="error",
+        title="The segmentation did not do what its name says",
+        detail=(
+            f"The corpus was loaded with {manifest.get('chunking_strategy', 'a strategy')!r} "
+            f"and its own check of the result did not pass: {'; '.join(unmet)}."
+        ),
+        action="Load the corpus again with a strategy whose promise its documents can keep, or "
+               "fix what stopped this one keeping it.",
+    )
+
+
 def detect_tuned_on_the_measurement_set(run: dict[str, Any]) -> DiagnosticItem | None:
     """The number is the best of a search over the questions it is measured on.
 
@@ -859,6 +890,7 @@ def run_detectors(run: dict[str, Any]) -> list[DiagnosticItem]:
         detect_chunk_id_collision(run),
         detect_metric_without_grounds(run),
         detect_index_and_query_models_differ(run),
+        detect_segmentation_did_not_do_what_it_says(run),
         detect_tuned_on_the_measurement_set(run),
         detect_fusion_constant_never_varied(run),
         detect_unmeasured_stage_cost(run),

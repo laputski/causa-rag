@@ -22,6 +22,7 @@ import structlog
 
 from adapters.bge_m3 import BgeM3Embedder
 from core.chunking.fixed import FixedChunkingStrategy
+from core.chunking.post_conditions import unmet
 from core.chunking.structure_aware import StructureAwareChunkingStrategy
 from core.interfaces import ChunkingStrategy
 from core.models import Document
@@ -181,12 +182,17 @@ def ingest(
     # "this corpus was reindexed" and "this is a different corpus" are the
     # same absence of a record.
     document_hashes: list[str] = []
+    # Kept so the strategy can be asked, once, whether it did what its name
+    # says. Per document the question is unanswerable: one flat file among
+    # forty is a fact about that file.
+    all_chunks: list[Any] = []
     for path in files:
         doc = _read_file(path, structure_parser_fn=structure_parser_fn)
         chunks = chunker.chunk(doc)
         if not chunks:
             continue
         document_hashes.append(doc.content_hash)
+        all_chunks.extend(chunks)
 
         # Dense
         texts = [c.text for c in chunks]
@@ -240,13 +246,13 @@ def ingest(
         "qdrant_collection": qdrant._collection,
         "opensearch_index": opensearch._index if opensearch else None,
         "manifest": _manifest(embedder, strategy_id, chunk_size, overlap,
-                              document_hashes, total_chunks),
+                              document_hashes, total_chunks, all_chunks),
     }
 
 
 def _manifest(
     embedder: Any, strategy_id: str, chunk_size: int, overlap: int,
-    document_hashes: list[str], chunk_count: int,
+    document_hashes: list[str], chunk_count: int, chunks: list[Any] | None = None,
 ) -> dict[str, Any]:
     """What this index was built from and built by.
 
@@ -277,6 +283,11 @@ def _manifest(
         "documents_digest": hashlib.sha256(
             "".join(sorted(document_hashes)).encode()
         ).hexdigest(),
+        # What the strategy promised about its own output and did not keep.
+        # A strategy named for structure that produced none has done exactly
+        # what the plain fixed-window strategy does, under another name, and
+        # every other trace of that load looks correct.
+        "post_conditions_unmet": unmet(strategy_id, chunks or [], chunk_size),
         "loaded_at": datetime.now(UTC).isoformat(),
     }
 

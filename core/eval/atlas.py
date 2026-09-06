@@ -234,11 +234,21 @@ FAILURES: tuple[FailureMode, ...] = (
         stage_visible="chunking",
         severity=Severity(3, 4, 2),
         origin="ours-8",
-        detection="visible",
+        # Visible in the data until the strategy was asked about its own
+        # output. The two health signals read an index and can say the
+        # structure is absent; neither can say which setting was supposed to
+        # produce it, so the reading was a person's. The third is the
+        # strategy's own promise, checked at load time, and it names the
+        # strategy.
+        detection="detector",
         instrument="platform",
         also_staged_by=("corpus",),
         applies_when=(("A2", ("fixed", "structure_aware", "late_chunking", "semantic")),),
-        signals=(Signal("health", "no_structure"), Signal("health", "some_missing_path"),),
+        signals=(
+            Signal("health", "no_structure"),
+            Signal("health", "some_missing_path"),
+            Signal("detector", "segmentation_broke_its_promise"),
+        ),
         bait="tests/unit/test_atlas_baits.py::test_bait[F03]",
     ),
     FailureMode(

@@ -2079,7 +2079,8 @@
       "metric_without_grounds": "A metric was computed where it has no grounds",
       "index_and_query_models_differ": "The index and the query do not use the same model",
       "tuned_on_the_measurement_set": "The reported number is the best of a search on these same questions",
-      "fusion_constant_never_varied": "The rank-fusion constant has never been anything else"
+      "fusion_constant_never_varied": "The rank-fusion constant has never been anything else",
+      "segmentation_broke_its_promise": "The segmentation did not do what its name says"
     },
     "findingAction": {
       "embedder_unverified": "Read the run's recall against its reference sources: a corpus indexed by a stub model retrieves at chance.",
@@ -2098,7 +2099,8 @@
       "metric_without_grounds": "Read each metric's declared preconditions and stop recording it where they do not hold, so the average is over the questions the number is about.",
       "index_and_query_models_differ": "Query with the model the corpus was indexed by, or load the corpus again with the model the run uses.",
       "tuned_on_the_measurement_set": "Report the number on a question set no configuration was chosen on, or say how many were tried beside it.",
-      "fusion_constant_never_varied": "Run the same configuration once with a different fusion constant and compare, so the value in use is a measured choice."
+      "fusion_constant_never_varied": "Run the same configuration once with a different fusion constant and compare, so the value in use is a measured choice.",
+      "segmentation_broke_its_promise": "Load the corpus again with a strategy whose promise its documents can keep, or fix what stopped this one keeping it."
     },
     "traceGap": {
       "sources": {

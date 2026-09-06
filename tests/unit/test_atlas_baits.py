@@ -326,10 +326,23 @@ def bait_F32_refusal_calibrated_badly() -> set[str]:
 
 
 def bait_F03_segmentation_did_nothing() -> set[str]:
-    """The strategy claimed a tree and produced flat windows: no chunk carries
-    a structural path."""
+    """The strategy claimed a tree and produced flat windows.
+
+    Both halves of what the platform can say about it: the corpus health
+    check reads the index and finds no structural path anywhere, and the
+    load record carries the strategy's own verdict on its own output, which
+    is the earlier of the two and the only one that names the strategy.
+    """
     chunks = [{**c, "structural_path": "root"} for c in clean_chunks()]
-    return _health_ids(chunks)
+    run = clean_run()
+    run["corpus_manifest"] = {
+        "chunking_strategy": "structure_aware",
+        "post_conditions_unmet": [
+            "the headings could not be read, so this load produced the same fragments the "
+            "plain fixed-window strategy would have produced under another name"
+        ],
+    }
+    return _health_ids(chunks) | _detector_ids(run)
 
 
 def bait_F14_model_does_not_cover_the_language() -> set[str]:

@@ -131,3 +131,55 @@ def test_a_precondition_can_actually_fail() -> None:
             assert precondition.holds(run, question) is False, (
                 f"{precondition.says!r} holds even on a payload built to violate it"
             )
+
+
+@pytest.mark.fitness
+def test_every_segmentation_strategy_says_what_it_promises() -> None:
+    """A strategy with no declared promise cannot be caught doing nothing.
+
+    Declared here and not in a rule about names, because only the
+    strategy knows what its name committed it to, and a rule written
+    elsewhere would be somebody's reading of that name.
+    """
+    from core.chunking.post_conditions import PROMISES
+
+    strategies = {
+        path.stem for path in (ROOT / "core" / "chunking").glob("*.py")
+        if path.stem not in ("__init__", "post_conditions")
+    }
+    silent = sorted(strategies - set(PROMISES))
+    assert silent == [], (
+        f"segmentation strategies promising nothing checkable: {silent}. Declare the promise "
+        "in core/chunking/post_conditions.py, or say there why this one makes none."
+    )
+
+
+@pytest.mark.fitness
+def test_every_promise_can_actually_be_broken() -> None:
+    """A promise nothing can breach is a promise nobody is keeping.
+
+    Each is checked against output built to break it, for the same reason
+    the preconditions above are: a check that passes on everything is
+    indistinguishable from a check that has quietly stopped running.
+    """
+    from core.chunking.post_conditions import PROMISES, unmet
+
+    class _Chunk:
+        def __init__(self, text: str, structural_path: str = "document/section[1 A]") -> None:
+            self.text = text
+            self.structural_path = structural_path
+
+    breaches = {
+        "structure_aware": ([_Chunk("prose", "root")] * 4, 0),
+        "fixed": ([_Chunk("x" * 200)] * 4, 100),
+        "sentence": ([_Chunk("a fragment cut off mid")] * 4, 0),
+        "paragraph": ([_Chunk("a fragment cut off mid")] * 4, 0),
+    }
+    for strategy in PROMISES:
+        assert strategy in breaches, (
+            f"{strategy} declares a promise and no way of breaking it is written here"
+        )
+        chunks, size = breaches[strategy]
+        assert unmet(strategy, chunks, size), (
+            f"{strategy}'s promise holds even on output built to break it"
+        )

@@ -37,11 +37,15 @@ beforeEach(() => {
 
 describe('Comparison: the order runs are offered in', () => {
   it('offers the newest run first in both pickers', async () => {
-    renderWithRealm(<ComparisonPage />, '/compare', 'demo')
+    // Queried inside this render and never through the whole document: two
+    // tests in one file leave two DOMs behind, and a global query answered
+    // with the other one's markup.
+    const { container } = renderWithRealm(<ComparisonPage />, '/compare', 'demo')
 
     // Both pickers, by role: the labels come from the translation file and
     // this is about the order, not about the wording.
-    const selects = await screen.findAllByRole('combobox')
+    await screen.findAllByRole('combobox')
+    const selects = Array.from(container.querySelectorAll('select'))
     expect(selects).toHaveLength(2)
     for (const select of selects) {
       const values = within(select)
@@ -60,9 +64,10 @@ describe('Comparison: the order runs are offered in', () => {
       { run_id: 'r-none', name: 'Undated', config_hash: 'h', aggregate_metrics: {}, started_at: '', finished_at: '', n_questions: 4, dataset_name: 'd.jsonl' },
       { ...EXPERIMENTS[2] },
     ])
-    renderWithRealm(<ComparisonPage />, '/compare', 'demo')
+    const { container } = renderWithRealm(<ComparisonPage />, '/compare', 'demo')
 
-    const [select] = await screen.findAllByRole('combobox')
+    await screen.findAllByRole('combobox')
+    const [select] = Array.from(container.querySelectorAll('select'))
     const values = within(select)
       .getAllByRole('option')
       .map(option => (option as HTMLOptionElement).value)

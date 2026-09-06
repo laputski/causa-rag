@@ -145,3 +145,39 @@ def test_the_registry_record_reads_the_embedder_off_what_indexed() -> None:
     text = source.read_text(encoding="utf-8")
     assert '"embedder_id": "bge_m3"' not in text
     assert 'manifest.get("embedder_id"' in text
+
+
+def test_the_manifest_carries_the_strategy_s_own_verdict_on_its_output() -> None:
+    """A strategy named for structure that produced none has done exactly
+    what the plain fixed-window strategy does, under another name, and every
+    other trace of that load looks correct."""
+    from adapters.bge_m3 import BgeM3Embedder
+    from core.chunking.structure_aware import StructureAwareChunkingStrategy
+    from core.models import Document
+    from services.ingestion.cli import _manifest
+
+    flat = Document(doc_id="d", source="d.md",
+                    content="Prose carrying no heading at all. " * 60, metadata={})
+    chunks = StructureAwareChunkingStrategy().chunk(flat)
+    manifest = _manifest(BgeM3Embedder(use_real_model=False), "structure_aware", 512, 64,
+                         ["h"], len(chunks), chunks)
+    assert manifest["post_conditions_unmet"], manifest
+
+
+def test_a_structured_corpus_keeps_the_promise() -> None:
+    """The half that rots. A check reporting a broken promise on every load
+    would say nothing about any of them."""
+    from adapters.bge_m3 import BgeM3Embedder
+    from core.chunking.structure_aware import StructureAwareChunkingStrategy
+    from core.models import Document
+    from services.ingestion.cli import _manifest
+
+    structured = Document(
+        doc_id="d", source="d.md", metadata={},
+        content="# One\n\nProse under the first heading. " * 10
+                + "\n\n# Two\n\nProse under the second heading. " * 10,
+    )
+    chunks = StructureAwareChunkingStrategy().chunk(structured)
+    manifest = _manifest(BgeM3Embedder(use_real_model=False), "structure_aware", 512, 64,
+                         ["h"], len(chunks), chunks)
+    assert manifest["post_conditions_unmet"] == [], manifest
