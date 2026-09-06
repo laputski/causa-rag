@@ -7,6 +7,12 @@ handed out. But the code under test derives a second name from it
 (`{name}__{embedder}` in Qdrant, `rag__{name}` in OpenSearch), and nobody
 deleted the derived one.
 """
+import pytest
+
+# Both tests here reach Qdrant and OpenSearch, and the file carried no marker,
+# so the default options selected it wherever the stack was down and the
+# fixtures skipped instead. A skip nobody reads is not a pass.
+pytestmark = pytest.mark.integration
 
 
 # @lat: [[navigation#Navigation and the patterns shared across pages#Fixtures clean up by prefix, not by exact name]]

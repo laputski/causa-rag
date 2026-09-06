@@ -145,7 +145,15 @@ testpaths = ["tests"]
 # their fixtures skip. Naming the exclusion makes the default honest. A `-m` on
 # the command line overrides this one (last -m wins), so `make test-int` and
 # `make test-eval` keep working unchanged.
-addopts = ["-m", "not integration and not deepeval and not e2e"]
+#
+# `proving_ground` was declared below and left out of this line, and a fresh
+# clone in CI collected all twenty-eight of its tests. Twenty-six skipped on
+# the fixture that checks the stack, which reads as passing, and the two that
+# reach the index directly failed with a refused connection. The suite needs
+# the whole stack, the real embedding model and the loaded indexes, so it is
+# deselected here like the others; `make test-proving-ground` passes its own
+# `-m` and is unaffected.
+addopts = ["-m", "not integration and not deepeval and not e2e and not proving_ground"]
 markers = [
     "deepeval: tests against real pipeline + Ollama LLM judge (slow, needs Ollama+Qdrant)",
     "integration: tests requiring live external services (Qdrant/Ollama/MongoDB/etc.)",

@@ -35,3 +35,34 @@ def test_every_test_file_imports() -> None:
         "the test tree does not collect:\n"
         + (result.stdout or "")[-3000:] + (result.stderr or "")[-2000:]
     )
+
+
+@pytest.mark.fitness
+def test_the_suites_that_need_the_stack_are_not_selected_by_default() -> None:
+    """A suite whose fixtures skip when the stack is down reads as passing.
+
+    `proving_ground` was declared as a marker and left out of the default
+    deselection, so a fresh clone in CI collected all twenty-eight of its
+    tests: twenty-six skipped on the fixture that checks the stack, which
+    nobody reads, and the two that reach the index directly failed with a
+    refused connection. The build went red for the honest reason and the
+    twenty-six were green for a dishonest one.
+
+    This checks the selection, not the fixtures. A marked suite must not be
+    collected when pytest runs with the options a person gets by typing
+    `pytest`.
+    """
+    for suite in ("tests/proving_ground", "tests/e2e", "tests/integration"):
+        if not (_ROOT / suite).is_dir():
+            continue
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", suite, "--collect-only", "-q",
+             "-p", "no:cacheprovider"],
+            cwd=_ROOT, capture_output=True, text=True, timeout=300,
+        )
+        selected = [line for line in (result.stdout or "").splitlines()
+                    if line.startswith(f"{suite}/")]
+        assert selected == [], (
+            f"{suite} is selected by the default options, so it runs wherever the stack "
+            f"is not up: {selected[:3]}"
+        )
