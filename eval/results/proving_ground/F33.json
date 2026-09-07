@@ -1,0 +1,19 @@
+{
+  "failure_id": "F33",
+  "recorded_at": "2026-09-07T06:52:06.125439+00:00",
+  "reproduced": true,
+  "claim": "a metric added to a real run with no declaration of what it computes",
+  "measured": {
+    "metrics": [
+      "answer_precision",
+      "pre_rerank_recall_at_k",
+      "retrieval_average_precision",
+      "retrieval_precision_at_k",
+      "retrieval_recall_at_k"
+    ],
+    "signals": [
+      "detector:undeclared_metric"
+    ],
+    "signals_on_the_control": []
+  }
+}

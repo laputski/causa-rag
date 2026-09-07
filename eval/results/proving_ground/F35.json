@@ -1,0 +1,13 @@
+{
+  "failure_id": "F35",
+  "recorded_at": "2026-09-07T06:52:06.135356+00:00",
+  "reproduced": true,
+  "claim": "a real run's retrieval metrics kept on questions with nothing to retrieve",
+  "measured": {
+    "questions": 19,
+    "signals": [
+      "detector:metric_without_grounds"
+    ],
+    "signals_on_the_control": []
+  }
+}

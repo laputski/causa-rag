@@ -96,7 +96,7 @@ ALLOWED_CORPUS_IDS = {
     # guard asks for that, and `base-ru-flat` is on the list for the same
     # reason although the pattern below cannot see it: it is passed as a
     # positional argument and never as a `corpus_id=` field.
-    "base-ru-flat", "base-ru-changing", "base-ru-mismatched",
+    "base-ru-flat", "base-ru-changing", "base-ru-mismatched", "base-ru-stuffed",
 }
 
 # A dotted lowerCamel path is an i18n key and not an id: `corpusId:

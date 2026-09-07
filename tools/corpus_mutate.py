@@ -340,6 +340,48 @@ def _insert_under_every_heading(text: str, phrase: str) -> str:
     return "\n".join(out)
 
 
+def _stuff_a_document_with_the_corpus_own_words(corpus: Corpus) -> Corpus:
+    """Add one document that repeats the corpus's commonest words and says
+    nothing.
+
+    What a keyword index rewards and a reader would throw away: a page of
+    boilerplate, an index, a glossary of headings, a table of contents pasted
+    into a document of its own. It carries every word a question is likely to
+    use and none of the meaning, so lexical search ranks it near the top of
+    almost every query while semantic search leaves it where it belongs.
+
+    The words come from the corpus and are never written here, for the same
+    reason the repeated phrase is lifted and never composed: a word chosen
+    by this module is a word in this module's language, and the questions are
+    asked in the corpus's.
+    """
+    words = _commonest_words(corpus, count=12)
+    if not words:
+        return dict(corpus)
+    filler = " ".join(words)
+    out = dict(corpus)
+    # Numbered past the end so it never displaces a document a question
+    # refers to, and so the corpus's own numbering stays a run without gaps.
+    name = f"{len(corpus) + 1:02d}.md"
+    out[name] = (
+        f"# {len(corpus) + 1} Указатель терминов\n\n"
+        + "\n\n".join(f"{filler}." for _ in range(12))
+        + "\n"
+    )
+    return out
+
+
+def _commonest_words(corpus: Corpus, count: int) -> list[str]:
+    """The corpus's own frequent content words, longest first among ties."""
+    from collections import Counter
+
+    seen: Counter[str] = Counter()
+    for text in corpus.values():
+        for word in re.findall(r"[^\W\d_]{6,}", text.lower()):
+            seen[word] += 1
+    return [word for word, _ in seen.most_common(count)]
+
+
 DEFECTS: tuple[Defect, ...] = (
     Defect("flatten_headings",
            "no document carries a heading, so nothing can build a structural tree",
@@ -363,6 +405,9 @@ DEFECTS: tuple[Defect, ...] = (
     Defect("add_a_second_language",
            "documents of a second language sit beside the first",
            ("F14", "F24"), _add_a_second_language),
+    Defect("stuff_a_document_with_the_corpus_own_words",
+           "one added document repeats the corpus's commonest words and says nothing",
+           ("F17",), _stuff_a_document_with_the_corpus_own_words),
     Defect("repeat_a_phrase_in_every_document",
            "one ordinary sentence sits under every heading, as a template would",
            ("F41",), _repeat_a_phrase_in_every_document,

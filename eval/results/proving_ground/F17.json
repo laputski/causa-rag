@@ -1,0 +1,15 @@
+{
+  "failure_id": "F17",
+  "recorded_at": "2026-09-07T06:52:15.187917+00:00",
+  "reproduced": false,
+  "claim": "not staged: the document is found by both halves, so the merge is balanced and the signal the entry names reads only which half a fragment came from",
+  "measured": {
+    "recall_control": 1.0,
+    "recall_stuffed": 0.6470588235294118,
+    "from_the_lexical_half_alone_control": 0.0,
+    "from_the_lexical_half_alone_stuffed": 0.0,
+    "signals_stuffed": [
+      "detector:layer_bottleneck"
+    ]
+  }
+}

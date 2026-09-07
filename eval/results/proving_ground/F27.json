@@ -1,0 +1,13 @@
+{
+  "failure_id": "F27",
+  "recorded_at": "2026-09-07T06:52:14.472908+00:00",
+  "reproduced": true,
+  "claim": "a real run whose reranker ran and reported no time",
+  "measured": {
+    "questions_with_a_trace": 19,
+    "signals": [
+      "detector:unmeasured_stage_cost"
+    ],
+    "signals_on_the_control": []
+  }
+}

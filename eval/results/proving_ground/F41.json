@@ -1,6 +1,7 @@
 {
   "failure_id": "F41",
-  "recorded_at": "2026-09-07T05:29:37.020654+00:00",
+  "recorded_at": "2026-09-07T06:52:22.199353+00:00",
+  "reproduced": true,
   "claim": "one sentence under every heading, and the link step produced nothing",
   "measured": {
     "units": 220,

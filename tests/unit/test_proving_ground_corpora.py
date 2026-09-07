@@ -45,6 +45,11 @@ PROVOKES = {
     # expectation here is silence, and the pair that proves the defect lives
     # in tests/proving_ground against a loaded graph.
     "repeat_a_phrase_in_every_document": None,
+    # None as well, and for the same kind of reason. This one adds a document
+    # of ordinary words, so nothing about the corpus on disk is malformed:
+    # every length, number and heading is in order, and what it does is to a
+    # lexical index. The pair that proves it runs a hybrid retrieval.
+    "stuff_a_document_with_the_corpus_own_words": None,
 }
 
 

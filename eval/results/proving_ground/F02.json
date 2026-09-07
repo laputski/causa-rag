@@ -1,0 +1,13 @@
+{
+  "failure_id": "F02",
+  "recorded_at": "2026-09-07T06:52:06.150973+00:00",
+  "reproduced": true,
+  "claim": "two fragments of a real run under one identifier",
+  "measured": {
+    "questions_affected": 19,
+    "signals": [
+      "detector:chunk_id_collision"
+    ],
+    "signals_on_the_control": []
+  }
+}

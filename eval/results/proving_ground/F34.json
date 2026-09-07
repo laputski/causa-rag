@@ -1,0 +1,14 @@
+{
+  "failure_id": "F34",
+  "recorded_at": "2026-09-07T06:52:06.115215+00:00",
+  "reproduced": true,
+  "claim": "a question lost on the way out of a real run, and its numbers moved",
+  "measured": {
+    "questions_before": 19,
+    "questions_after": 18,
+    "signals": [
+      "detector:aggregate_disagrees"
+    ],
+    "signals_on_the_control": []
+  }
+}
