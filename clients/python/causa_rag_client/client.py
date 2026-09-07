@@ -160,6 +160,7 @@ class RagPlatformClient:
         request_template: dict[str, Any] | None = None,
         response_mapping: dict[str, str] | None = None,
         supported_params: list[str] | None = None,
+        coordinates: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Registers an external RAG (mirrors the "Resources and RAG endpoints"
         manual form) — POST /external-rags. Returns the saved record,
@@ -182,6 +183,20 @@ class RagPlatformClient:
         `["fetch_k", "temperature"]`. Declared here, not probed, because
         whether a knob had any effect isn't observable from a single test()
         call; an un-declared key is simply never expected to do anything.
+
+        `coordinates` declares where this system sits in the space of
+        architectures, as {dimension code: value}: `{"C3": "rrf", "D1":
+        "cross_encoder"}` for a standard hybrid. Declared for the same reason
+        as the line above: no probe can see whether the thing on the other end
+        fuses two sources.
+
+        It decides which entries of the failure atlas can occur in this system
+        at all, so a run against it is diagnosed against the failures its own
+        shape admits. Omit it and the atlas can say only what it says about
+        every system, which is the honest answer for one nobody has described.
+        A code or value the published schema does not hold is refused at
+        registration: stored unchecked it would match no entry, and the system
+        would read as one in which no failure can happen.
         """
         return self._post(
             "/external-rags",
@@ -195,6 +210,7 @@ class RagPlatformClient:
                 "request_template": request_template,
                 "response_mapping": response_mapping,
                 "supported_params": supported_params or [],
+                "coordinates": coordinates or {},
             },
         )
 

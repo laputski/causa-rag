@@ -197,6 +197,29 @@ actually read at registration:
 client.register_rag(name="my_rag", url="...", supported_params=["fetch_k", "temperature"])
 ```
 
+### Where your system sits
+
+The platform diagnoses a run against the failures your architecture admits,
+and half its catalogue cannot occur in a dense-only system while a different
+half cannot occur in a graph one. Which half is yours is decided by
+coordinates, and no probe can see them: no request's answer says whether the
+thing on the other end fuses two sources. So you declare them, the same way
+you declare the knobs you read.
+
+```python
+client.register_rag(
+    name="my_rag", url="...",
+    coordinates={"A5": "dense_single", "C3": "rrf", "D1": "cross_encoder"},
+)
+```
+
+The codes and their values come from the published schema at
+[ragworld.org](https://ragworld.org); the platform keeps a verified copy and
+refuses a code or value that does not resolve in it, because a coordinate
+stored unchecked matches no entry and would make your system read as one in
+which no failure can happen. Declaring nothing is allowed and means what it
+says: the atlas can then tell you only what it tells every system.
+
 The platform assumes nothing about an undeclared key. It passes `params` through
 as given, and the interpretation is entirely yours.
 

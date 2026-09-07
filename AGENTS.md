@@ -118,6 +118,24 @@ parity check had not noticed, because the keys were all present.
 policy): implement the protocol in `core/`, write the adapter in `adapters/`,
 register it in `services/api_gateway/main.py`, add a contract test.
 
+**An architecture** is not a component and takes five parts, and the first two
+cost no code. *Find its point*: the coordinates come from the published schema
+the neighbouring project keeps, and if the architecture is not there it is
+added there and not here. *Ask what applies*: `python3 -m tools.atlas_report
+--point <id>` prints which catalogue entries can occur in it, which
+coordinates of the point no entry speaks about, and how many applicable
+entries still carry a scope caveat, so the gap is visible before the work
+starts. *Make the platform run it*: a protocol in `core/interfaces.py` if none
+fits, the adapter and its stub, the registration, and the parameters it varies
+by, which means fields in `core/experiment/config.py` **and** their
+application in `core/experiment/runner.py`. A field accepted and never applied
+is the failure this platform sells the detection of, and five of them lived
+here. *Make the platform speak about it*: entries for the coordinates nothing
+covers, each with its bait, and applicability on the signals that cannot say
+anything there. *Stage it*: a corpus, a golden set and a configuration in the
+proving ground, then the level-B pairs. Until those, an entry's state is "not
+staged", which is neither caught nor uncaught.
+
 **A domain pack**: a directory with `pack.yaml`, discovered by scan. It
 contributes structure parsers, answer masks, refusal policies and error
 taxonomies for one subject area. A pack carries one subject area's vocabulary in

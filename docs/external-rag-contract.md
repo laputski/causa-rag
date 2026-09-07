@@ -356,9 +356,24 @@ curl -X POST http://localhost:8081/external-rags \
     "name": "my_rag",
     "url": "http://localhost:8002/platform/query",
     "retrieve_endpoint": "http://localhost:8002/platform/retrieve",
-    "supported_params": ["prompt_version"]
+    "supported_params": ["prompt_version"],
+    "coordinates": {"A5": "dense_single", "C3": "rrf", "D1": "cross_encoder"}
   }'
 ```
+
+`coordinates` says where your system sits in the space of architectures, as
+`{dimension code: value}`. It decides which entries of the failure atlas can
+occur in your system at all, so a run against it is diagnosed against the
+failures its own shape admits and never against every failure known. Like
+`supported_params`, it is declared and never probed: no request's answer says
+whether the thing on the other end fuses two sources.
+
+The codes and values come from the schema published at
+[ragworld.org](https://ragworld.org). The platform keeps a verified copy and
+answers 400 for a code or value that does not resolve in it: a coordinate
+stored unchecked matches no entry, and the system would read as one in which
+no failure can happen. Omit the field to declare nothing, which is honest and
+leaves the atlas saying only what it says about every system.
 
 Then upload golden questions (`POST /datasets`) and start a run
 (`POST /experiments`, with `external_rag_id` set to the id the registration

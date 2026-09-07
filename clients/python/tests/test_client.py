@@ -356,3 +356,38 @@ def test_error_response_raises_rag_platform_error_with_detail():
     client = _client(handler)
     with pytest.raises(RagPlatformError, match="Run 'nope' not found"):
         client.get_results("nope")
+
+
+def test_register_rag_sends_the_coordinates_it_was_given(monkeypatch):
+    """Where a system sits decides which failures the atlas can say occur in
+    it, and no probe can see it, so the registrant declares it."""
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/external-rag-spec":
+            return _spec_response()
+        calls.append(json.loads(request.content))
+        return httpx.Response(201, json={"id": "abc123"})
+
+    client = _client(handler)
+    client.register_rag("My RAG", "https://rag.example/query",
+                        coordinates={"C3": "rrf", "D1": "cross_encoder"})
+
+    assert calls[0]["coordinates"] == {"C3": "rrf", "D1": "cross_encoder"}
+
+
+def test_register_rag_declares_no_coordinates_when_given_none(monkeypatch):
+    """An empty declaration is an answer: the atlas then says only what it
+    says about every system, which is honest for one nobody described."""
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/external-rag-spec":
+            return _spec_response()
+        calls.append(json.loads(request.content))
+        return httpx.Response(201, json={"id": "abc123"})
+
+    client = _client(handler)
+    client.register_rag("My RAG", "https://rag.example/query")
+
+    assert calls[0]["coordinates"] == {}
