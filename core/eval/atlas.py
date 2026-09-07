@@ -704,7 +704,15 @@ FAILURES: tuple[FailureMode, ...] = (
         severity=Severity(3, 3, 3),
         origin="ours-11",
         detection="detector",
+        # The server prints the wrong number, and the corpus decides whether
+        # there is a number to print. Staging it settled that: only the
+        # top-level heading of each document carries one, retrieval returns
+        # subsections, and twenty-one of ninety-five returned labels had a
+        # number at all, so a server moving every citation scored like its
+        # control. With every subsection numbered the same server drops the
+        # coverage by half. Both halves are needed and only one of them lies.
         instrument="faulty_rag",
+        also_staged_by=("corpus",),
         applies_when=(("E3", ("document_level", "fragment_level", "claim_level")),),
         signals=(Signal("metric", "citation_number_coverage"),),
         bait="tests/unit/test_atlas_baits.py::test_bait[F29]",

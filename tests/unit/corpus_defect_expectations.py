@@ -62,4 +62,9 @@ PROVOKES: dict[str, str | None] = {
     # heading where it was. What the sentence stages is measured on the index
     # and depends on the corpus: on a small one of short sections, nothing.
     "hide_a_code_in_one_document": None,
+    # None, and this one is not a defect of the documents at all: it is what a
+    # neighbouring failure needs in order to be observable, which is a label a
+    # citation can name. Numbering a subsection breaks nothing about a corpus,
+    # which is why the checks here have to stay silent about it.
+    "number_every_subsection_heading": None,
 }

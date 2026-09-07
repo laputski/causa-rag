@@ -97,51 +97,118 @@ def test_F18_a_selection_of_one_loses_what_ranked_second(
            recall_control=recall(control), recall_broken=recall(broken))
 
 
-def test_one_half_deciding_is_not_stageable_by_a_setting(
-    embedder: Any, control: dict[str, Any]
+def test_F21_the_whole_weight_on_one_half_leaves_the_other_contributing_nothing(
+    embedder: Any,
 ) -> None:
-    """Not staged, which is a third state and not a signal that failed.
+    """One half deciding the merge, staged by the setting that decides it.
 
-    The signal reads where each chunk came from, so it needs the two halves to
-    disagree about what to return. On this corpus they agree almost entirely:
-    measured on the healthy half, sixty of seventy-five retrieved sources carry
-    both a dense and a lexical score. Weighting the merge onto one half changes
-    how the agreed set is ordered and not which chunks it contains, so nothing
-    for the signal to see is created.
+    Recorded twice as a blocker before this, and each reason was true of the
+    corpus it was measured on. The first said the corpus was too small, which
+    measuring on one of twice the size disproved. The second said the whole
+    weight on one half moves the order of the merged list and not its
+    membership, and on two hundred and twenty fragments that is what happens:
+    the two halves return nearly the same twenty candidates, so re-weighting
+    reorders an agreed set.
 
-    Filed as a measured blocker and not skipped, so the report can tell an
-    entry somebody measured from one nobody tried.
+    On three thousand fragments they stop agreeing. With the whole weight on
+    the semantic half it supplies about three quarters of the context on its
+    own and the keyword half supplies nothing of its own at all, against
+    roughly thirty and fifteen per cent when the weight is even. The half
+    being paid for has stopped deciding anything.
 
-    This passed once, before the two halves were able to recognise a chunk as
-    one chunk at all. It was reading a merge of two disjoint lists, where every
-    chunk had exactly one provenance by construction, so it was evidence about
-    a defect and not about the distortion under test.
-
-    Staging it needs a corpus large enough that the candidate window does not
-    cover it, and questions whose phrasing one half misses. Recorded here as an
-    open gap, so it does not sit as a red test somebody would learn to ignore.
+    The signal the entry names stays silent, and this pair measures why rather
+    than asserting it. Its threshold is four fifths of the context from one
+    half alone, and the deciding half's own share stops at about three
+    quarters at every window size tried, because the remaining quarter is what
+    the two halves agreed on. Lowering the threshold is not the fix: measured
+    over the runs stored here, a healthy small-corpus run has the keyword half
+    contributing nothing of its own too, agreeing with the semantic half on
+    fifty fragments of fifty-seven, so a rule reading "nothing of its own" as
+    idleness reports five healthy runs as broken. That was written, measured
+    and withdrawn.
     """
-    broken = _distorted(embedder, "let_one_half_decide")
-    merged = [s for q in broken["question_results"] for s in (q.get("pre_rerank_source_refs") or [])]
-    dense_only = [s for s in merged
-                  if s.get("dense_score", 0) > 0 and not s.get("sparse_score", 0)]
-    share = len(dense_only) / len(merged)
-    assert share < 0.8, (
-        "one half now supplies the merged list, so this failure is stageable here after all"
+    from adapters.opensearch import OpenSearchRetriever
+    from adapters.qdrant import QdrantRetriever
+    from core.retrieval.hybrid import HybridRetriever
+    from tests.proving_ground.conftest import _index_exists
+
+    corpus, strategy, language = "miracl-ru-coded", "fixed", "ru_be"
+    if not _index_exists(corpus, strategy, embedder.embedder_id):
+        pytest.skip(
+            f"NOT RUN: no index for {corpus!r}, which this pair needs because the base corpus "
+            "is too small for the two halves to disagree. Build and load it with "
+            "`python3 -m tools.corpus_mutate corpus/miracl-ru "
+            f"--defect hide_a_code_in_one_document --out /tmp/{corpus} --limit 1500` and "
+            f"`USE_REAL_BGE_M3=true python3 -m services.ingestion.cli ingest /tmp/{corpus} "
+            f"--strategy {strategy} --corpus-id {corpus} --language {language} "
+            "--realm-id proving-ground`."
+        )
+
+    import json
+    import pathlib
+
+    dense = QdrantRetriever(host="localhost", port=6333, strategy_id=strategy,
+                            embedder_id=embedder.embedder_id, corpus_id=corpus,
+                            realm_id="proving-ground")
+    sparse = OpenSearchRetriever(host="localhost", port=9200, strategy_id=strategy,
+                                 corpus_id=corpus, realm_id="proving-ground", language=language)
+    questions = [json.loads(line)["question"] for line
+                 in pathlib.Path("eval/golden/miracl-ru.v1.fast.jsonl")
+                 .read_text(encoding="utf-8").splitlines() if line.strip()][:40]
+
+    def shares(alpha: float, window: int = 5) -> dict[str, float]:
+        merge = HybridRetriever(dense_retriever=dense, sparse_retriever=sparse,
+                                embedder=embedder, merge="weighted", alpha=alpha)
+        counted = {"semantic only": 0, "keyword only": 0, "both": 0}
+        for question in questions:
+            vector = embedder.embed([question])[0]
+            fetch = max(window * 2, 20)
+            by_meaning = {h.chunk.chunk_id
+                          for h in dense.retrieve(query=question, k=fetch, query_vector=vector)}
+            by_words = {h.chunk.chunk_id for h in sparse.retrieve(query=question, k=fetch)}
+            for hit in merge.retrieve(query=question, k=window, query_vector=vector):
+                where = hit.chunk.chunk_id
+                if where in by_meaning and where in by_words:
+                    counted["both"] += 1
+                elif where in by_meaning:
+                    counted["semantic only"] += 1
+                elif where in by_words:
+                    counted["keyword only"] += 1
+        total = sum(counted.values())
+        assert total, "the merge returned nothing, so this measures nothing"
+        return {name: round(n / total, 3) for name, n in counted.items()}
+
+    even = shares(0.5)
+    all_on_one = shares(1.0)
+    assert all_on_one["keyword only"] == 0.0, (
+        f"the keyword half still contributes fragments of its own with no weight at all: "
+        f"{all_on_one}"
     )
-    # Filed and not skipped. A skip says nothing to the report, so an entry
-    # whose blocker somebody measured looked exactly like one nobody had
-    # tried, which is the difference the third state exists to draw.
-    record("F21", "not staged by a setting: the signal reads which half supplied each chunk, "
-                  "and putting the whole weight on one half moves the order of the merged "
-                  "list without moving its membership",
-           reproduced=False,
-           from_the_semantic_half_alone=len(dense_only), merged=len(merged),
-           share=round(share, 3), the_signal_s_threshold=0.8,
-           staged_instead_by="a load: see test_level_b_ingest.py, where a lexical index that "
-                             "was never built leaves one half supplying every chunk",
-           first_reason_recorded_here="the size of the corpus, which measuring on one of "
-                                      "twice the size disproved")
+    assert all_on_one["semantic only"] > even["semantic only"] * 2, (
+        f"the weight changed nothing about which fragments reach the answer: {even} against "
+        f"{all_on_one}, so this is the membership finding the earlier blocker recorded"
+    )
+    assert even["keyword only"] > 0.05, (
+        f"the keyword half contributes nothing of its own on an even weighting either: {even}, "
+        "so this corpus cannot show the difference and the blocker stands"
+    )
+    assert all_on_one["semantic only"] < 0.8, (
+        f"the deciding half's own share reached {all_on_one['semantic only']}, so the signal "
+        "the entry names does fire and the entry should say it is caught"
+    )
+
+    record("F21", "with the whole weight on one half it supplies three quarters of the context "
+                  "on its own and the other supplies nothing of its own, and the named signal "
+                  "stays under its threshold",
+           corpus=corpus, questions=len(questions), window=5,
+           even_weighting=even, whole_weight_on_the_semantic_half=all_on_one,
+           the_signals_threshold=0.8,
+           why_it_stays_silent="a quarter of the context is what the two halves agreed on, so "
+                               "the deciding half's own share stops at about three quarters at "
+                               "every window size tried",
+           lowering_it_was_tried="a rule reading 'nothing of its own' as idleness reports five "
+                                 "healthy stored runs as broken, one of them agreeing on fifty "
+                                 "fragments of fifty-seven")
 
 
 def test_F22_pinning_the_fusion_constant_changes_the_order_and_nothing_speaks(

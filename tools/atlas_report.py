@@ -106,9 +106,14 @@ def render(point_name: str) -> str:
     lines += ["", "  " + ", ".join(f"{v} {k}" for k, v in sorted(counts.items()))]
 
     staged = sum(1 for r in table if r["staged"])
+    # The trailing clause is about the rows that were not reproduced, so it is
+    # printed only while there are some. Left unconditional, a report of a
+    # point where every row has been run said "every other row's state rests
+    # on a fixture" about no rows at all.
     lines.append(
-        f"  {staged} of {len(table)} reproduced on the proving ground: every other row's "
-        "state rests on a fixture, not on a run"
+        f"  {staged} of {len(table)} reproduced on the proving ground"
+        + (": every other row's state rests on a fixture, not on a run"
+           if staged < len(table) else ", and none of them on a fixture alone")
     )
 
     shared = [r for r in table if r["shares_with"]]

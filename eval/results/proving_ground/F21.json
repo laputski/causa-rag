@@ -1,14 +1,24 @@
 {
   "failure_id": "F21",
-  "recorded_at": "2026-09-07T19:30:49.052222+00:00",
-  "reproduced": false,
-  "claim": "not staged by a setting: the signal reads which half supplied each chunk, and putting the whole weight on one half moves the order of the merged list without moving its membership",
+  "recorded_at": "2026-09-07T20:47:41.513077+00:00",
+  "reproduced": true,
+  "claim": "with the whole weight on one half it supplies three quarters of the context on its own and the other supplies nothing of its own, and the named signal stays under its threshold",
   "measured": {
-    "from_the_semantic_half_alone": 417,
-    "merged": 950,
-    "share": 0.439,
-    "the_signal_s_threshold": 0.8,
-    "staged_instead_by": "a load: see test_level_b_ingest.py, where a lexical index that was never built leaves one half supplying every chunk",
-    "first_reason_recorded_here": "the size of the corpus, which measuring on one of twice the size disproved"
+    "corpus": "miracl-ru-coded",
+    "questions": 40,
+    "window": 5,
+    "even_weighting": {
+      "semantic only": 0.295,
+      "keyword only": 0.145,
+      "both": 0.56
+    },
+    "whole_weight_on_the_semantic_half": {
+      "semantic only": 0.66,
+      "keyword only": 0.0,
+      "both": 0.34
+    },
+    "the_signals_threshold": 0.8,
+    "why_it_stays_silent": "a quarter of the context is what the two halves agreed on, so the deciding half's own share stops at about three quarters at every window size tried",
+    "lowering_it_was_tried": "a rule reading 'nothing of its own' as idleness reports five healthy stored runs as broken, one of them agreeing on fifty fragments of fifty-seven"
   }
 }

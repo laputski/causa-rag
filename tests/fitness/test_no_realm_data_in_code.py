@@ -97,6 +97,14 @@ ALLOWED_CORPUS_IDS = {
     # reason although the pattern below cannot see it: it is passed as a
     # positional argument and never as a `corpus_id=` field.
     "base-ru-flat", "base-ru-changing", "base-ru-mismatched", "base-ru-stuffed",
+    # And the ones the later pairs load: sections cut in two, a section loaded
+    # whole past the embedding model's window and the same one cut small,
+    # every subsection numbered so a citation has a number to name, and a
+    # slice of the benchmark this repository ships with a designation written
+    # into one passage of it. Listed whether or not the pattern below can see
+    # them, because a reader of this list wants the whole set.
+    "base-ru-split", "base-ru-window-split", "base-ru-window-whole",
+    "base-ru-numbered", "miracl-ru-coded",
 }
 
 # A dotted lowerCamel path is an i18n key and not an id: `corpusId:

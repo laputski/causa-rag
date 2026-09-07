@@ -1,6 +1,6 @@
 {
   "failure_id": "F38",
-  "recorded_at": "2026-09-07T19:38:36.357702+00:00",
+  "recorded_at": "2026-09-07T20:56:52.140722+00:00",
   "reproduced": true,
   "claim": "one word in fifty units joins all fifty to each other, 1225 edges from a word that means nothing, and no check counts them",
   "measured": {

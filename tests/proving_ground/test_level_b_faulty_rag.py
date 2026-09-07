@@ -72,8 +72,14 @@ def running(fault: str) -> Iterator[dict[str, Any]]:
             process.wait(timeout=20)
 
 
-def _run(embedder: Any) -> dict[str, Any]:
-    """The golden set through the platform, against whatever is on that port."""
+def _run(embedder: Any, corpus_id: str = CORPUS) -> dict[str, Any]:
+    """The golden set through the platform, against whatever is on that port.
+
+    `corpus_id` names the index the server reads, and the questions are the
+    same either way: a mutated corpus is written into a directory named after
+    the base one, so a reference still names `base-ru/NN` while the index it
+    is served from is another namespace.
+    """
     from core.experiment.config import ComponentRef, ExperimentConfig
     from core.experiment.runner import ExperimentRunner
     from core.registry import ComponentRegistry
@@ -85,7 +91,7 @@ def _run(embedder: Any) -> dict[str, Any]:
         chunking_strategy=ComponentRef(kind="chunker", component_id="structure_aware"),
         embedder=ComponentRef(kind="embedder", component_id="bge_m3"),
         generator=ComponentRef(kind="generator", component_id="external"),
-        pipeline_id="hybrid_rrf", corpus_id=CORPUS, top_k=5,
+        pipeline_id="hybrid_rrf", corpus_id=corpus_id, top_k=5,
     )
     dataset = EvalDataset.from_jsonl(ROOT / "eval" / "golden" / f"{CORPUS}.v1.fast.jsonl")
     result = ExperimentRunner(ComponentRegistry()).run(
@@ -249,41 +255,85 @@ def test_F30_an_overfilled_context_answered_from_its_edges_goes_unremarked(
            context_support_broken=_metric(broken, "context_support"))
 
 
-def test_F29_is_not_stageable_on_this_corpus_and_the_reason_is_measured(
-    embedder: Any, control: dict[str, Any]
-) -> None:
-    """The entry's signal has nothing to read here, and that is a fact about
-    the corpus and not about the instrument.
+def test_F29_a_citation_names_another_fragments_number(embedder: Any) -> None:
+    """The right fragment is in the context and the number beside the sentence
+    belongs to a different one.
 
-    `citation_number_coverage` looks for the structural number of a retrieved
-    fragment occurring in the answer text. In this corpus only the top-level
-    heading of each document is numbered; every subsection is a bare title,
-    and retrieval returns subsections. So the signal has no candidate number
-    for almost every question, and a run against a server that moves every
-    citation scores exactly like its control, which was measured twice before
-    it was traced to this.
+    Blocked twice before this, and the second reason was right about what it
+    measured: `citation_number_coverage` looks for the structural number of a
+    retrieved fragment occurring in the answer, and in this corpus only the
+    top-level heading of each document is numbered while retrieval returns
+    subsections. Twenty-one of ninety-five returned labels carried a number
+    and the honest half's coverage was 0.11, so a server moving every citation
+    scored like its control.
+
+    That is a fact about the labels and not about the failure, so the labels
+    are what this pair changes: the same documents with every subsection
+    numbered, loaded beside the original. Nothing else moves. Both halves are
+    the same server on the same index and the same questions, and the only
+    difference between them is whether it prints the number of the fragment it
+    used or of another one it also returned.
     """
     import re
 
-    labelled = numbered = 0
-    for question in control["question_results"]:
-        for source in question.get("source_refs") or []:
-            label = re.search(r"\[([^\]]+)\]", source.get("structural_path") or "")
-            if not label:
-                continue
-            labelled += 1
-            if re.search(r"\d", label.group(1)):
-                numbered += 1
+    from tests.proving_ground.conftest import _index_exists
 
+    corpus_id = "base-ru-numbered"
+    if not _index_exists(corpus_id, "structure_aware", embedder.embedder_id):
+        pytest.skip(
+            f"NOT RUN: no index for {corpus_id!r}, which this pair needs because the base "
+            "corpus numbers only its top-level headings. Build and load it with "
+            "`python3 -m tools.corpus_mutate corpus/proving-ground/base-ru "
+            f"--defect number_every_subsection_heading --out <dir>/{CORPUS}` and "
+            f"`USE_REAL_BGE_M3=true python3 -m services.ingestion.cli ingest <dir>/{CORPUS} "
+            f"--strategy structure_aware --corpus-id {corpus_id} --language ru_be "
+            "--realm-id proving-ground`."
+        )
+
+    def numbered_labels(run: dict[str, Any]) -> tuple[int, int]:
+        labelled = with_a_number = 0
+        for question in run["question_results"]:
+            for source in question.get("source_refs") or []:
+                label = re.search(r"\[([^\]]+)\]", source.get("structural_path") or "")
+                if not label:
+                    continue
+                labelled += 1
+                if re.search(r"\d", label.group(1)):
+                    with_a_number += 1
+        return labelled, with_a_number
+
+    with running("none"):
+        honest = _run(embedder, corpus_id=corpus_id)
+    with running("F29_cites_the_wrong_fragment"):
+        moved = _run(embedder, corpus_id=corpus_id)
+
+    labelled, with_a_number = numbered_labels(honest)
     assert labelled > 0, "no retrieved fragment carries a bracketed label at all"
-    assert numbered < labelled // 2, (
-        f"{numbered} of {labelled} retrieved labels carry a number, so the signal has "
-        "candidates after all and this entry is stageable here"
+    assert with_a_number == labelled, (
+        f"only {with_a_number} of {labelled} returned labels carry a number, so the signal "
+        "still has nothing to read on most questions"
     )
-    record("F29", "not staged: retrieval returns subsections, whose labels carry no number, "
-                  "so the signal the entry names has nothing to look for",
-           reproduced=False,
-           retrieved_labels=labelled, of_them_numbered=numbered,
-           coverage_recorded_by_the_control=control["aggregate_metrics"].get(
-               "citation_number_coverage"),
-           baited_at="tests/unit/test_atlas_baits.py, on a payload whose labels carry numbers")
+
+    def coverage(run: dict[str, Any]) -> float:
+        return float(run["aggregate_metrics"].get("citation_number_coverage", -1.0))
+
+    # A third, and the number is measured and never chosen: the honest half
+    # comes back at about 0.49, because a generator names a fragment's number
+    # in roughly half its sentences and says nothing of the sort in the rest.
+    # What matters is that there is enough for the other half to lose.
+    assert coverage(honest) > 0.3, (
+        f"the honest half's citations already name the wrong fragments: {coverage(honest)}, "
+        "so there is nothing for the broken half to break"
+    )
+    assert coverage(moved) < coverage(honest), (
+        f"moving every citation number cost the coverage nothing: {coverage(moved)} against "
+        f"{coverage(honest)}, so the server's mode is reaching nothing this signal reads"
+    )
+
+    record("F29", "with every subsection numbered, a server printing another fragment's "
+                  "number drops the coverage the honest half records",
+           corpus=corpus_id, returned_labels=labelled, of_them_numbered=with_a_number,
+           coverage_honest=round(coverage(honest), 3), coverage_moved=round(coverage(moved), 3),
+           what_the_base_corpus_gives="twenty-one numbered labels of ninety-five, and a "
+                                      "coverage of 0.11 on the honest half, which is why this "
+                                      "was recorded as a blocker twice")
