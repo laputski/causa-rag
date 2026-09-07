@@ -88,7 +88,14 @@ describe('The community graph: expanding a node', () => {
     await clickNode(container, 7)
 
     // The community requested is that one, rather than whichever came first.
-    expect(detailMock).toHaveBeenCalledWith('handbook_01', 7, 'leiden', 'lexical', 'acme')
+    //
+    // Awaited and not asserted outright: the section renders its own loading
+    // state before the request it needs is issued, so `clickNode` returning
+    // says the section is there and says nothing yet about the call. Asserted
+    // outright this passed on a fast machine for months and failed in CI,
+    // where the effect had not run by the time the assertion did.
+    await waitFor(() =>
+      expect(detailMock).toHaveBeenCalledWith('handbook_01', 7, 'leiden', 'lexical', 'acme'))
 
     const detail = container.querySelector('.graph-detail')!
     await waitFor(() => expect(detail.querySelector('tbody tr')).toBeTruthy())
