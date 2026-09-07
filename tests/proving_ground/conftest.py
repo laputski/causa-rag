@@ -129,11 +129,45 @@ def _registry(embedder: Any, corpus_id: str, language: str, strategy: str,
         retriever=HybridRetriever(dense_retriever=dense, sparse_retriever=sparse,
                                   embedder=embedder, merge="weighted"),
         embedder=embedder, generator=generator, pipeline_id="hybrid_weighted"))
+    # The graph point, when the realm's own Neo4j is up. Registered here and
+    # not conditionally at the call site, because a registry that sometimes
+    # holds a pipeline and sometimes does not makes a run's absence look like
+    # a choice somebody made.
+    graph = _graph_retriever()
+    if graph is not None:
+        from core.retrieval.graph_hybrid import GraphHybridRetriever
+        registry.register("pipeline", "graph", NaivePipeline(
+            retriever=GraphHybridRetriever(graph_retriever=graph, base_retriever=dense),
+            embedder=embedder, generator=generator, pipeline_id="graph"))
+
     if reranker_model:
         from adapters.reranker import CrossEncoderRerankerLocal
         registry.register("reranker", "cross_encoder_local",
                           CrossEncoderRerankerLocal(model_name=reranker_model))
     return registry
+
+
+#: The proving ground's own Neo4j, assigned by
+#: `tools.generate_realm_neo4j_compose` and registered on the realm. Never the
+#: default instance: that one belongs to the first-registered realm and holds
+#: another corpus entirely.
+NEO4J = os.getenv("PROVING_GROUND_NEO4J", "bolt://localhost:7478")
+
+
+def _graph_retriever() -> Any:
+    """The realm's graph, or None when it is not up.
+
+    None and never an exception: every suite here builds a registry, and only
+    one of them asks for the graph, so an unreachable Neo4j must cost the
+    others nothing.
+    """
+    from adapters.neo4j_graph import Neo4jGraphRetriever
+
+    try:
+        retriever = Neo4jGraphRetriever(uri=NEO4J, user="neo4j", password="ragplatform")
+        return retriever if retriever.verify() else None
+    except Exception:  # noqa: BLE001 - the caller reports the absence, loudly
+        return None
 
 
 def _index_exists(corpus_id: str, strategy: str, embedder_id: str) -> bool:

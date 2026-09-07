@@ -69,9 +69,12 @@ def _what_actually_ran(pipeline: Any) -> dict[str, Any]:
     """
     embedder = getattr(pipeline, "_embedder", None)
     retriever = getattr(pipeline, "_retriever", None)
-    # A hybrid wraps two retrievers; the dense half is the one namespaced by
-    # an embedder, and the sparse half never is.
-    dense = getattr(retriever, "_dense", retriever)
+    # A wrapper holds the retriever that is namespaced by an embedder under a
+    # name of its own: a hybrid calls it `_dense`, a graph pipeline calls its
+    # non-graph half `_base`. Following only the first left every graph run
+    # with no record of the index it read, so the check comparing the model
+    # that indexed with the model that queries stayed silent there.
+    dense = getattr(retriever, "_dense", None) or getattr(retriever, "_base", None) or retriever
     applied: dict[str, Any] = {}
     if embedder is not None:
         applied["query_embedder_id"] = getattr(embedder, "embedder_id", "")

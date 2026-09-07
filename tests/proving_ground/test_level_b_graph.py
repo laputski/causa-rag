@@ -46,6 +46,9 @@ CORPUS = ROOT / "corpus" / "proving-ground" / "base-ru"
 URI = os.getenv("PROVING_GROUND_NEO4J", "bolt://localhost:7478")
 #: How many documents the base corpus holds, read from disk below.
 DOCUMENTS = len(list(CORPUS.glob("*.md")))
+#: The analyser the base corpus was indexed under, the same one every other
+#: level-B suite here uses.
+LANGUAGE = "ru_be"
 
 
 @pytest.fixture(scope="module")
@@ -222,4 +225,61 @@ def test_this_suite_never_touches_another_realms_graph() -> None:
     assert "7687" not in URI, (
         f"{URI} is the default instance, which belongs to the first-registered realm and "
         "holds another corpus entirely. This suite clears what it measures."
+    )
+
+
+# ── the graph point, run end to end ───────────────────────────────────────────
+
+def _graph_run(embedder: Any, graph_weight: float, hops: int) -> dict[str, Any]:
+    """One retrieval-only run of the graph pipeline at these two settings."""
+    from core.experiment.config import ExperimentConfig
+    from tests.proving_ground.conftest import retrieval_only, run_on
+    from tools.seed_proving_ground import control_config
+
+    base = control_config("base-ru").model_dump(exclude={"config_hash"})
+    base["name"] = f"proving-ground-graph-w{graph_weight}-h{hops}"
+    base["pipeline_id"] = "graph"
+    base["graph_weight"] = graph_weight
+    base["hops"] = hops
+    base["chunking_strategy"] = {"kind": "chunker", "component_id": "structure_aware",
+                                 "params": {}}
+    return run_on(embedder, retrieval_only(ExperimentConfig(**base)), "base-ru", LANGUAGE)
+
+
+def test_the_graph_point_runs_and_its_two_settings_reach_the_run(
+    embedder: Any, graph: Any,
+) -> None:
+    """The point exists on the proving ground, and it can be varied.
+
+    Both halves matter and the second is the one that was missing: the two
+    parameters of the graph point had no fields on a configuration, so the
+    pipeline could be chosen and every run of it used whatever the gateway had
+    constructed. A unit test proves the field reaches the retriever; this
+    proves it reaches a run against a live graph, which is where a setting
+    that quietly does nothing would still look identical.
+    """
+    from_graph_only = _graph_run(embedder, graph_weight=1.0, hops=1)
+    from_base_only = _graph_run(embedder, graph_weight=0.0, hops=1)
+
+    assert from_graph_only["question_results"], "the graph run answered no questions at all"
+    assert from_graph_only["config"]["graph_weight"] == 1.0
+    assert from_graph_only["config"]["hops"] == 1
+
+    def _ranking(run: dict[str, Any]) -> list[tuple[str, ...]]:
+        return [tuple(s["chunk_id"] for s in (q.get("source_refs") or []))
+                for q in run["question_results"]]
+
+    assert _ranking(from_graph_only) != _ranking(from_base_only), (
+        "the graph weight moved from one to zero and every question came back with the "
+        "same fragments in the same order, so the setting reached nothing"
+    )
+    # Deliberately not recorded as evidence. The evidence directory holds one
+    # file per catalogue entry, and a file named for something the catalogue
+    # does not hold is refused by the registry's own guard. This proves the
+    # point can be run and varied, which is a fact about the platform and not
+    # about a failure.
+    applied = from_graph_only.get("applied") or {}
+    assert applied.get("index_embedder_id"), (
+        "the graph run recorded no index embedder, so the check comparing the model that "
+        f"indexed with the model that queries is silent on this point: {applied}"
     )
