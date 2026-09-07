@@ -1321,7 +1321,8 @@
       "triage": "Feedback triage",
       "realm": "Realms",
       "shell": "Commands and notifications",
-      "packs": "Domain packs"
+      "packs": "Domain packs",
+      "stages": "Stages of an experiment"
     },
     "pipelineDecisionTree": {
       "needKeywordSearch": "Need precise word search (section numbers, terms)?",
@@ -1521,6 +1522,29 @@
       "add2": "The interface cannot create a pack, deliberately: a pack brings executable rules, not a row in a table. The Domain packs page shows what was found and enables it for a realm; the enabling is stored in the database, the pack itself in files.",
       "calloutExternal": "A pack plugs into the platform’s own built-in pipeline: its routing, masks and refusal run inside its own RAG. It has nothing to do with an external RAG over HTTP — that system has its own logic, and the platform only measures it.",
       "calloutRestart": "Packs load once, when the gateway starts. A new pack, or an edit to one, is visible after a restart; enabling and disabling on the page is not — that is read on every request."
+    },
+    "stagesSection": {
+      "lead": "The path from source files to a verdict. Every stage decides something, and nearly every one can decide it silently, so each is named here with what breaks in it.",
+      "sourceTitle": "The source",
+      "sourceDesc": "The files as they are. Whatever is not in them, no setting will make retrieval find.",
+      "loadTitle": "Loading and segmentation",
+      "loadDesc": "Documents are read, cut into fragments, and given a record of what was loaded, by what, and when. The segmentation strategy declares a promise about its own output, and it is checked here.",
+      "indexTitle": "The index",
+      "indexDesc": "Fragments go into a vector store and a lexical one, and into a graph linked by shared words when the graph pipeline runs. A load adds and never removes.",
+      "questionsTitle": "The question set",
+      "questionsDesc": "Questions with references to the sources that should answer them. The set decides which differences can be told apart at all.",
+      "defectTitle": "Introducing a known defect",
+      "defectDesc": "A stage absent from ordinary work, and the only way to know whether a check would have spoken. The mutator damages a copy of a corpus in one named way, and a pair of runs differs by that and nothing else.",
+      "runTitle": "The run",
+      "runDesc": "The questions go through the pipeline, and the run records more than the answers: which model asked, which index it read, what each stage cost.",
+      "metricsTitle": "The metrics",
+      "metricsDesc": "A number per question and their mean. Each metric declares what it computes and what must hold for it to mean anything, because otherwise its name is all anybody has.",
+      "signalsTitle": "The signals",
+      "signalsDesc": "Named judgements of the platform, computed when a run is read. A new signal costs a run nothing and applies to every run already stored.",
+      "verdictTitle": "The verdict",
+      "verdictDesc": "A funnel layer, a cause, a prescription. And, separately, what this run made impossible to check: a check that could not run and a check that ran and found nothing are the same absence on a screen until one of them is named.",
+      "spaceLead": "An architecture is a point in a space",
+      "space": "Dense retrieval, a hybrid, a graph: each is a point in a space of twenty-eight dimensions, and whether a failure applies is derived from the coordinates and never from the name. That is why the <0>failure atlas</0> counts per point: half its entries cannot happen in a dense-only system, and a different half cannot happen in a graph one. The dimensions themselves are published by <1>ragworld.org</1>, and the platform checks itself against them and not against a vocabulary of its own."
     }
   },
   "language": {

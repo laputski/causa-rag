@@ -8,7 +8,7 @@ import {
   CheckCircle, XCircle, Info, ChevronRight, Target, UserCog, ShieldAlert,
   SlidersHorizontal, Share2, ArrowUpDown, ShieldCheck, Boxes, Plug, GitCompare, Scale, Puzzle,
   Command,
-  Wrench, ClipboardList, ChartScatter, SatelliteDish, Package, Sparkles,
+  Wrench, ClipboardList, ChartScatter, SatelliteDish, Package, Sparkles, Route,
 } from 'lucide-react'
 
 /* ── Platform service topology — high-level view of all services & their roles ── */
@@ -1283,6 +1283,46 @@ const SECTIONS: {
             </div>
           </div>
         ))}
+      </div>
+      )
+    },
+  },
+  {
+    id: 'stages', label: 'guidePage.nav.stages', icon: Route, group: 'data',
+    content: () => {
+      const { t } = useTranslation()
+      // The whole path, source files to verdict, with the mutator standing in
+      // the row of stages and never beside it. A tool that damages the
+      // platform's own data on purpose reads as a curiosity until it is shown
+      // as a stage, and then it reads as what it is: the only way to know a
+      // check would have spoken.
+      const stages = [
+        'source', 'load', 'index', 'questions', 'defect', 'run', 'metrics', 'signals', 'verdict',
+      ]
+      return (
+      <div>
+        <p className="guide-lead">{t('guidePage.stagesSection.lead')}</p>
+        <div className="guide-component-list">
+          {stages.map(id => (
+            <div className="guide-component-row" key={id}>
+              <ChevronRight size={15} className="who-icon blue" />
+              <div>
+                <strong>{t(`guidePage.stagesSection.${id}Title`)}</strong>
+                <span className="guide-component-desc">{t(`guidePage.stagesSection.${id}Desc`)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <h3 className="guide-h3">{t('guidePage.stagesSection.spaceLead')}</h3>
+        <p className="guide-lead">
+          <Trans i18nKey="guidePage.stagesSection.space">
+            <Link to="/atlas" />
+            {/* Outbound and on a click. The air-gap rule forbids the interface
+                loading anything from outside; it does not forbid a reader
+                following a link to whoever defines the words. */}
+            <a href="https://ragworld.org" target="_blank" rel="noreferrer" />
+          </Trans>
+        </p>
       </div>
       )
     },
