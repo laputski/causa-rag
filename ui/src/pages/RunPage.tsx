@@ -379,14 +379,21 @@ function ConfirmGroundTruthControl({ runId, questionId, referenceAnswer, sourceD
     setDatasetId(defaultDataset.id ?? '')
   }, [defaultDataset, datasetTouched])
 
+  // What is being written travels with the call and never in a closure. The
+  // button is disabled until a target dataset is known, and a run recorded a
+  // promotion to the empty string all the same: the enabled button came from
+  // a render where the id was known and the mutation still held the function
+  // from the render before it. Passing the values as arguments makes the two
+  // impossible to disagree.
   const mutation = useMutation({
-    mutationFn: () => api.feedback.promote(runId, questionId, {
-      target_dataset_id: datasetId,
-      reference_answer: refAnswer,
-      article_refs: articleRefs.trim()
-        ? articleRefs.split(',').map(r => r.trim()).filter(Boolean)
-        : undefined,
-    }, realmId),
+    mutationFn: (writing: { datasetId: string; refAnswer: string; articleRefs: string }) =>
+      api.feedback.promote(runId, questionId, {
+        target_dataset_id: writing.datasetId,
+        reference_answer: writing.refAnswer,
+        article_refs: writing.articleRefs.trim()
+          ? writing.articleRefs.split(',').map(r => r.trim()).filter(Boolean)
+          : undefined,
+      }, realmId),
   })
 
   return (
@@ -433,7 +440,7 @@ function ConfirmGroundTruthControl({ runId, questionId, referenceAnswer, sourceD
       />
       <button
         className="btn-sm" disabled={!datasetId || mutation.isPending}
-        onClick={() => mutation.mutate()}
+        onClick={() => mutation.mutate({ datasetId, refAnswer, articleRefs })}
       >
         {t('runPage.confirm.button')}
       </button>
