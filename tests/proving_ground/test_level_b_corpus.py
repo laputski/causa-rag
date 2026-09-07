@@ -251,3 +251,96 @@ class _Bound:
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._client, name)
+
+
+# ── two entries this corpus and this model cannot stage ───────────────────────
+
+def test_F07_cannot_be_staged_while_a_reference_names_a_whole_document(
+    stack: None,
+) -> None:
+    """Grounds spread across fragments, and a ref that does not notice.
+
+    The entry is about a source unit split so finely that no single fragment
+    answers a question the whole unit answers. Two measurements say this
+    corpus cannot show it.
+
+    The chunker already splits at every paragraph, so there is nothing left
+    to split: putting a heading over each paragraph produced the same two
+    hundred and twenty fragments, byte for byte.
+
+    And the reference of every question here names a document, because the
+    corpus is one numbered file per unit and the ref id is built from that
+    numbering. So retrieval is credited when it finds any fragment of the
+    right document, and a unit spread across seven of them is a unit found
+    seven ways. Staging it needs references naming a section.
+    """
+    from core.chunking.structure_aware import StructureAwareChunkingStrategy
+    from core.eval.retrieval_metrics import extract_ref_id
+    from core.models import Document
+
+    documents = read_corpus(ROOT / "corpus" / "proving-ground" / CORPUS)
+    strategy = StructureAwareChunkingStrategy()
+    per_document: dict[str, set[str]] = {}
+    for name, text in documents.items():
+        chunks = strategy.chunk(Document(doc_id=name, source=f"{CORPUS}/{name}",
+                                         content=text, metadata={}))
+        for chunk in chunks:
+            ref = extract_ref_id({"doc_id": f"{CORPUS}/{name.removesuffix('.md')}",
+                                  "source_code": CORPUS,
+                                  "article_no": name.removesuffix(".md"),
+                                  "structural_path": chunk.structural_path})
+            per_document.setdefault(ref or name, set()).add(chunk.chunk_id)
+
+    spread = max(len(ids) for ids in per_document.values())
+    assert spread > 1, "no document occupies more than one fragment, so nothing is spread"
+    assert len(per_document) == len(documents), (
+        "a reference now names something finer than a document, so this entry may be "
+        "stageable here after all"
+    )
+    record("F07", "not staged: every reference names a whole document, so a unit spread "
+                  "across fragments is credited when any one of them is found",
+           reproduced=False,
+           documents=len(documents), distinct_references=len(per_document),
+           fragments_in_the_most_spread_document=spread,
+           and_the_chunker_already_splits_at="every paragraph, so a heading over each one "
+                                             "produced the same 220 fragments byte for byte")
+
+
+def test_F15_cannot_be_staged_while_the_model_reads_the_codes(
+    stack: None, embedder: Any,
+) -> None:
+    """Semantic search missing codes, names and numbers, on a model that does
+    not miss them.
+
+    The corpus is full of instrument codes and the questions can be asked
+    about them. Searched for a bare code, the dense half returns the document
+    carrying it at the first rank and fills most of the window with it. There
+    is no miss to attribute to an identifier, so the entry has nothing to be
+    reproduced from here.
+
+    Staging it needs an embedding model that tokenises a code away. This one
+    is multilingual and does not, which is a fact about the model and worth
+    recording as one.
+    """
+    from adapters.qdrant import QdrantRetriever
+
+    dense = QdrantRetriever(host="localhost", port=6333, strategy_id="structure_aware",
+                            embedder_id=embedder.embedder_id, corpus_id=CORPUS, realm_id=REALM)
+    code = "ДТ-760"
+    hits = dense.retrieve(query=code, k=10, query_vector=embedder.embed([code])[0])
+    assert hits, "the dense half returned nothing at all, so this measures nothing"
+    carrying = [h for h in hits if code in h.chunk.text]
+    assert carrying, (
+        f"the dense half missed every fragment carrying {code}, so this entry is stageable "
+        "here after all, so this pair should assert a reproduction"
+    )
+    assert code in hits[0].chunk.text, (
+        f"{code} is not in the first result, so the model may be losing it after all"
+    )
+    record("F15", "not staged: searched for a bare code the dense half returns the fragment "
+                  "carrying it first, so there is no miss to attribute to an identifier",
+           reproduced=False,
+           code=code, results=len(hits), of_them_carrying_the_code=len(carrying),
+           rank_of_the_first_carrying_it=1,
+           staging_needs="an embedding model that tokenises a code away; this one is "
+                         "multilingual and does not")

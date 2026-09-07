@@ -206,3 +206,61 @@ def test_F25_a_window_equal_to_the_selection_leaves_nothing_to_rescue(
     record("F25", "the candidate window closed to the selection, and no signal speaks",
            questions_with_a_window_healthy=len(widened), questions_with_a_window_broken=len(closed),
            signals=sorted(detector_signals(broken)))
+
+
+def test_F24_a_reranker_that_does_not_know_the_language_drops_what_retrieval_found(
+    embedder: Any, control: dict[str, Any]
+) -> None:
+    """The corpus is Russian and the reranker reads English only.
+
+    Both models are cross-encoders, both take a pair of texts, both return a
+    score, and nothing in the configuration or in the run says one of them
+    has never seen this alphabet. What says it is the funnel: retrieval finds
+    the reference source for every question before the reranker, and the
+    reranker gives back a context without it.
+
+    Staged by a setting, because the model name is one: this is the entry's
+    own instrument and not an argument about the corpus.
+    """
+    from core.eval.funnel import diagnose_question
+    from core.experiment.config import ExperimentConfig
+
+    def _reranked_by(name: str, model: str) -> dict[str, Any]:
+        payload = control_config(CORPUS).model_dump(exclude={"config_hash"})
+        payload["name"] = f"proving-ground-{name}"
+        payload["chunking_strategy"] = {"kind": "chunker", "component_id": "structure_aware",
+                                        "params": {}}
+        payload["reranker"] = {"kind": "reranker", "component_id": "cross_encoder_local",
+                               "params": {"model_name": model}}
+        return run_on(embedder, retrieval_only(ExperimentConfig(**payload)), CORPUS, LANGUAGE)
+
+    multilingual = _reranked_by("F24-multilingual", "BAAI/bge-reranker-v2-m3")
+    english_only = _reranked_by("F24-english-only", "cross-encoder/ms-marco-MiniLM-L-6-v2")
+
+    assert recall_before_rerank(english_only) == recall_before_rerank(multilingual), (
+        "retrieval itself moved, so this pair changed two things and neither is the reranker"
+    )
+    assert recall(english_only) < recall(multilingual), (
+        f"the English-only reranker cost nothing: {recall(english_only)} against "
+        f"{recall(multilingual)}"
+    )
+
+    def _lost_at_the_reranker(run: dict[str, Any]) -> int:
+        return sum(
+            1 for q in run["question_results"]
+            if diagnose_question(q.get("answerability") or "answerable", q.get("metrics") or {},
+                                 (q.get("metrics") or {}).get("pre_rerank_recall_at_k")).layer
+            == "rerank"
+        )
+
+    lost = _lost_at_the_reranker(english_only)
+    assert lost > _lost_at_the_reranker(multilingual), (
+        f"the funnel blames the reranker on {lost} questions here and on "
+        f"{_lost_at_the_reranker(multilingual)} with a model that reads the language, so the "
+        "verdict does not separate the two"
+    )
+    record("F24", "a cross-encoder that has never seen this alphabet, ranking its corpus",
+           recall_multilingual=recall(multilingual), recall_english_only=recall(english_only),
+           before_the_reranker=recall_before_rerank(english_only),
+           questions_the_funnel_blames_on_the_reranker=lost,
+           the_same_with_a_multilingual_model=_lost_at_the_reranker(multilingual))

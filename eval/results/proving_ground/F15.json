@@ -1,0 +1,13 @@
+{
+  "failure_id": "F15",
+  "recorded_at": "2026-09-07T07:41:55.482973+00:00",
+  "reproduced": false,
+  "claim": "not staged: searched for a bare code the dense half returns the fragment carrying it first, so there is no miss to attribute to an identifier",
+  "measured": {
+    "code": "ДТ-760",
+    "results": 10,
+    "of_them_carrying_the_code": 7,
+    "rank_of_the_first_carrying_it": 1,
+    "staging_needs": "an embedding model that tokenises a code away; this one is multilingual and does not"
+  }
+}

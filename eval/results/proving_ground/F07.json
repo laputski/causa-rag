@@ -1,0 +1,12 @@
+{
+  "failure_id": "F07",
+  "recorded_at": "2026-09-07T07:41:47.295963+00:00",
+  "reproduced": false,
+  "claim": "not staged: every reference names a whole document, so a unit spread across fragments is credited when any one of them is found",
+  "measured": {
+    "documents": 40,
+    "distinct_references": 40,
+    "fragments_in_the_most_spread_document": 7,
+    "and_the_chunker_already_splits_at": "every paragraph, so a heading over each one produced the same 220 fragments byte for byte"
+  }
+}

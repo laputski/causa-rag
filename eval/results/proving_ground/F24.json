@@ -1,0 +1,13 @@
+{
+  "failure_id": "F24",
+  "recorded_at": "2026-09-07T07:41:02.211343+00:00",
+  "reproduced": true,
+  "claim": "a cross-encoder that has never seen this alphabet, ranking its corpus",
+  "measured": {
+    "recall_multilingual": 0.9411764705882353,
+    "recall_english_only": 0.6470588235294118,
+    "before_the_reranker": 1.0,
+    "questions_the_funnel_blames_on_the_reranker": 6,
+    "the_same_with_a_multilingual_model": 1
+  }
+}
