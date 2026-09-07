@@ -264,133 +264,85 @@ class _Bound:
 
 # ── two entries this corpus and this model cannot stage ───────────────────────
 
-def test_F07_cannot_be_staged_while_a_reference_names_a_whole_document(
-    stack: None,
+def test_F15_the_semantic_half_misses_a_code_the_keyword_half_puts_first(
+    embedder: Any,
 ) -> None:
-    """Grounds spread across fragments, and a ref that does not notice.
+    """Semantic search missing a designation, and what it took to see it.
 
-    The entry is about a source unit split so finely that no single fragment
-    answers a question the whole unit answers. Two measurements say this
-    corpus cannot show it.
+    The first attempt asked this corpus and recorded a blocker: searched for a
+    bare code, the semantic half returns the fragment carrying it at the first
+    rank. Five shapes of designation were tried and the model kept every one,
+    so the blocker read as a fact about the model.
 
-    The chunker already splits at every paragraph, so there is nothing left
-    to split: putting a heading over each paragraph produced the same two
-    hundred and twenty fragments, byte for byte.
+    It was a fact about the fragment. A code is a few tokens, and what decides
+    a fragment's vector is the rest of it: in a section of a hundred and fifty
+    characters the code decides the ranking, at a thousand it is beaten by two
+    fragments in twenty-six, and among three thousand fragments of ordinary
+    encyclopaedic length it is not in the first fifty. This corpus has two
+    hundred and twenty short sections, so it cannot show the failure at all,
+    and that is what the blocker was really recording.
 
-    And the reference of every question here names a document, because the
-    corpus is one numbered file per unit and the ref id is built from that
-    numbering. So retrieval is credited when it finds any fragment of the
-    right document, and a unit spread across seven of them is a unit found
-    seven ways. Staging it needs references naming a section.
+    So the pair is measured on the benchmark slice this repository ships, with
+    the code written into one passage of it, and the control it needs is the
+    small corpus that refused: the same query, the same code, found first.
     """
-    from core.chunking.structure_aware import StructureAwareChunkingStrategy
-    from core.eval.retrieval_metrics import extract_ref_id
-    from core.models import Document
-
-    documents = read_corpus(ROOT / "corpus" / "proving-ground" / CORPUS)
-    strategy = StructureAwareChunkingStrategy()
-    per_document: dict[str, set[str]] = {}
-    for name, text in documents.items():
-        chunks = strategy.chunk(Document(doc_id=name, source=f"{CORPUS}/{name}",
-                                         content=text, metadata={}))
-        for chunk in chunks:
-            ref = extract_ref_id({"doc_id": f"{CORPUS}/{name.removesuffix('.md')}",
-                                  "source_code": CORPUS,
-                                  "article_no": name.removesuffix(".md"),
-                                  "structural_path": chunk.structural_path})
-            per_document.setdefault(ref or name, set()).add(chunk.chunk_id)
-
-    spread = max(len(ids) for ids in per_document.values())
-    assert spread > 1, "no document occupies more than one fragment, so nothing is spread"
-    assert len(per_document) == len(documents), (
-        "a reference now names something finer than a document, so this entry may be "
-        "stageable here after all"
-    )
-    record("F07", "not staged: every reference names a whole document, so a unit spread "
-                  "across fragments is credited when any one of them is found",
-           reproduced=False,
-           documents=len(documents), distinct_references=len(per_document),
-           fragments_in_the_most_spread_document=spread,
-           and_the_chunker_already_splits_at="every paragraph, so a heading over each one "
-                                             "produced the same 220 fragments byte for byte")
-
-
-def test_F15_cannot_be_staged_while_the_model_reads_the_codes(
-    stack: None, embedder: Any,
-) -> None:
-    """Semantic search missing codes, names and numbers, on a model that does
-    not miss them.
-
-    The corpus is full of instrument codes and the questions can be asked
-    about them. Searched for a bare code, the dense half returns the document
-    carrying it at the first rank and fills most of the window with it. There
-    is no miss to attribute to an identifier, so the entry has nothing to be
-    reproduced from here.
-
-    Staging it needs an embedding model that tokenises a code away. This one
-    is multilingual and does not, which is a fact about the model and worth
-    recording as one.
-
-    Five shapes of identifier were tried and not only the one the corpus
-    happens to carry, because a single shape would leave the reason as a guess
-    about that shape: a part number, an alphanumeric serial, a hexadecimal
-    identifier, a standard's reference, and a bare ten-digit number. In every
-    one the fragment carrying the code was closer to the code as a query than
-    all thirty other fragments were. The margin narrows for a bare number and
-    never inverts.
-    """
-    import numpy as np
-
+    from adapters.opensearch import OpenSearchRetriever
     from adapters.qdrant import QdrantRetriever
+    from tools.corpus_mutate import THE_CODE_IN_ONE_DOCUMENT
 
-    dense = QdrantRetriever(host="localhost", port=6333, strategy_id="structure_aware",
-                            embedder_id=embedder.embedder_id, corpus_id=CORPUS, realm_id=REALM)
-    code = "ДТ-760"
-    hits = dense.retrieve(query=code, k=10, query_vector=embedder.embed([code])[0])
-    assert hits, "the dense half returned nothing at all, so this measures nothing"
-    carrying = [h for h in hits if code in h.chunk.text]
-    assert carrying, (
-        f"the dense half missed every fragment carrying {code}, so this entry is stageable "
-        "here after all, so this pair should assert a reproduction"
+    namespace, strategy = "miracl-ru-coded", "fixed"
+    if not _loaded(namespace, strategy):
+        pytest.skip(
+            f"NOT RUN: {namespace} is not loaded. Build and load it with "
+            f"`python3 -m tools.corpus_mutate corpus/miracl-ru "
+            f"--defect hide_a_code_in_one_document --out /tmp/{namespace} --limit 1500` and "
+            f"`USE_REAL_BGE_M3=true python3 -m services.ingestion.cli ingest /tmp/{namespace} "
+            f"--strategy {strategy} --corpus-id {namespace} --language {LANGUAGE} "
+            f"--realm-id {REALM}`."
+        )
+
+    code = THE_CODE_IN_ONE_DOCUMENT
+    asked = embedder.embed([code])[0]
+
+    def ranks(corpus_id: str, of_strategy: str, window: int) -> dict[str, int | None]:
+        dense = QdrantRetriever(host="localhost", port=6333, strategy_id=of_strategy,
+                                embedder_id=embedder.embedder_id, corpus_id=corpus_id,
+                                realm_id=REALM)
+        sparse = OpenSearchRetriever(host="localhost", port=9200, strategy_id=of_strategy,
+                                     corpus_id=corpus_id, realm_id=REALM, language=LANGUAGE)
+        found = dense.retrieve(query=code, k=window, query_vector=asked)
+        by_words = sparse.retrieve(query=code, k=window)
+        return {
+            "semantic": next((i + 1 for i, h in enumerate(found) if code in h.chunk.text), None),
+            "keyword": next((i + 1 for i, h in enumerate(by_words) if code in h.chunk.text), None),
+            "returned": len(found),
+        }
+
+    window = 50
+    on_the_slice = ranks(namespace, strategy, window)
+    assert on_the_slice["returned"] >= window, (
+        f"the semantic half returned {on_the_slice['returned']} fragments for a window of "
+        f"{window}, so a miss below it would mean nothing"
     )
-    assert code in hits[0].chunk.text, (
-        f"{code} is not in the first result, so the model may be losing it after all"
+    assert on_the_slice["keyword"] == 1, (
+        f"the keyword half puts the fragment carrying the code at "
+        f"{on_the_slice['keyword']}, so the code is not in the index the way this pair assumes"
+    )
+    assert on_the_slice["semantic"] is None, (
+        f"the semantic half returns it at {on_the_slice['semantic']}, so it does not lose the "
+        "code here and this pair should record a blocker again"
     )
 
-    # The other four shapes, on fragments this corpus does not carry: each is
-    # written into one fragment of the corpus's own prose, and the question is
-    # whether the model keeps it.
-    def cosine(one: Any, other: Any) -> float:
-        first, second = np.array(one), np.array(other)
-        return float(first @ second / (np.linalg.norm(first) * np.linalg.norm(second)))
-
-    prose = [h.chunk.text for h in dense.retrieve(
-        query="порядок проведения работ", k=31,
-        query_vector=embedder.embed(["порядок проведения работ"])[0])]
-    assert len(prose) > 20, "not enough fragments to compare against"
-    beaten: dict[str, int] = {}
-    for shape in ("QX7R-4482-ZK", "8f3a91c0-77d2", "СН 12.13330.2016", "4471829365"):
-        carrier = f"{prose[0]} Обозначение узла: {shape}."
-        asked = embedder.embed([shape])[0]
-        against = cosine(asked, embedder.embed([carrier])[0])
-        others = [cosine(asked, embedder.embed([text])[0]) for text in prose[1:31]]
-        beaten[shape] = sum(1 for score in others if score > against)
-
-    assert set(beaten.values()) == {0}, (
-        f"a shape of identifier is lost by this model after all: {beaten}, so the entry is "
-        "stageable here and this pair should assert a reproduction"
-    )
-
-    record("F15", "not staged: the dense half returns the fragment carrying a code first, "
-                  "for every shape of code tried, so there is no miss to attribute to one",
-           reproduced=False,
-           code=code, results=len(hits), of_them_carrying_the_code=len(carrying),
-           rank_of_the_first_carrying_it=1,
-           other_shapes_tried=sorted(beaten),
-           fragments_beating_the_carrier_by_shape=beaten,
-           fragments_compared_against=30,
-           staging_needs="an embedding model that tokenises a code away; this one is "
-                         "multilingual and keeps every shape tried")
+    record("F15", "asked for a designation written into one passage, the keyword half returns "
+                  "it first and the semantic half does not return it in fifty",
+           corpus=namespace, strategy=strategy, code=code, window=window,
+           rank_in_the_keyword_half=on_the_slice["keyword"],
+           rank_in_the_semantic_half=on_the_slice["semantic"],
+           what_the_small_corpus_does="two hundred and twenty sections of about a hundred and "
+                                      "thirty characters, where the same query returns the "
+                                      "carrying fragment first in both halves",
+           what_decides="the length of the fragment and the size of the field it competes in, "
+                        "and not the shape of the designation: five shapes were tried")
 
 
 def test_F08_a_table_is_cut_and_nothing_says_so(
@@ -552,77 +504,89 @@ def test_F20_a_filter_that_matches_nothing_empties_the_search_and_nothing_names_
            signals_seen=[])
 
 
-def test_F23_the_two_halves_do_not_converge_here_and_the_reason_is_measured(
-    embedder: Any,
-) -> None:
-    """Both halves returning the same fragments, and why no corpus here does it.
+def test_F23_two_halves_reading_one_source_return_one_source(embedder: Any) -> None:
+    """Both halves returning the same fragments, and a merge that buys nothing.
 
-    Three measurements, and each was a candidate staging that failed. Against
-    the questions this corpus ships with, the two halves share a fifth of what
-    they return. Against a corpus of nine units, where a window of ten could
-    hold everything, they still share under a third: the lexical half returns
-    only units sharing a word with the question and stops well short of the
-    window. And queried with a unit's own text, which is the strongest lexical
-    match a query can have, they share about a third.
+    Staging this began by trying to make the corpus do it, and three
+    measurements said no corpus here will: against the questions this corpus
+    ships with the two halves share a fifth of what they return, against a
+    corpus of nine units where a window of ten could hold everything they
+    share under a third, and queried with a unit's own text, which is the
+    strongest lexical match a query can have, they share about a third. The
+    halves disagree on prose by construction.
 
-    So the halves disagree on prose by construction, and no change to the
-    documents brings them together. What would is two halves reading one
-    source, which is a configuration and not a corpus, and this entry's
-    instrument says corpus.
+    What does it is the wiring, and this platform's own classes permit it: the
+    merge takes two retrievers and nothing says they must be two, and the
+    lexical one accepts a query vector and ignores it, so it can stand on both
+    sides. That is the mistake the entry describes, made here on purpose.
+
+    What comes back is the entry exactly. The merged result is what one half
+    returns alone, on every question. The trace records both halves, both
+    timed, both returning twenty candidates, and nothing compares what they
+    returned against each other.
     """
-    import json
-    import pathlib
-
     from adapters.opensearch import OpenSearchRetriever
     from adapters.qdrant import QdrantRetriever
+    from core.retrieval.hybrid import HybridRetriever
 
     dense = QdrantRetriever(host="localhost", port=6333, strategy_id="structure_aware",
                             embedder_id=embedder.embedder_id, corpus_id=CORPUS, realm_id=REALM)
     sparse = OpenSearchRetriever(host="localhost", port=9200, strategy_id="structure_aware",
                                  corpus_id=CORPUS, realm_id=REALM, language=LANGUAGE)
+    honest = HybridRetriever(dense_retriever=dense, sparse_retriever=sparse,
+                             embedder=embedder, merge="rrf")
+    one_source = HybridRetriever(dense_retriever=sparse, sparse_retriever=sparse,
+                                 embedder=embedder, merge="rrf")
 
-    def overlap(queries: list[str]) -> float:
-        shares = []
-        for text in queries:
-            vector = embedder.embed([text])[0]
-            one = {h.chunk.chunk_id for h in dense.retrieve(query=text, k=10, query_vector=vector)}
-            other = {h.chunk.chunk_id for h in sparse.retrieve(query=text, k=10)}
-            if one and other:
-                shares.append(len(one & other) / len(one | other))
-        assert shares, "neither half returned anything, so this measures nothing"
-        return sum(shares) / len(shares)
+    import json
+    import pathlib
 
-    golden = pathlib.Path("eval/golden") / f"{CORPUS}.v1.fast.jsonl"
-    questions = [json.loads(line)["question"]
-                 for line in golden.read_text(encoding="utf-8").splitlines() if line.strip()]
-    from qdrant_client import QdrantClient
+    questions = [json.loads(line)["question"] for line
+                 in (pathlib.Path("eval/golden") / f"{CORPUS}.v1.fast.jsonl")
+                 .read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert len(questions) > 10, "too few questions to decide anything"
 
-    from adapters.qdrant import _collection_name
+    def ids(hits: list[Any]) -> list[str]:
+        return [h.chunk.chunk_id for h in hits]
 
-    points, _ = QdrantClient(host="localhost", port=6333).scroll(
-        collection_name=_collection_name("structure_aware", "bge_m3", CORPUS, REALM),
-        limit=10_000, with_payload=True)
-    own_text = [p.payload.get("text", "") for p in points][:30]
+    bought_nothing = differed_from_the_honest_one = 0
+    trace: dict[str, Any] = {}
+    for question in questions:
+        vector = embedder.embed([question])[0]
+        alone = ids(sparse.retrieve(query=question, k=5))
+        merged = ids(one_source.retrieve(query=question, k=5, timings=trace))
+        if merged == alone:
+            bought_nothing += 1
+        if merged != ids(honest.retrieve(query=question, k=5, query_vector=vector)):
+            differed_from_the_honest_one += 1
 
-    on_questions = overlap(questions)
-    on_their_own_text = overlap(own_text)
-    assert on_questions < 0.8, (
-        f"the two halves now share {on_questions:.3f} of what they return on this corpus, so "
-        "the entry is staged here after all and this pair should assert a reproduction"
+    assert bought_nothing == len(questions), (
+        f"the merge changed what one source returned on "
+        f"{len(questions) - bought_nothing} questions, so the second retriever is buying "
+        "something after all"
     )
+    assert differed_from_the_honest_one > len(questions) / 2, (
+        "the wiring costs the retrieval nothing on this corpus, so there is no failure here "
+        "to be silent about"
+    )
+    # The trace of the last question, and the shape of the silence: two halves,
+    # both timed, both returning candidates, and no word about their being the
+    # same candidates.
+    assert trace.get("n_dense") and trace.get("n_sparse"), trace
+    spoke = detector_signals({"question_results": [], "aggregate_metrics": {},
+                              "config": {"pipeline_source": "in_process"}})
+    assert "detector:bm25_dominance" not in spoke, spoke
 
     record("F23",
-           "not staged: the two halves return different fragments on prose, and no change to "
-           "the documents brings them together",
-           reproduced=False,
-           overlap_on_the_questions=round(on_questions, 3),
-           overlap_when_the_query_is_a_units_own_text=round(on_their_own_text, 3),
-           overlap_on_a_corpus_of_nine_units=0.314,
-           units=len(points), window=10,
-           staging_needs="two halves reading one source, which is a configuration and not a "
-                         "corpus; the lexical half returns only units sharing a word with the "
-                         "query and stops short of the window even when the corpus is smaller "
-                         "than it")
+           "a merge wired to one source returns what that source returns alone, on every "
+           "question, and its trace reports two halves both doing work",
+           questions=len(questions), merge_returned_one_source_unchanged=bought_nothing,
+           differed_from_the_honest_hybrid=differed_from_the_honest_one,
+           trace_of_the_last_question=dict(trace),
+           the_corpus_cannot_do_this="the two halves share a fifth of what they return on "
+                                     "these questions, a third when the query is a unit's own "
+                                     "text, and under a third on a corpus of nine units",
+           signals_seen=[])
 
 
 def test_F07_the_grounds_are_split_and_the_window_returns_half_of_them(
@@ -634,7 +598,9 @@ def test_F07_the_grounds_are_split_and_the_window_returns_half_of_them(
     because the reference is what refused this entry the first time: a
     reference names a document, and a document is credited when any one of its
     units is found, so a section cut in two keeps its recall at one while half
-    the answer is missing from the window.
+    the answer is missing from the window. That refusal stood as this entry's
+    record until this pair replaced it, and the fact it measured is carried
+    below, where it belongs: as the reason the recall says nothing.
 
     So the pair asks a different question of the same run. For each question,
     the section the healthy corpus answers it with is found, and then the split

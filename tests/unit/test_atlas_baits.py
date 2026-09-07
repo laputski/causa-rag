@@ -276,18 +276,6 @@ def bait_F10_stub_embedder() -> set[str]:
     return _detector_ids(run)
 
 
-def bait_F17_keyword_bias() -> set[str]:
-    """Almost the whole context contributed by the keyword half alone.
-
-    Not "sparse scores are larger": they always are, being on another scale.
-    """
-    run = clean_run()
-    for qr in run["question_results"]:
-        for ref in qr["source_refs"]:
-            ref["dense_score"], ref["sparse_score"] = 0.0, 9.0
-    return _detector_ids(run)
-
-
 def bait_F18_right_fragment_below_the_cutoff() -> set[str]:
     """Indexed, and the widened search finds it well outside the selection."""
     cause = classify_retrieval_cause(
@@ -646,6 +634,15 @@ def bait_F43_an_index_holding_nothing() -> set[str]:
     return _health_ids([])
 
 
+#: F17 has no bait here, and the reason is worth the line. It had one: every
+#: fragment of every context carrying a score from the keyword half alone.
+#: That is a whole context ruled by one half, which is what two neighbouring
+#: entries are about, and this entry is about one document raised by one half.
+#: Measured on a live index, a document of the corpus's own frequent words
+#: enters the keyword half's window and not the semantic half's, and the
+#: signal that fixture provoked stays silent throughout. The fixture had been
+#: proving a different failure under this entry's name, which is the divergence
+#: the second level of baiting exists to find.
 BAITS = {
     "F01": bait_F01_reingest_duplicates,
     "F02": bait_F02_one_identifier_two_fragments,
@@ -660,7 +657,6 @@ BAITS = {
     "F14": bait_F14_model_does_not_cover_the_language,
     "F15": bait_F15_semantic_search_misses_an_identifier,
     "F16": bait_F16_keyword_search_misses_a_paraphrase,
-    "F17": bait_F17_keyword_bias,
     "F18": bait_F18_right_fragment_below_the_cutoff,
     "F21": bait_F21_incomparable_scales,
     "F40": bait_F40_one_half_is_absent,

@@ -212,106 +212,100 @@ def test_F27_a_stage_that_ran_and_left_no_duration_is_reported(
            signals=sorted(spoke), signals_on_the_control=sorted(_signals(reranked)))
 
 
-def test_F17_a_frequent_word_document_damages_retrieval_and_the_named_signal_is_silent(
+def test_F17_a_document_of_frequent_words_is_raised_by_one_half(
     embedder: Any,
 ) -> None:
-    """The measured blocker, recorded because a blocker nobody measured is
-    worth less than a row saying "not staged".
+    """A document made of the corpus's own commonest words, and which half
+    raises it.
 
-    A document repeating the corpus's commonest words is added, loaded, and
-    queried through a hybrid retrieval. It costs retrieval a third of its
-    recall, so the failure is unmistakably present. The signal the entry
-    names reads which half of the merge a fragment came from, and this
-    document is found by both halves: it is made of the corpus's own words,
-    so the embedding places it near the same questions the lexical index
-    does. Nothing about the merge is imbalanced, and the entry's signal is
-    right to stay silent.
+    Measured per half and never on the share of the whole context, which is
+    what the first attempt did and what left this entry blocked for so long.
+    The share of a context that came from one half is a statistic about a
+    merge; this failure is one document, and one document moves that share by
+    a fragment. Asked the other way, the document enters the keyword half's
+    window on six questions of nineteen and the semantic half's on one.
+
+    So the signal the entry used to name is silent here, correctly: it reports
+    a half that has stopped contributing, and nothing here has stopped. The
+    entry no longer names it, and this is the pair that says why: a fixture
+    that made every fragment come from the keyword half was proving a whole
+    context ruled by one half, which two neighbouring entries are about, under
+    this entry's name.
 
     Skipped, loudly, until the stuffed corpus is loaded, because the load
     costs a pass of the real model over two hundred and twenty fragments and
     belongs to whoever is staging this, and not to every run of the suite.
     """
+    from adapters.opensearch import OpenSearchRetriever
+    from adapters.qdrant import QdrantRetriever
     from tests.proving_ground.conftest import _index_exists
+    from tools.corpus_mutate import _commonest_words, read_corpus
 
-    if not _index_exists("base-ru-stuffed", "structure_aware", embedder.embedder_id):
+    corpus_id = "base-ru-stuffed"
+    if not _index_exists(corpus_id, "structure_aware", embedder.embedder_id):
         pytest.skip(
-            "NOT RUN: no index for 'base-ru-stuffed'. Create it with the plan from "
+            f"NOT RUN: no index for {corpus_id!r}. Create it with the plan from "
             "`python3 -m tools.corpus_mutate corpus/proving-ground/base-ru "
             "--defect stuff_a_document_with_the_corpus_own_words --out <dir>/base-ru`, "
-            "then load that directory as corpus base-ru-stuffed."
+            f"then load that directory as corpus {corpus_id}."
         )
 
     control = _run(embedder, "F17-control", pipeline_id="hybrid_rrf", reranker=None)
     stuffed = _run(embedder, "F17-stuffed", pipeline_id="hybrid_rrf", reranker=None,
-                   corpus_id="base-ru-stuffed")
+                   corpus_id=corpus_id)
 
     def _recall(run: dict[str, Any]) -> float:
         return float(run["aggregate_metrics"].get("retrieval_recall_at_k", -1.0))
 
-    def _from_one_half(run: dict[str, Any]) -> float:
-        refs = [s for q in run["question_results"] for s in (q.get("source_refs") or [])]
-        scored = [(s.get("dense_score") or 0.0, s.get("sparse_score") or 0.0) for s in refs]
-        scored = [(d, s) for d, s in scored if d > 0 or s > 0]
-        if not scored:
-            return 0.0
-        return sum(1 for d, s in scored if d == 0 and s > 0) / len(scored)
-
     assert _recall(stuffed) < _recall(control), (
         f"the added document cost retrieval nothing: {_recall(stuffed)} against "
-        f"{_recall(control)}, so there is no failure here to be silent about"
+        f"{_recall(control)}, so there is no failure here to be raised by anything"
     )
-    assert "detector:bm25_dominance" not in _signals(stuffed), (
-        "the entry's own signal fired, so this is no longer a blocker and the pair should "
-        "assert the reproduction and stop recording the absence"
-    )
-    # Why no shape of stuffing separates the halves, measured and never
-    # assumed. The signal the entry names reads which half a fragment came
-    # from, so staging it needs a document the lexical half raises and the
-    # dense half does not. Four shapes were put to the model, from the twelve
-    # commonest words repeated to one word repeated sixty times, and asked how
-    # close each is to this corpus's questions. Every one of them sits where a
-    # real document sits, so the dense half takes them all.
-    import numpy as np
 
-    def cosine(one: Any, other: Any) -> float:
-        first, second = np.array(one), np.array(other)
-        return float(first @ second / (np.linalg.norm(first) * np.linalg.norm(second)))
-
-    from tools.corpus_mutate import _commonest_words, read_corpus
-
+    dense = QdrantRetriever(host="localhost", port=6333, strategy_id="structure_aware",
+                            embedder_id=embedder.embedder_id, corpus_id=corpus_id,
+                            realm_id="proving-ground")
+    sparse = OpenSearchRetriever(host="localhost", port=9200, strategy_id="structure_aware",
+                                 corpus_id=corpus_id, realm_id="proving-ground",
+                                 language=LANGUAGE)
     healthy = read_corpus(ROOT / "corpus" / "proving-ground" / "base-ru")
-    words = _commonest_words(healthy, 12)
-    questions = [q["question"] for q in control["question_results"] if q.get("question")][:12]
-    assert len(questions) > 5, "not enough questions to compare against"
-    asked = [embedder.embed([q])[0] for q in questions]
-    real = [embedder.embed([text[:1000]])[0] for text in list(healthy.values())[:12]]
+    filler = " ".join(_commonest_words(healthy, 12))
+    questions = [q["question"] for q in stuffed["question_results"] if q.get("question")]
+    assert len(questions) > 10, "too few questions to measure a half by"
 
-    def closeness(text: str) -> float:
-        vector = embedder.embed([text])[0]
-        return sum(cosine(vector, one) for one in asked) / len(asked)
+    seen = {"the keyword half only": 0, "the semantic half only": 0, "both": 0, "neither": 0}
+    for question in questions:
+        vector = embedder.embed([question])[0]
+        by_meaning = any(filler in h.chunk.text
+                         for h in dense.retrieve(query=question, k=10, query_vector=vector))
+        by_words = any(filler in h.chunk.text
+                       for h in sparse.retrieve(query=question, k=10))
+        if by_words and not by_meaning:
+            seen["the keyword half only"] += 1
+        elif by_meaning and not by_words:
+            seen["the semantic half only"] += 1
+        elif by_meaning:
+            seen["both"] += 1
+        else:
+            seen["neither"] += 1
 
-    salads = {
-        "the twelve commonest words repeated": (" ".join(words) + ". ") * 3,
-        "one frequent word repeated": (words[0] + " ") * 180,
-        "one word, once": words[0],
-    }
-    a_real_document = sum(cosine(one, other) for one in real for other in asked) / (
-        len(real) * len(asked))
-    measured = {name: round(closeness(text), 3) for name, text in salads.items()}
-    assert min(measured.values()) > a_real_document - 0.1, (
-        f"a shape of stuffing is far enough from the questions to be lexical only: {measured} "
-        f"against {a_real_document:.3f} for a real document, so this entry is stageable here"
+    assert seen["the keyword half only"] > seen["the semantic half only"], (
+        f"the semantic half raises this document as readily as the keyword half does: {seen}, "
+        "so it is not the keyword search that raises it and this entry is not staged"
+    )
+    spoke = _signals(stuffed)
+    assert "detector:bm25_dominance" not in spoke, (
+        "the signal this entry used to name fired, so it does read this after all and the "
+        "entry should name it again"
     )
 
-    record("F17", "not staged: the document is found by both halves, so the merge is balanced "
-                  "and the signal the entry names reads only which half a fragment came from",
-           reproduced=False,
+    record("F17", "a document of the corpus's own frequent words enters the keyword half's "
+                  "window and not the semantic half's, and nothing reads which half raised it",
            recall_control=_recall(control), recall_stuffed=_recall(stuffed),
-           from_the_lexical_half_alone_control=_from_one_half(control),
-           from_the_lexical_half_alone_stuffed=_from_one_half(stuffed),
-           signals_stuffed=sorted(_signals(stuffed)),
-           closeness_to_the_questions=measured,
-           closeness_of_a_real_document=round(a_real_document, 3),
-           staging_needs="a document the lexical half raises and the dense half does not; this "
-                         "model rates a salad of the corpus's own frequent words as close to a "
-                         "question as it rates a real document, so no stuffing is lexical only")
+           questions=len(questions), reached_the_window=seen,
+           signals_stuffed=sorted(spoke),
+           why_nothing_reads_it="the only judgement about the halves counts the share of a "
+                                "whole context that came from one of them and reports a half "
+                                "that has stopped contributing; one document moves that share "
+                                "by a fragment",
+           the_entry_was_corrected="it claimed a detector until this pair ran")

@@ -1,26 +1,16 @@
 {
   "failure_id": "F15",
-  "recorded_at": "2026-09-07T17:49:25.193898+00:00",
-  "reproduced": false,
-  "claim": "not staged: the dense half returns the fragment carrying a code first, for every shape of code tried, so there is no miss to attribute to one",
+  "recorded_at": "2026-09-07T19:50:43.661000+00:00",
+  "reproduced": true,
+  "claim": "asked for a designation written into one passage, the keyword half returns it first and the semantic half does not return it in fifty",
   "measured": {
-    "code": "ДТ-760",
-    "results": 10,
-    "of_them_carrying_the_code": 7,
-    "rank_of_the_first_carrying_it": 1,
-    "other_shapes_tried": [
-      "4471829365",
-      "8f3a91c0-77d2",
-      "QX7R-4482-ZK",
-      "СН 12.13330.2016"
-    ],
-    "fragments_beating_the_carrier_by_shape": {
-      "QX7R-4482-ZK": 0,
-      "8f3a91c0-77d2": 0,
-      "СН 12.13330.2016": 0,
-      "4471829365": 0
-    },
-    "fragments_compared_against": 30,
-    "staging_needs": "an embedding model that tokenises a code away; this one is multilingual and keeps every shape tried"
+    "corpus": "miracl-ru-coded",
+    "strategy": "fixed",
+    "code": "ЩК-4471",
+    "window": 50,
+    "rank_in_the_keyword_half": 1,
+    "rank_in_the_semantic_half": null,
+    "what_the_small_corpus_does": "two hundred and twenty sections of about a hundred and thirty characters, where the same query returns the carrying fragment first in both halves",
+    "what_decides": "the length of the fragment and the size of the field it competes in, and not the shape of the designation: five shapes were tried"
   }
 }

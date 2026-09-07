@@ -1,11 +1,11 @@
 {
   "failure_id": "F31",
-  "recorded_at": "2026-09-07T17:53:03.849151+00:00",
+  "recorded_at": "2026-09-07T19:36:47.311969+00:00",
   "reproduced": true,
   "claim": "an external system that answers from its own knowledge, sources unused",
   "measured": {
     "recall_unchanged": 1.0,
-    "context_support_control": 0.8154833954427717,
+    "context_support_control": 0.8149373337030986,
     "context_support_broken": 0.5600165417015208,
     "signals_that_appeared": [],
     "what_they_said": {}

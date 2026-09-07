@@ -468,18 +468,33 @@ FAILURES: tuple[FailureMode, ...] = (
     ),
     FailureMode(
         id="F17",
-        shares_signals_with=("F21", "F40"),
         atlas_rows=(17,),
         title="Keyword search raises a document carrying a frequent word",
         stage_origin="retrieval",
         stage_visible="retrieval",
         severity=Severity(3, 2, 2),
         origin="ours-4",
-        detection="detector",
+        # Named a signal until staging it on a live index said otherwise, and
+        # the correction is the point of staging anything. A document of the
+        # corpus's own frequent words enters the keyword half's window and not
+        # the semantic half's, on five questions of nineteen, and the signal
+        # this entry named stays silent throughout. That signal counts the
+        # share of a whole context contributed by one half, and reports a half
+        # that has stopped contributing; this failure is one document raised
+        # by one half, which moves that share by a fragment.
+        #
+        # The fixture that stood here made every fragment of every context
+        # come from the keyword half alone. That is a whole context ruled by
+        # one half, which is what the two entries below are about, so the
+        # fixture had been proving a different failure under this name.
+        detection="none",
         instrument="corpus",
         applies_when=(("C3", ("rrf", "score_normalization", "learned_fusion")),),
-        signals=(Signal("detector", "bm25_dominance"),),
-        bait="tests/unit/test_atlas_baits.py::test_bait[F17]",
+        not_detected_reason=(
+            "nothing reads which half raised one fragment; the only judgement about the "
+            "halves counts the share of a whole context that came from one of them, and one "
+            "document moves that share by a fragment"
+        ),
         scope_caveat=(
             "the schema records only the primary representation model, so a hybrid's lexical half is invisible in it; scoped by the presence of fusion instead, which is wider than the truth"
         ),
@@ -529,7 +544,7 @@ FAILURES: tuple[FailureMode, ...] = (
     ),
     FailureMode(
         id="F21",
-        shares_signals_with=("F17", "F40"),
+        shares_signals_with=("F40",),
         atlas_rows=(21,),
         title="The halves are on incomparable scales and one of them rules the merge",
         stage_origin="fusion",
@@ -553,7 +568,7 @@ FAILURES: tuple[FailureMode, ...] = (
         # built and lost, answers every query from one half while every
         # configuration on file still says two.
         id="F40",
-        shares_signals_with=("F17", "F21"),
+        shares_signals_with=("F21",),
         atlas_rows=(),
         title="One half of the retrieval is absent and every setting still says two",
         stage_origin="ingest",

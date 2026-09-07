@@ -1,6 +1,6 @@
 {
   "failure_id": "F33",
-  "recorded_at": "2026-09-07T17:59:02.233488+00:00",
+  "recorded_at": "2026-09-07T19:42:38.100221+00:00",
   "reproduced": true,
   "claim": "a metric added to a real run with no declaration of what it computes",
   "measured": {

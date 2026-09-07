@@ -58,4 +58,8 @@ PROVOKES: dict[str, str | None] = {
     # is what makes the failure quiet. What it costs is measured on the index,
     # by asking how much of an answering section a window still holds.
     "split_every_section_in_two": None,
+    # None. One sentence added to one document leaves every length, number and
+    # heading where it was. What the sentence stages is measured on the index
+    # and depends on the corpus: on a small one of short sections, nothing.
+    "hide_a_code_in_one_document": None,
 }

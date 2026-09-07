@@ -1,14 +1,20 @@
 {
   "failure_id": "F23",
-  "recorded_at": "2026-09-07T17:49:44.773430+00:00",
-  "reproduced": false,
-  "claim": "not staged: the two halves return different fragments on prose, and no change to the documents brings them together",
+  "recorded_at": "2026-09-07T19:51:01.664845+00:00",
+  "reproduced": true,
+  "claim": "a merge wired to one source returns what that source returns alone, on every question, and its trace reports two halves both doing work",
   "measured": {
-    "overlap_on_the_questions": 0.215,
-    "overlap_when_the_query_is_a_units_own_text": 0.37,
-    "overlap_on_a_corpus_of_nine_units": 0.314,
-    "units": 220,
-    "window": 10,
-    "staging_needs": "two halves reading one source, which is a configuration and not a corpus; the lexical half returns only units sharing a word with the query and stops short of the window even when the corpus is smaller than it"
+    "questions": 19,
+    "merge_returned_one_source_unchanged": 19,
+    "differed_from_the_honest_hybrid": 19,
+    "trace_of_the_last_question": {
+      "dense_ms": 1.2,
+      "sparse_ms": 1.0,
+      "merge_ms": 0.0,
+      "n_dense": 20,
+      "n_sparse": 20
+    },
+    "the_corpus_cannot_do_this": "the two halves share a fifth of what they return on these questions, a third when the query is a unit's own text, and under a third on a corpus of nine units",
+    "signals_seen": []
   }
 }

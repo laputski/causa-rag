@@ -86,8 +86,10 @@ def test_a_finding_is_joined_to_the_entries_it_evidences() -> None:
     items = [{"id": "duplicates"}, {"id": "bm25_dominance"}, {"id": "no_such_detector"}]
     attach_failure_ids(items, "detector")
     assert items[0]["failure_ids"] == ["F01"]
-    assert items[1]["failure_ids"] == ["F17", "F21", "F40"], (
-        "a finding standing for two entries must name both"
+    assert items[1]["failure_ids"] == ["F21", "F40"], (
+        "a finding standing for two entries must name both. It stood for three until one of "
+        "them was staged on a live index and the signal stayed silent throughout, so that "
+        "entry stopped naming it"
     )
     assert items[2]["failure_ids"] == [], (
         "a finding no entry names keeps an empty list: the platform is saying "

@@ -1,22 +1,22 @@
 {
   "failure_id": "F17",
-  "recorded_at": "2026-09-07T17:59:15.592440+00:00",
-  "reproduced": false,
-  "claim": "not staged: the document is found by both halves, so the merge is balanced and the signal the entry names reads only which half a fragment came from",
+  "recorded_at": "2026-09-07T19:42:46.549030+00:00",
+  "reproduced": true,
+  "claim": "a document of the corpus's own frequent words enters the keyword half's window and not the semantic half's, and nothing reads which half raised it",
   "measured": {
     "recall_control": 1.0,
     "recall_stuffed": 0.6470588235294118,
-    "from_the_lexical_half_alone_control": 0.0,
-    "from_the_lexical_half_alone_stuffed": 0.0,
+    "questions": 19,
+    "reached_the_window": {
+      "the keyword half only": 5,
+      "the semantic half only": 0,
+      "both": 1,
+      "neither": 13
+    },
     "signals_stuffed": [
       "detector:layer_bottleneck"
     ],
-    "closeness_to_the_questions": {
-      "the twelve commonest words repeated": 0.408,
-      "one frequent word repeated": 0.425,
-      "one word, once": 0.44
-    },
-    "closeness_of_a_real_document": 0.466,
-    "staging_needs": "a document the lexical half raises and the dense half does not; this model rates a salad of the corpus's own frequent words as close to a question as it rates a real document, so no stuffing is lexical only"
+    "why_nothing_reads_it": "the only judgement about the halves counts the share of a whole context that came from one of them and reports a half that has stopped contributing; one document moves that share by a fragment",
+    "the_entry_was_corrected": "it claimed a detector until this pair ran"
   }
 }

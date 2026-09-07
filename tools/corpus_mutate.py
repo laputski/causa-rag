@@ -710,6 +710,46 @@ def _sentences(line: str) -> list[str]:
     return [s.strip() for s in re.split(r"(?<=[.!?])\s+", line.strip()) if s.strip()]
 
 
+#: A designation no corpus this repository ships contains, checked by the
+#: defect below before it writes anything: a code the corpus already states
+#: elsewhere is a code that finding proves nothing about.
+THE_CODE_IN_ONE_DOCUMENT = "ЩК-4471"
+
+
+def _hide_a_code_in_one_document(corpus: Corpus) -> Corpus:
+    """Write a designation into one document, once, and nowhere else.
+
+    A keyword index finds it: a code is a token and the token is there. What
+    the pair asks is whether the semantic half does, and the answer depends on
+    how much text surrounds it. Measured on the model this proving ground
+    indexes with: in a fragment of a hundred and fifty characters the code
+    decides the ranking; at a thousand it is beaten by two fragments in
+    twenty-six; and in four thousand fragments of ordinary encyclopaedic
+    length the fragment carrying it comes back three thousand three hundred
+    and eighty-seventh.
+
+    So the defect is one sentence and the corpus decides what it stages. On a
+    small corpus of short sections it stages nothing, which is why the first
+    attempt at this entry recorded a blocker.
+    """
+    if any(THE_CODE_IN_ONE_DOCUMENT in text for text in corpus.values()):
+        raise CorpusCannotCarryDefect(
+            f"this corpus already states {THE_CODE_IN_ONE_DOCUMENT!r}, so a search finding it "
+            "would prove nothing about the sentence this defect adds"
+        )
+    words = _commonest_words(corpus, count=4)
+    if not words:
+        return dict(corpus)
+    out = dict(corpus)
+    # The middle document by name, so the mutation is not on whichever
+    # document a neighbouring test happens to read first.
+    name = sorted(corpus)[len(corpus) // 2]
+    out[name] = corpus[name].rstrip() + (
+        f"\n\n{' '.join(words)}: {THE_CODE_IN_ONE_DOCUMENT}.\n"
+    )
+    return out
+
+
 DEFECTS: tuple[Defect, ...] = (
     Defect("flatten_headings",
            "no document carries a heading, so nothing can build a structural tree",
@@ -762,6 +802,13 @@ DEFECTS: tuple[Defect, ...] = (
            ("F07",), _split_every_section_in_two,
            requires="carries headings, since each half is given one",
            admits=lambda corpus: any("#" in text for text in corpus.values())),
+    Defect("hide_a_code_in_one_document",
+           "one document states a designation that appears nowhere else in the corpus",
+           ("F15",), _hide_a_code_in_one_document,
+           requires="does not already state that designation, since finding one the corpus "
+                    "states elsewhere proves nothing",
+           admits=lambda corpus: not any(
+               THE_CODE_IN_ONE_DOCUMENT in text for text in corpus.values())),
     Defect("cut_a_table_and_a_list",
            "one added document is mostly a table and a list, both longer than a chunk",
            ("F08",), _cut_a_table_and_a_list),
@@ -770,11 +817,32 @@ DEFECTS: tuple[Defect, ...] = (
 _BY_NAME = {d.name: d for d in DEFECTS}
 
 
-def read_corpus(source: Path) -> Corpus:
-    return {
-        path.name: path.read_text(encoding="utf-8")
-        for path in sorted(source.glob("*.md")) + sorted(source.glob("*.txt"))
-    }
+def read_corpus(source: Path, limit: int = 0) -> Corpus:
+    """The documents of a corpus, by file name.
+
+    Two layouts, because this repository ships both and for a while this read
+    only one. A handbook is a directory of files. A retrieval benchmark is a
+    directory of directories, one per document, holding its passages; three of
+    the five corpora here are laid out that way and none of them could be read
+    at all, so no defect could be put into any of them.
+
+    A nested corpus is flattened, and the name keeps both parts, so a passage
+    stays identifiable and a load derives one source code for the lot. `limit`
+    caps how many are read, in name order, because those corpora hold tens of
+    thousands of passages and a proving ground wants a slice of one.
+    """
+    files = sorted(source.glob("*.md")) + sorted(source.glob("*.txt"))
+    if not files:
+        files = sorted(source.glob("*/*.md")) + sorted(source.glob("*/*.txt"))
+        if limit:
+            files = files[:limit]
+        return {
+            f"{path.parent.name}-{path.name}": path.read_text(encoding="utf-8")
+            for path in files
+        }
+    if limit:
+        files = files[:limit]
+    return {path.name: path.read_text(encoding="utf-8") for path in files}
 
 
 class CorpusCannotCarryDefect(ValueError):
@@ -814,6 +882,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--defect", help="which defect to put in it")
     parser.add_argument("--out", type=Path, help="where to write the result")
     parser.add_argument("--list", action="store_true", help="the defects this tool can put in")
+    parser.add_argument("--limit", type=int, default=0, metavar="N",
+                        help="read at most N documents, in name order. For the retrieval "
+                             "benchmarks, which hold tens of thousands")
     args = parser.parse_args(argv)
 
     if args.list or not args.source:
@@ -827,7 +898,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.defect or not args.out:
         parser.error("--defect and --out are both required when a source is given")
 
-    corpus = read_corpus(args.source)
+    corpus = read_corpus(args.source, limit=args.limit)
     if not corpus:
         parser.error(f"no documents found in {args.source}")
     try:

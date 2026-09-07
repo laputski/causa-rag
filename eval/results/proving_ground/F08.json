@@ -1,6 +1,6 @@
 {
   "failure_id": "F08",
-  "recorded_at": "2026-09-07T17:49:43.479345+00:00",
+  "recorded_at": "2026-09-07T19:51:00.403251+00:00",
   "reproduced": true,
   "claim": "a table cut across fragments is in the index and every check is silent",
   "measured": {
