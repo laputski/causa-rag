@@ -1,6 +1,6 @@
 {
   "failure_id": "F19",
-  "recorded_at": "2026-09-07T07:03:34.712447+00:00",
+  "recorded_at": "2026-09-07T17:52:21.808412+00:00",
   "reproduced": true,
   "claim": "an external system with no confidence threshold answers what it cannot",
   "measured": {

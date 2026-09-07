@@ -1,13 +1,26 @@
 {
   "failure_id": "F15",
-  "recorded_at": "2026-09-07T15:43:28.274749+00:00",
+  "recorded_at": "2026-09-07T17:49:25.193898+00:00",
   "reproduced": false,
-  "claim": "not staged: searched for a bare code the dense half returns the fragment carrying it first, so there is no miss to attribute to an identifier",
+  "claim": "not staged: the dense half returns the fragment carrying a code first, for every shape of code tried, so there is no miss to attribute to one",
   "measured": {
     "code": "ДТ-760",
     "results": 10,
     "of_them_carrying_the_code": 7,
     "rank_of_the_first_carrying_it": 1,
-    "staging_needs": "an embedding model that tokenises a code away; this one is multilingual and does not"
+    "other_shapes_tried": [
+      "4471829365",
+      "8f3a91c0-77d2",
+      "QX7R-4482-ZK",
+      "СН 12.13330.2016"
+    ],
+    "fragments_beating_the_carrier_by_shape": {
+      "QX7R-4482-ZK": 0,
+      "8f3a91c0-77d2": 0,
+      "СН 12.13330.2016": 0,
+      "4471829365": 0
+    },
+    "fragments_compared_against": 30,
+    "staging_needs": "an embedding model that tokenises a code away; this one is multilingual and keeps every shape tried"
   }
 }

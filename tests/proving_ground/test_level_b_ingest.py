@@ -282,3 +282,103 @@ def test_F40_a_missing_half_leaves_the_other_supplying_everything(
            single_half_healthy=f"{alone_healthy}/{total_healthy}",
            single_half_missing=f"{alone_missing}/{total_missing}",
            signals=sorted(detector_signals(missing)))
+
+
+def test_F13_the_end_of_a_unit_past_the_model_window_is_in_no_vector(
+    embedder: Any,
+) -> None:
+    """A unit longer than the model reads, and the part it never read.
+
+    Nothing on this platform reaches this by default: the chunker caps a unit
+    at its chunk size and the default is a thousand characters, far below the
+    window. The pair is therefore two loads of the same documents, one of
+    which carries a fact after sixty thousand characters: at a thousand the
+    fact sits near the start of a unit, and at sixty-five thousand the whole
+    section is one unit whose end the model stops at.
+
+    Measured on the stored vector and never on a ranking, and the difference
+    matters. The long unit still comes back for a question about its subject,
+    because it is the only unit on that subject and the first eight thousand
+    tokens of it are about that subject. What is absent is the end: embedding
+    the unit's text again, and embedding it with its tail removed, gives the
+    same vector to six decimal places. So retrieval looks correct and answers
+    from a unit whose relevant part was never read, which is the worst shape
+    this failure has.
+    """
+    import numpy as np
+    from qdrant_client import QdrantClient
+
+    from adapters.qdrant import _collection_name
+    from tools.corpus_mutate import THE_FACT_AT_THE_END
+
+    client = QdrantClient(host="localhost", port=6333)
+
+    def the_unit_holding_the_fact(corpus_id: str) -> Any:
+        name = _collection_name("structure_aware", "bge_m3", corpus_id, "proving-ground")
+        if name not in {c.name for c in client.get_collections().collections}:
+            pytest.skip(
+                f"NOT RUN: {corpus_id} is not loaded. Print the two loads with "
+                f"`python3 -m tools.ingest_distort --plan "
+                f"load_a_section_whole_past_the_model_window --corpus {CORPUS}` and run them."
+            )
+        points, _ = client.scroll(collection_name=name, limit=10_000,
+                                  with_payload=True, with_vectors=True)
+        holding = [p for p in points
+                   if THE_FACT_AT_THE_END in (p.payload.get("text") or "")]
+        assert len(holding) == 1, (
+            f"{corpus_id} holds {len(holding)} units carrying the fact, and the pair needs one"
+        )
+        return holding[0], [len(p.payload.get("text") or "") for p in points]
+
+    def cosine(a: Any, b: Any) -> float:
+        first, second = np.array(a), np.array(b)
+        return float(first @ second / (np.linalg.norm(first) * np.linalg.norm(second)))
+
+    def without_its_tail(text: str) -> str:
+        # Twenty words back from the fact, so what is dropped is a sentence and
+        # not a token, and a vector that changes has changed for a reason a
+        # reader would call a change of meaning.
+        return text[:text.index(THE_FACT_AT_THE_END)].rsplit(" ", 20)[0]
+
+    def stored_vector(point: Any) -> Any:
+        return point.vector if not isinstance(point.vector, dict) else list(point.vector.values())[0]
+
+    split, split_lengths = the_unit_holding_the_fact(f"{CORPUS}-window-split")
+    whole, whole_lengths = the_unit_holding_the_fact(f"{CORPUS}-window-whole")
+
+    # Exactly one unit of the distorted index is longer than the window, so
+    # everything below is attributable to that unit and not to the chunk size.
+    over_the_window = [n for n in whole_lengths if n > 40_000]
+    assert len(over_the_window) == 1, (
+        f"{len(over_the_window)} units exceed the window, so more than one thing changed"
+    )
+    assert max(split_lengths) < 40_000, "the control index also holds a unit past the window"
+
+    split_text = split.payload["text"]
+    whole_text = whole.payload["text"]
+    moved = cosine(stored_vector(split), embedder.embed([without_its_tail(split_text)])[0])
+    unmoved = cosine(stored_vector(whole), embedder.embed([without_its_tail(whole_text)])[0])
+
+    assert moved < 0.99, (
+        f"removing the tail of the control's unit left its vector at {moved:.6f}, so this pair "
+        "cannot tell a read tail from an unread one"
+    )
+    assert unmoved > 0.999999, (
+        f"removing the tail of a unit of {len(whole_text)} characters moved its vector to "
+        f"{unmoved:.6f}, so the model did read past the window and this entry is not staged"
+    )
+
+    # The reverse half. Nothing compares a unit's length against the window.
+    spoke = health_signals(f"{CORPUS}-window-whole")
+    assert spoke == set(), (
+        f"something does see this, which would make the entry detectable: {sorted(spoke)}"
+    )
+    record("F13",
+           "a unit of sixty thousand characters is stored with a vector its end never "
+           "reached, and every check reports a corpus in order",
+           unit_characters_whole=len(whole_text), unit_characters_split=len(split_text),
+           units_whole=len(whole_lengths), units_split=len(split_lengths),
+           units_over_the_window=len(over_the_window),
+           cosine_after_dropping_the_tail_whole=round(unmoved, 6),
+           cosine_after_dropping_the_tail_split=round(moved, 6),
+           declared_window_tokens=8192, signals_seen=[])

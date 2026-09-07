@@ -100,6 +100,37 @@ def _built(graph: Any, corpus: dict[str, str]) -> dict[str, Any]:
     return {"units": units, "edges": edges, "edges_per_unit": edges / units if units else 0.0}
 
 
+#: The largest number of units one word can join before the linker's own cap
+#: removes it. The cap is what refused the first attempt at these two entries,
+#: so the staging that works sits directly underneath it.
+UNITS_AT_THE_CAP = 50
+
+
+def _units_carrying_the_shared_word(corpus: dict[str, str],
+                                    healthy: dict[str, str]) -> list[Any]:
+    """The units the injected word is a keyword of.
+
+    Asked of the chunker and of the keyword extractor, never assumed: a word
+    is a keyword of a unit only if it is among the first eight distinct words
+    of four characters or more, and a placement that misses that window joins
+    nothing at all.
+    """
+    from adapters.neo4j_graph import _keywords
+    from tools.corpus_mutate import _commonest_words
+
+    word = _commonest_words(healthy, count=1)[0] * 2
+    return [c for c in _chunks(corpus) if word in _keywords(c.text)]
+
+
+def _edges_among(graph: Any, units: list[Any]) -> int:
+    """How many of the pairs inside one set of units are linked."""
+    with graph._connect().session() as session:
+        return session.run(
+            "MATCH (a:Chunk)-[r:RELATED]-(b:Chunk) "
+            "WHERE a.chunk_id IN $ids AND b.chunk_id IN $ids AND a.chunk_id < b.chunk_id "
+            "RETURN count(r) AS n", ids=[u.chunk_id for u in units]).single()["n"]
+
+
 def _communities(graph: Any) -> dict[str, Any]:
     """How many distinct documents the largest community mixes.
 
@@ -125,14 +156,32 @@ def _communities(graph: Any) -> dict[str, Any]:
 def halves(graph: Any) -> Any:
     """Both halves, built once, in order. The second overwrites the first,
     which is what clearing between them means."""
-    from tools.corpus_mutate import mutate, read_corpus
+    from tools.corpus_mutate import mutate, read_corpus, share_a_word
 
     healthy = read_corpus(CORPUS)
+    # The units a shared word reaches at the larger size, held fixed so every
+    # graph below is measured over the same units and the control can be asked
+    # how many of those pairs it already had.
+    carrying = _units_carrying_the_shared_word(share_a_word(healthy, UNITS_AT_THE_CAP), healthy)
+
     control = _built(graph, healthy)
     control["communities"] = _communities(graph)
+    control["edges_among_the_carriers"] = _edges_among(graph, carrying)
     broken = _built(graph, mutate(healthy, "repeat_a_phrase_in_every_document"))
     broken["communities"] = _communities(graph)
-    yield {"control": control, "broken": broken}
+
+    shared: dict[int, dict[str, Any]] = {}
+    for units in (UNITS_AT_THE_CAP // 2, UNITS_AT_THE_CAP):
+        corpus = share_a_word(healthy, units)
+        built = _built(graph, corpus)
+        built["communities"] = _communities(graph)
+        reached = _units_carrying_the_shared_word(corpus, healthy)
+        built["carriers"] = len(reached)
+        built["documents_reached"] = len({unit.doc_id for unit in reached})
+        built["edges_among_the_carriers"] = _edges_among(graph, reached)
+        shared[units] = built
+
+    yield {"control": control, "broken": broken, "shared": shared}
     # Left as it was found. The proving ground is meant to be broken on
     # purpose, and a graph emptied by a suite that has finished is broken by
     # accident: the next person to open it would read the damage as the
@@ -186,38 +235,128 @@ def test_F41_the_guard_leaves_the_graph_with_no_edges_and_it_still_reports_struc
            signals=sorted(spoke), signals_on_the_control=sorted(quiet))
 
 
-def test_F38_and_F39_cannot_be_staged_here_and_the_reason_is_measured(
-    halves: dict[str, dict[str, Any]],
+def test_F38_one_word_joins_every_unit_it_reaches_to_every_other(
+    halves: dict[str, Any],
 ) -> None:
-    """The other two entries, and why this proving ground does not reach them.
+    """The runaway link step, staged under the cap that refused it before.
 
-    A runaway link step needs a keyword shared by many units and kept. Here a
-    shared keyword is dropped the moment it passes the cap, so the graph goes
-    to nothing and not to everything, and a community drawing on most of
-    the corpus never forms because there are no edges to form it from. Both
-    are baited at the unit level, on graphs whose counts say what no graph
-    this platform builds will say.
+    The first attempt put a shared sentence in every unit, and the linker
+    dropped the keyword for passing its frequency cap: the graph went to
+    nothing instead of to everything. The cap is fifty, so a word in fifty
+    units is the most one word can join before it is removed, which is also
+    where the runaway is at its worst.
+
+    What is measured is the clique and never the total, because the injected
+    word displaces one of a unit's own eight keywords and costs edges
+    elsewhere: at half the size the total moved by 42 while the word itself
+    contributed 300. A total is the sum of two effects and evidence for
+    neither.
     """
-    control, broken = halves["control"], halves["broken"]
-    assert broken["edges_per_unit"] < control["edges_per_unit"], (
-        "the repeated phrase added edges, so the cap did not exclude the shared keywords "
-        "and the reason recorded below is wrong"
+    control, shared = halves["control"], halves["shared"]
+    assert control["edges_among_the_carriers"] == 0, (
+        "the units this word joins were already linked to each other in the healthy graph, "
+        "so the edges below are not the word's doing"
     )
-    for failure_id in ("F38", "F39"):
-        record(failure_id,
-               "not staged here: the linker drops a keyword once it passes its frequency "
-               "cap, so a shared phrase empties the graph and does not fill it",
-               reproduced=False,
-               edges_per_unit_control=round(control["edges_per_unit"], 2),
-               edges_per_unit_broken=round(broken["edges_per_unit"], 2),
-               keyword_frequency_cap=50, keywords_per_unit=8,
-               largest_community_control=control["communities"]["largest"],
-               documents_in_largest_control=control["communities"]["documents_in_largest"],
-               documents=DOCUMENTS,
-               community_check_withdrawn=(
-                   "counting the documents a large community draws on was refuted by this "
-                   "control: a corpus of procedures on one subject groups across its "
-                   "documents, so the number does not separate the failure from health"))
+    for units, built in sorted(shared.items()):
+        assert built["carriers"] == units, (
+            f"the word reached {built['carriers']} units and not {units}, so the arithmetic "
+            "below is about a different set"
+        )
+        expected = units * (units - 1) // 2
+        assert built["edges_among_the_carriers"] == expected, (
+            f"{units} units sharing one word are linked by {built['edges_among_the_carriers']} "
+            f"edges and a complete bucket is {expected}"
+        )
+
+    small, large = sorted(shared)
+    growth = shared[large]["edges_among_the_carriers"] / shared[small]["edges_among_the_carriers"]
+    assert growth > 3.5, (
+        f"twice the units carrying the word gave {growth:.1f} times the edges, and a count "
+        "growing with the square of them would give about four"
+    )
+
+
+def test_F38_the_runaway_is_there_and_no_check_counts_it(halves: dict[str, Any]) -> None:
+    """The other half, and the one the entry's own state rests on.
+
+    An edge count that grows with the square of the vocabulary is a shape, and
+    the only check this platform has for a graph asks whether there are any
+    edges at all. So the reverse pair: the failure is in the graph, measured
+    above, and everything is silent.
+    """
+    from core.eval.graph_health import analyze as analyze_graph
+
+    control, shared = halves["control"], halves["shared"]
+    at_the_cap = shared[UNITS_AT_THE_CAP]
+    spoke = {f"health:{f.id}" for f in analyze_graph(at_the_cap["units"], at_the_cap["edges"])}
+    assert spoke == set(), (
+        f"something does count the edges after all, which would make this entry detectable: "
+        f"{sorted(spoke)}"
+    )
+    record("F38",
+           "one word in fifty units joins all fifty to each other, 1225 edges from a word "
+           "that means nothing, and no check counts them",
+           units=at_the_cap["units"], documents=DOCUMENTS,
+           keyword_frequency_cap=UNITS_AT_THE_CAP, keywords_per_unit=8,
+           edges_control=control["edges"], edges_at_the_cap=at_the_cap["edges"],
+           edges_among_the_carriers_control=control["edges_among_the_carriers"],
+           edges_among_the_carriers_at_half=shared[UNITS_AT_THE_CAP // 2][
+               "edges_among_the_carriers"],
+           edges_among_the_carriers_at_the_cap=at_the_cap["edges_among_the_carriers"],
+           carriers_at_half=shared[UNITS_AT_THE_CAP // 2]["carriers"],
+           carriers_at_the_cap=at_the_cap["carriers"],
+           signals_seen=[],
+           displacement=("the injected word takes one of a unit's eight keyword slots, so "
+                         "the graph loses edges elsewhere while the bucket adds them: at "
+                         "half the size the total rose by 42 and the word contributed 300"))
+
+
+def test_F39_a_community_built_from_one_word_reads_like_structure(
+    halves: dict[str, Any],
+) -> None:
+    """Fifty units of forty unrelated documents, joined by a word that means
+    nothing, and a modularity that reads as structure.
+
+    This is the reverse kind of pair. The grouping provably followed a word:
+    the units are a complete clique, and in the healthy graph not one of those
+    pairs was linked. What comes back is a count of communities, a size and a
+    list of documents for each, and a modularity. None of it separates this
+    grouping from one that followed meaning, which is what the entry says.
+
+    The first attempt at this entry counted the documents a large community
+    draws on, and the control refuted it: a corpus of procedures on one
+    subject already groups across its documents.
+    """
+    control, shared = halves["control"], halves["shared"]
+    at_the_cap = shared[UNITS_AT_THE_CAP]
+    assert at_the_cap["documents_reached"] > DOCUMENTS * 0.8, (
+        f"the word reached {at_the_cap['documents_reached']} of {DOCUMENTS} documents, so the "
+        "clique it built is a group of related sections and not of unrelated ones"
+    )
+    modularity = at_the_cap["communities"]["modularity"]
+    assert modularity is not None and modularity > 0.3, (
+        f"the modularity came back at {modularity}, which reads as no structure, so a reader "
+        "would not be misled by it and this entry is not staged here"
+    )
+    assert at_the_cap["communities"]["documents_in_largest"] >= (
+        control["communities"]["documents_in_largest"] * 0.7
+    ), ("the largest community narrowed sharply, which would be something a reader could see; "
+        "if that holds, the entry has a signal after all")
+
+    record("F39",
+           "a clique of fifty units across forty documents, built by one meaningless word, "
+           "comes back as communities with a plausible modularity and nothing that says why",
+           units=at_the_cap["units"], documents=DOCUMENTS,
+           documents_reached_by_the_word=at_the_cap["documents_reached"],
+           edges_among_the_carriers_control=control["edges_among_the_carriers"],
+           edges_among_the_carriers_at_the_cap=at_the_cap["edges_among_the_carriers"],
+           modularity_control=control["communities"]["modularity"],
+           modularity_at_the_cap=modularity,
+           documents_in_largest_control=control["communities"]["documents_in_largest"],
+           documents_in_largest_at_the_cap=at_the_cap["communities"]["documents_in_largest"],
+           what_is_reported="a community count, a size and a document list for each, "
+                            "and a modularity",
+           signals_seen=[])
 
 
 def test_this_suite_never_touches_another_realms_graph() -> None:

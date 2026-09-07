@@ -28,6 +28,46 @@ def _collection_name(
     return name if not realm_id else f"{realm_id}__{name}"
 
 
+def _as_filter(filters: dict[str, Any] | None) -> Any:
+    """A payload filter for the store, or nothing when nothing was asked for.
+
+    This parameter was accepted and never used. The signature took it, the
+    protocol declared it, the lexical half applied its own, and this half
+    passed a query with no filter at all: a question asked with a filter that
+    matches nothing came back with a full page of results from here and an
+    empty one from there, so a filtered query returned unfiltered fragments
+    and nothing said so. Found while trying to stage the catalogue's entry for
+    a filter that excludes everything, which could not be staged because on
+    this half a filter excluded nothing.
+
+    Keys name payload fields, which is what the lexical half's own filter
+    does, so one dictionary means the same thing on both sides.
+    """
+    if not filters:
+        return None
+    from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+    return Filter(must=[FieldCondition(key=field, match=MatchValue(value=value))
+                        for field, value in filters.items()])
+
+
+def _matches(chunk: Chunk, filters: dict[str, Any] | None) -> bool:
+    """The same decision the store makes, for the stub that has no store.
+
+    A stub that ignores a filter the real adapter applies is a unit test
+    agreeing with itself, so this is here for the same reason the stub is.
+    """
+    if not filters:
+        return True
+    for field, value in filters.items():
+        found = getattr(chunk, field, None)
+        if found is None:
+            found = (chunk.metadata or {}).get(field)
+        if found != value:
+            return False
+    return True
+
+
 class QdrantRetriever:
     """Dense retriever backed by Qdrant.
 
@@ -138,6 +178,7 @@ class QdrantRetriever:
             collection_name=self._collection,
             query=query_vector,
             limit=k,
+            query_filter=_as_filter(filters),
         ).points
         scored: list[ScoredChunk] = []
         for hit in results:
@@ -273,7 +314,7 @@ class QdrantRetrieverStub:
             for chunk, vec in self._store
         ]
         scored.sort(key=lambda s: s.score, reverse=True)
-        return scored[:k]
+        return [s for s in scored if _matches(s.chunk, filters)][:k]
 
     def get_chunks_by_ids(self, chunk_ids: list[str]) -> list[Chunk]:
         wanted = set(chunk_ids)

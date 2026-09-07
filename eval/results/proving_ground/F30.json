@@ -1,6 +1,6 @@
 {
   "failure_id": "F30",
-  "recorded_at": "2026-09-07T07:05:28.360241+00:00",
+  "recorded_at": "2026-09-07T17:54:20.319331+00:00",
   "reproduced": true,
   "claim": "a context filled past what was asked for, answered from its edges",
   "measured": {
@@ -11,7 +11,7 @@
       "detector:layer_bottleneck": "10/17 answerable questions failed at the \"generation\" layer (59%)."
     },
     "signals_on_the_control": [],
-    "context_support_control": 0.8140274932996716,
+    "context_support_control": 0.8154833954427717,
     "context_support_broken": 0.4214700052905926
   }
 }

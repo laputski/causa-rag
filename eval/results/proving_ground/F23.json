@@ -1,0 +1,14 @@
+{
+  "failure_id": "F23",
+  "recorded_at": "2026-09-07T17:49:44.773430+00:00",
+  "reproduced": false,
+  "claim": "not staged: the two halves return different fragments on prose, and no change to the documents brings them together",
+  "measured": {
+    "overlap_on_the_questions": 0.215,
+    "overlap_when_the_query_is_a_units_own_text": 0.37,
+    "overlap_on_a_corpus_of_nine_units": 0.314,
+    "units": 220,
+    "window": 10,
+    "staging_needs": "two halves reading one source, which is a configuration and not a corpus; the lexical half returns only units sharing a word with the query and stops short of the window even when the corpus is smaller than it"
+  }
+}

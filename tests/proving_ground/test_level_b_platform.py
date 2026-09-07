@@ -20,11 +20,14 @@ merely says "not staged".
 from __future__ import annotations
 
 import copy
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from tests.proving_ground.conftest import LANGUAGE, record, retrieval_only, run_on
+
+ROOT = Path(__file__).resolve().parents[2]
 
 pytestmark = pytest.mark.proving_ground
 
@@ -261,10 +264,54 @@ def test_F17_a_frequent_word_document_damages_retrieval_and_the_named_signal_is_
         "the entry's own signal fired, so this is no longer a blocker and the pair should "
         "assert the reproduction and stop recording the absence"
     )
+    # Why no shape of stuffing separates the halves, measured and never
+    # assumed. The signal the entry names reads which half a fragment came
+    # from, so staging it needs a document the lexical half raises and the
+    # dense half does not. Four shapes were put to the model, from the twelve
+    # commonest words repeated to one word repeated sixty times, and asked how
+    # close each is to this corpus's questions. Every one of them sits where a
+    # real document sits, so the dense half takes them all.
+    import numpy as np
+
+    def cosine(one: Any, other: Any) -> float:
+        first, second = np.array(one), np.array(other)
+        return float(first @ second / (np.linalg.norm(first) * np.linalg.norm(second)))
+
+    from tools.corpus_mutate import _commonest_words, read_corpus
+
+    healthy = read_corpus(ROOT / "corpus" / "proving-ground" / "base-ru")
+    words = _commonest_words(healthy, 12)
+    questions = [q["question"] for q in control["question_results"] if q.get("question")][:12]
+    assert len(questions) > 5, "not enough questions to compare against"
+    asked = [embedder.embed([q])[0] for q in questions]
+    real = [embedder.embed([text[:1000]])[0] for text in list(healthy.values())[:12]]
+
+    def closeness(text: str) -> float:
+        vector = embedder.embed([text])[0]
+        return sum(cosine(vector, one) for one in asked) / len(asked)
+
+    salads = {
+        "the twelve commonest words repeated": (" ".join(words) + ". ") * 3,
+        "one frequent word repeated": (words[0] + " ") * 180,
+        "one word, once": words[0],
+    }
+    a_real_document = sum(cosine(one, other) for one in real for other in asked) / (
+        len(real) * len(asked))
+    measured = {name: round(closeness(text), 3) for name, text in salads.items()}
+    assert min(measured.values()) > a_real_document - 0.1, (
+        f"a shape of stuffing is far enough from the questions to be lexical only: {measured} "
+        f"against {a_real_document:.3f} for a real document, so this entry is stageable here"
+    )
+
     record("F17", "not staged: the document is found by both halves, so the merge is balanced "
                   "and the signal the entry names reads only which half a fragment came from",
            reproduced=False,
            recall_control=_recall(control), recall_stuffed=_recall(stuffed),
            from_the_lexical_half_alone_control=_from_one_half(control),
            from_the_lexical_half_alone_stuffed=_from_one_half(stuffed),
-           signals_stuffed=sorted(_signals(stuffed)))
+           signals_stuffed=sorted(_signals(stuffed)),
+           closeness_to_the_questions=measured,
+           closeness_of_a_real_document=round(a_real_document, 3),
+           staging_needs="a document the lexical half raises and the dense half does not; this "
+                         "model rates a salad of the corpus's own frequent words as close to a "
+                         "question as it rates a real document, so no stuffing is lexical only")

@@ -1,6 +1,6 @@
 {
   "failure_id": "F14",
-  "recorded_at": "2026-09-07T15:43:06.702689+00:00",
+  "recorded_at": "2026-09-07T17:49:04.257645+00:00",
   "reproduced": true,
   "claim": "add_a_second_language in the documents is read off the index by health:mixed_language",
   "measured": {

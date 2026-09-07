@@ -247,6 +247,45 @@ def _index_under_the_other_analyser(path: str, corpus_id: str, language: str, st
     )
 
 
+def _load_a_section_whole_past_the_model_window(
+    path: str, corpus_id: str, language: str, strategy: str,
+) -> Plan:
+    """Load a very long section as one unit, and then as many.
+
+    An embedding model reads a fixed number of tokens and drops the rest
+    without saying so. Nothing on this platform reaches that by default: the
+    chunker caps a unit at its chunk size, and the default is far below the
+    window. A chunk size above the window is what reaches it, and then a
+    section longer than the window becomes one unit whose end the model never
+    reads.
+
+    Both halves load the same documents, one of which carries a fact after
+    sixty thousand characters. The control cuts that section into units of a
+    thousand characters, so the fact sits near the start of one of them. The
+    distorted load asks for units of sixty-five thousand, so the whole section
+    is one unit and the fact is past the window. Every other document of the
+    corpus is a few thousand characters, so exactly one unit of the distorted
+    index exceeds the window, which the pair measures and never assumes.
+    """
+    padded = f"{path}-padded"
+    write = Step(
+        ("python3", "-m", "tools.corpus_mutate", path,
+         "--defect", "pad_a_section_past_the_model_window", "--out", padded),
+        note="write the documents, one of them a section longer than the model reads",
+    )
+    return Plan(
+        control_corpus_id=f"{corpus_id}-window-split",
+        distorted_corpus_id=f"{corpus_id}-window-whole",
+        control=(write, _ingest(padded, f"{corpus_id}-window-split", language, strategy,
+                                chunk_size=1024,
+                                note="units of a thousand: the fact is near the start of one")),
+        distorted=(write, _ingest(padded, f"{corpus_id}-window-whole", language, strategy,
+                                  chunk_size=65536,
+                                  note="units of sixty-five thousand: the section is one unit "
+                                       "and its end is past the window")),
+    )
+
+
 DISTORTIONS: tuple[IngestDistortion, ...] = (
     IngestDistortion(
         "reingest_with_another_chunk_size",
@@ -272,6 +311,17 @@ DISTORTIONS: tuple[IngestDistortion, ...] = (
         "index_under_the_other_analyser",
         "the lexical index stems the text by another language's rules",
         ("F16",), _index_under_the_other_analyser,
+    ),
+    IngestDistortion(
+        "load_a_section_whole_past_the_model_window",
+        "one unit is longer than the embedding model reads, and its end is in no vector",
+        ("F13",), _load_a_section_whole_past_the_model_window,
+        proves="silence",
+        proves_note=(
+            "nothing compares a unit's length against the model's window, so the end of a "
+            "unit that exceeds it is absent from the index and every count, length and "
+            "health check reports a corpus in order"
+        ),
     ),
     IngestDistortion(
         "load_without_the_lexical_half",

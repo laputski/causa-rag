@@ -501,6 +501,215 @@ def _cut_a_table_and_a_list(corpus: Corpus) -> Corpus:
     return out
 
 
+#: How many units share the injected word.
+#:
+#: The linker drops a keyword once it occurs in more units than its own cap,
+#: which is fifty, so a word placed in every unit produces no edges at all and
+#: stages that prevention instead of the runaway it was meant to. Fifty is the
+#: largest number of units a shared word can join before the cap removes it,
+#: and it is therefore where the runaway is at its worst: one bucket of fifty
+#: contributes 50x49/2 edges by itself.
+UNITS_SHARING_THE_WORD = 50
+
+
+def share_a_word(corpus: Corpus, units: int) -> Corpus:
+    """One invented word at the head of the body of `units` sections, spread
+    one section per document at a time.
+
+    Exposed beside the defect because the failure being staged is a *shape*
+    and one measurement cannot show a shape. A pair at two sizes can: twice
+    the units carrying the word, four times the edges it contributes. The
+    defect below fixes the size; a caller measuring the growth varies it.
+
+    Spread and never filled document by document, which is what makes the
+    grouping it produces readable. Fifty units taken from the front are nine
+    documents, and units of one document belong together anyway, so a
+    community built from them says nothing. One unit per document, round by
+    round, joins sections of forty unrelated documents into a clique that has
+    the word and nothing else in common.
+
+    At the head of the body, which is a measurement and not a preference.
+    Keywords are the first eight distinct words of four characters or more,
+    in the order they appear, so a word placed anywhere else in a long
+    section is not a keyword of it and joins nothing.
+
+    The word is the corpus's commonest doubled, so it is in the corpus's own
+    script and is not a word of any language, which is what keeps it from
+    colliding with a real keyword. A token written here would be a token in
+    this module's language, and a sibling defect records what that cost.
+    """
+    words = _commonest_words(corpus, count=1)
+    if not words:
+        return dict(corpus)
+    shared = words[0] * 2
+    heading = re.compile(r"^#{1,6}\s")
+
+    # Where each document's section bodies begin, so the rounds below can take
+    # one section from each document in turn without re-parsing.
+    bodies: dict[str, list[int]] = {}
+    lines: dict[str, list[str]] = {}
+    for name, text in sorted(corpus.items()):
+        rows = text.splitlines()
+        lines[name] = rows
+        at: list[int] = []
+        awaiting = False
+        for i, row in enumerate(rows):
+            if heading.match(row):
+                awaiting = True
+            elif awaiting and row.strip():
+                at.append(i)
+                awaiting = False
+        bodies[name] = at
+
+    left = units
+    round_number = 0
+    while left > 0 and any(len(at) > round_number for at in bodies.values()):
+        for name, at in bodies.items():
+            if left <= 0:
+                break
+            if len(at) <= round_number:
+                continue
+            i = at[round_number]
+            lines[name][i] = f"{shared} {lines[name][i]}"
+            left -= 1
+        round_number += 1
+    return {name: "\n".join(rows) + "\n" for name, rows in lines.items()}
+
+
+def _share_a_word_at_the_cap(corpus: Corpus) -> Corpus:
+    """A shared word in as many units as the linker's cap will still link.
+
+    One word in fifty units puts all fifty in one keyword bucket, and a bucket
+    of N contributes N(N-1)/2 edges: 1225 of them, on top of a corpus whose
+    own linking produces about 3756. The corpus reads correctly, every length,
+    number and heading is in order, and nothing about the documents is
+    malformed. What grows is the graph.
+    """
+    return share_a_word(corpus, UNITS_SHARING_THE_WORD)
+
+
+#: How long one section has to be before an embedding model stops reading it.
+#:
+#: Measured on the model this proving ground indexes with, by embedding a text
+#: with and without a sentence at its end: at fifty thousand characters the
+#: sentence stopped changing the vector at all, to six decimal places. The
+#: window is declared as 8192 tokens and this is what that is in Russian prose.
+#: Sixty thousand is past it with room, and still under a chunk size a load can
+#: be given, which is what the other half of this pair needs.
+CHARACTERS_PAST_THE_MODEL_WINDOW = 60_000
+
+
+def _pad_a_section_past_the_model_window(corpus: Corpus) -> Corpus:
+    """Add one document whose single section is longer than a model will read.
+
+    A section, and not a document: a document of any length is cut into units
+    and every unit is read. What is never read is the end of a *unit* longer
+    than the window, and a unit is as long as the load's chunk size allows.
+    So this half makes the text and the load's half makes the unit.
+
+    The last sentence carries a fact that appears nowhere else in the corpus,
+    which is how the pair is read: ask for that fact, and an index built over
+    the whole section answers, while one built over a unit the model stopped
+    reading does not.
+
+    The prose is the corpus's own words, for the reason a sibling defect
+    records: a paragraph of this module's choosing is a paragraph in this
+    module's language.
+    """
+    words = _commonest_words(corpus, count=12)
+    if not words:
+        return dict(corpus)
+    sentence = " ".join(words)
+    number = len(corpus) + 1
+    body: list[str] = []
+    # Numbered, and that is a measurement: an unnumbered sentence repeated to
+    # sixty thousand characters produces a unit identical to the unit beside
+    # it at any chunk size, and the duplicate check fired on a defect that
+    # names the model's window. The numbers run far below the fact at the end,
+    # so that fact stays the only occurrence of its own value.
+    while sum(len(line) + 1 for line in body) < CHARACTERS_PAST_THE_MODEL_WINDOW:
+        body.append(f"{sentence} {len(body) + 1}.")
+    out = dict(corpus)
+    out[f"{number:02d}.md"] = (
+        f"# {number} {' '.join(words[:3])}\n\n"
+        + " ".join(body)
+        + f" {' '.join(words[:4])}: {THE_FACT_AT_THE_END}\n"
+    )
+    return out
+
+
+#: The fact only the end of that section carries, in the corpus's own shape: a
+#: bare number nothing else in the corpus holds. Written here and not lifted,
+#: because a fact lifted from the corpus is a fact the corpus states elsewhere,
+#: and then finding it proves nothing about the end of this section.
+THE_FACT_AT_THE_END = "8317"
+
+
+def _unnumbered(title: str) -> str:
+    """A heading's words without the number in front of them."""
+    return re.sub(r"^[\d.]+\s*", "", title).strip()
+
+
+def _split_every_section_in_two(corpus: Corpus) -> Corpus:
+    """Cut each section at its middle sentence and give the halves a heading each.
+
+    The grounds for an answer are two sentences that stood together, and now
+    they stand in two units. Retrieval scores a unit against a question, so
+    each half matches the question about half as well as the whole did, and a
+    window that would have returned the answer returns one half of it.
+
+    Every length, number and heading stays in order and no text is lost: the
+    corpus reads as a slightly more finely divided version of itself, which is
+    what makes the failure quiet.
+
+    Two refusals shaped what it will and will not cut, and both were the
+    corpus answering back. A section of one or two sentences cut in two leaves
+    units whose whole text is one sentence, and a handbook repeats a few
+    sentences across its documents as any handbook does: thirteen of them
+    surfaced as units identical to each other, so the mutation staged a
+    duplicate beside the failure it names. And the continued heading copied
+    the original's words, number included, so a corpus that numbers its
+    headings gained a repeated number, which the structural check reads. So a
+    section is cut only when no sentence of it occurs anywhere else, and the
+    continued heading carries the words without the number.
+    """
+    heading = re.compile(r"^(#{1,6})\s+(.*)$")
+    everywhere: dict[str, int] = {}
+    for text in corpus.values():
+        for line in text.splitlines():
+            for sentence in _sentences(line):
+                everywhere[sentence] = everywhere.get(sentence, 0) + 1
+
+    def split(text: str) -> str:
+        out: list[str] = []
+        level, title = "##", ""
+        for line in text.splitlines():
+            match = heading.match(line)
+            if match:
+                level, title = match.group(1), match.group(2)
+                out.append(line)
+                continue
+            sentences = _sentences(line)
+            if len(sentences) < 2 or any(everywhere[s] > 1 for s in sentences):
+                out.append(line)
+                continue
+            middle = len(sentences) // 2
+            out.append(" ".join(sentences[:middle]))
+            out.append("")
+            out.append(f"{level} {_unnumbered(title)}, continued")
+            out.append("")
+            out.append(" ".join(sentences[middle:]))
+        return "\n".join(out).strip() + "\n"
+
+    return {name: split(text) for name, text in corpus.items()}
+
+
+def _sentences(line: str) -> list[str]:
+    if not line.strip() or line.startswith("#"):
+        return []
+    return [s.strip() for s in re.split(r"(?<=[.!?])\s+", line.strip()) if s.strip()]
+
+
 DEFECTS: tuple[Defect, ...] = (
     Defect("flatten_headings",
            "no document carries a heading, so nothing can build a structural tree",
@@ -540,6 +749,19 @@ DEFECTS: tuple[Defect, ...] = (
     Defect("empty_the_corpus",
            "no documents at all, and every retrieval metric reporting zero",
            ("F43",), _empty_the_corpus),
+    Defect("share_a_word_at_the_cap",
+           "one invented word heads fifty sections, joining all fifty in one keyword bucket",
+           ("F38", "F39"), _share_a_word_at_the_cap,
+           requires="carries headings, since the word is placed at the head of each body",
+           admits=lambda corpus: any("#" in text for text in corpus.values())),
+    Defect("pad_a_section_past_the_model_window",
+           "one added document is a single section longer than an embedding model reads",
+           ("F13",), _pad_a_section_past_the_model_window),
+    Defect("split_every_section_in_two",
+           "each section is cut at its middle sentence, so grounds that stood together do not",
+           ("F07",), _split_every_section_in_two,
+           requires="carries headings, since each half is given one",
+           admits=lambda corpus: any("#" in text for text in corpus.values())),
     Defect("cut_a_table_and_a_list",
            "one added document is mostly a table and a list, both longer than a chunk",
            ("F08",), _cut_a_table_and_a_list),

@@ -35,6 +35,14 @@ def _plan(distortion: str, corpus: Any = _RU, strategy: str = "structure_aware")
                 corpus.language, strategy)
 
 
+def _is_a_load(step: Any) -> bool:
+    """Whether this step is a load, as opposed to a step that prepares what a
+    load will read. Decided by the module the command names and never by a
+    flag beside it, because a flag can say one thing while the argv does
+    another."""
+    return step.is_command and "services.ingestion.cli" in step.argv
+
+
 def _strategy_for(distortion: Any) -> str:
     return "fixed" if distortion.name == "reingest_with_another_chunk_size" else "structure_aware"
 
@@ -48,14 +56,20 @@ def test_the_two_halves_land_in_two_namespaces(distortion: Any) -> None:
 
 
 @pytest.mark.parametrize("distortion", DISTORTIONS, ids=lambda d: d.name)
-def test_every_command_of_a_half_targets_that_half(distortion: Any) -> None:
+def test_every_load_of_a_half_targets_that_half(distortion: Any) -> None:
     """A plan whose second command drifted into the other namespace would look
-    correct and break the control."""
+    correct and break the control.
+
+    Loads only, because a plan may need a step that is not one: one distortion
+    needs documents this repository does not ship, so its first step writes
+    them and has no namespace to target at all. That step is held to a
+    stricter rule instead, in the test below: it has to be the same step in
+    both halves, or the two halves would not be reading the same documents."""
     built = _plan(distortion.name, strategy=_strategy_for(distortion))
     for steps, namespace in ((built.control, built.control_corpus_id),
                              (built.distorted, built.distorted_corpus_id)):
         for step in steps:
-            if not step.is_command:
+            if not _is_a_load(step):
                 continue
             argv = list(step.argv)
             assert argv[argv.index("--corpus-id") + 1] == namespace
@@ -68,8 +82,16 @@ def test_both_halves_read_the_same_documents(distortion: Any) -> None:
     which difference caused it."""
     built = _plan(distortion.name, strategy=_strategy_for(distortion))
     paths = {step.argv[4] for half in (built.control, built.distorted)
-             for step in half if step.is_command}
+             for step in half if _is_a_load(step)}
     assert len(paths) == 1, paths
+
+    # And whatever put those documents there was the same act on both sides.
+    preparation = [tuple(step.argv) for half in (built.control, built.distorted)
+                   for step in half if step.is_command and not _is_a_load(step)]
+    assert len(set(preparation)) <= 1, (
+        f"the halves prepare their documents differently, so they do not read the same ones: "
+        f"{preparation}"
+    )
 
 
 @pytest.mark.parametrize("distortion", DISTORTIONS, ids=lambda d: d.name)
@@ -79,9 +101,30 @@ def test_both_halves_stay_inside_the_proving_ground_realm(distortion: Any) -> No
     built = _plan(distortion.name, strategy=_strategy_for(distortion))
     for half in (built.control, built.distorted):
         for step in half:
-            if step.is_command:
+            if _is_a_load(step):
                 argv = list(step.argv)
                 assert argv[argv.index("--realm-id") + 1] == "proving-ground"
+                continue
+            if not step.is_command:
+                continue
+            # A step that writes documents has no realm to name, and the same
+            # danger under another shape: a mutator pointed at the wrong output
+            # would overwrite the corpus the installation check reads.
+            #
+            # The output is asked for by name and never inferred from whichever
+            # argument happens to look like a corpus. Written the second way
+            # first, this passed a step whose output was /tmp: the *input* was
+            # a proving-ground path, and one path inside satisfied it.
+            argv = list(step.argv)
+            assert "--out" in argv, f"a step writes nothing and is not a load: {step.argv}"
+            written = argv[argv.index("--out") + 1]
+            assert "/corpus/proving-ground/" in written, (
+                f"{written} is outside the proving ground's own documents"
+            )
+            for path in (arg for arg in argv if "/corpus/" in arg):
+                assert "/corpus/proving-ground/" in path, (
+                    f"{path} is outside the proving ground's own documents"
+                )
 
 
 # ── each half is a load that differs by one thing ─────────────────────────────
@@ -226,4 +269,9 @@ def test_the_two_instruments_together_cover_what_used_to_be_one() -> None:
     assert claimed_by_ingest == by_instrument["ingest"], (
         f"ingest entries unclaimed: {sorted(by_instrument['ingest'] - claimed_by_ingest)}"
     )
-    assert len(claimed_by_config | claimed_by_ingest) == 11
+    # Ten when the instrument was split in two, eleven when a load was found
+    # to be what stages a missing lexical half, and twelve since a load was
+    # measured to be what stages a unit longer than the model's window: the
+    # documents alone provoke nothing there, because the segmentation caps a
+    # unit far below any window.
+    assert len(claimed_by_config | claimed_by_ingest) == 12

@@ -1,6 +1,6 @@
 {
   "failure_id": "F32",
-  "recorded_at": "2026-09-07T07:02:59.594879+00:00",
+  "recorded_at": "2026-09-07T17:51:40.542001+00:00",
   "reproduced": true,
   "claim": "an external system that refuses what its corpus answers plainly",
   "measured": {

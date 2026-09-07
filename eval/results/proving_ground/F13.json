@@ -1,0 +1,17 @@
+{
+  "failure_id": "F13",
+  "recorded_at": "2026-09-07T17:56:28.526979+00:00",
+  "reproduced": true,
+  "claim": "a unit of sixty thousand characters is stored with a vector its end never reached, and every check reports a corpus in order",
+  "measured": {
+    "unit_characters_whole": 60097,
+    "unit_characters_split": 492,
+    "units_whole": 221,
+    "units_split": 283,
+    "units_over_the_window": 1,
+    "cosine_after_dropping_the_tail_whole": 1.0,
+    "cosine_after_dropping_the_tail_split": 0.948309,
+    "declared_window_tokens": 8192,
+    "signals_seen": []
+  }
+}

@@ -1,16 +1,21 @@
 {
   "failure_id": "F38",
-  "recorded_at": "2026-09-07T06:52:22.202474+00:00",
-  "reproduced": false,
-  "claim": "not staged here: the linker drops a keyword once it passes its frequency cap, so a shared phrase empties the graph and does not fill it",
+  "recorded_at": "2026-09-07T17:54:50.584374+00:00",
+  "reproduced": true,
+  "claim": "one word in fifty units joins all fifty to each other, 1225 edges from a word that means nothing, and no check counts them",
   "measured": {
-    "edges_per_unit_control": 17.07,
-    "edges_per_unit_broken": 0.0,
+    "units": 220,
+    "documents": 40,
     "keyword_frequency_cap": 50,
     "keywords_per_unit": 8,
-    "largest_community_control": 35,
-    "documents_in_largest_control": 35,
-    "documents": 40,
-    "community_check_withdrawn": "counting the documents a large community draws on was refuted by this control: a corpus of procedures on one subject groups across its documents, so the number does not separate the failure from health"
+    "edges_control": 3756,
+    "edges_at_the_cap": 4367,
+    "edges_among_the_carriers_control": 0,
+    "edges_among_the_carriers_at_half": 300,
+    "edges_among_the_carriers_at_the_cap": 1225,
+    "carriers_at_half": 25,
+    "carriers_at_the_cap": 50,
+    "signals_seen": [],
+    "displacement": "the injected word takes one of a unit's eight keyword slots, so the graph loses edges elsewhere while the bucket adds them: at half the size the total rose by 42 and the word contributed 300"
   }
 }

@@ -1,16 +1,19 @@
 {
   "failure_id": "F39",
-  "recorded_at": "2026-09-07T06:52:22.205149+00:00",
-  "reproduced": false,
-  "claim": "not staged here: the linker drops a keyword once it passes its frequency cap, so a shared phrase empties the graph and does not fill it",
+  "recorded_at": "2026-09-07T17:54:50.586277+00:00",
+  "reproduced": true,
+  "claim": "a clique of fifty units across forty documents, built by one meaningless word, comes back as communities with a plausible modularity and nothing that says why",
   "measured": {
-    "edges_per_unit_control": 17.07,
-    "edges_per_unit_broken": 0.0,
-    "keyword_frequency_cap": 50,
-    "keywords_per_unit": 8,
-    "largest_community_control": 35,
-    "documents_in_largest_control": 35,
+    "units": 220,
     "documents": 40,
-    "community_check_withdrawn": "counting the documents a large community draws on was refuted by this control: a corpus of procedures on one subject groups across its documents, so the number does not separate the failure from health"
+    "documents_reached_by_the_word": 40,
+    "edges_among_the_carriers_control": 0,
+    "edges_among_the_carriers_at_the_cap": 1225,
+    "modularity_control": 0.7261736564060514,
+    "modularity_at_the_cap": 0.6117922640340892,
+    "documents_in_largest_control": 35,
+    "documents_in_largest_at_the_cap": 37,
+    "what_is_reported": "a community count, a size and a document list for each, and a modularity",
+    "signals_seen": []
   }
 }

@@ -1,0 +1,15 @@
+{
+  "failure_id": "F20",
+  "recorded_at": "2026-09-07T17:49:43.948216+00:00",
+  "reproduced": true,
+  "claim": "a filter naming a document nobody loaded empties both halves, and an empty result is what an unanswerable question looks like",
+  "measured": {
+    "results_without_a_filter": 10,
+    "results_with_it": 0,
+    "dense_half": 0,
+    "lexical_half": 0,
+    "found_while_staging": "the dense half took the filter and queried the store without it, so before this the same filter left that half returning ten fragments and the lexical half none",
+    "the_run_cannot_carry_one": "filters live on a query and no experiment configuration has a field for one",
+    "signals_seen": []
+  }
+}

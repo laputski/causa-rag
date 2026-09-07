@@ -405,7 +405,15 @@ FAILURES: tuple[FailureMode, ...] = (
         severity=Severity(3, 2, 2),
         origin="mechanism",
         detection="none",
-        instrument="corpus",
+        # The load and not the documents, which is what staging it settled.
+        # A long document alone reaches nothing: the segmentation caps a unit
+        # at its chunk size and every default is far below any model's window,
+        # so the corpus half was measured to provoke exactly nothing. What
+        # reaches the window is a load asked for units larger than it, and
+        # then a section longer than the window is one unit whose end no
+        # vector holds. Both halves are needed and only one of them decides.
+        instrument="ingest",
+        also_staged_by=("corpus",),
         applies_when=(("A5", ("dense_single", "dense_multi_late_interaction")),),
         not_detected_reason=(
             "nothing compares a document's length against the model's window"

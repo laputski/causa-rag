@@ -45,6 +45,13 @@ corpus/*/
 # with the directory moved aside, a tree without them fails twenty-four tests
 # and errors on three more, which is what a fresh clone would have done.
 !corpus/proving-ground/
+# Except the ones a tool writes from those two. A load that stages a failure
+# needs documents this repository does not ship, so a plan's first step builds
+# them; the tree holds the source and never the derivative, and the command
+# that rebuilds it is printed beside the load that reads it.
+corpus/proving-ground/*
+!corpus/proving-ground/base-ru/
+!corpus/proving-ground/base-en/
 
 # DeepEval run results
 eval/results/*

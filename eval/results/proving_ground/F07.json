@@ -1,12 +1,18 @@
 {
   "failure_id": "F07",
-  "recorded_at": "2026-09-07T15:43:27.788447+00:00",
-  "reproduced": false,
-  "claim": "not staged: every reference names a whole document, so a unit spread across fragments is credited when any one of them is found",
+  "recorded_at": "2026-09-07T17:49:53.926544+00:00",
+  "reproduced": true,
+  "claim": "the grounds are cut across two units, the window returns one of them, and recall against a reference naming the document stays where it was",
   "measured": {
-    "documents": 40,
-    "distinct_references": 40,
-    "fragments_in_the_most_spread_document": 7,
-    "and_the_chunker_already_splits_at": "every paragraph, so a heading over each one produced the same 220 fragments byte for byte"
+    "defect": "split_every_section_in_two",
+    "window": 5,
+    "questions": 19,
+    "window_held_both_halves": 4,
+    "window_held_one_half": 14,
+    "recall_at_k": 0.941,
+    "units_control": 220,
+    "units_split": 295,
+    "the_reference_is_a_document": "a document is credited when any one of its units is found, so half an answer scores as a whole one",
+    "signals_seen": []
   }
 }

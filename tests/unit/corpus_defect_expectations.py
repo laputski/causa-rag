@@ -43,4 +43,19 @@ PROVOKES: dict[str, str | None] = {
     # claim under test and not an omission. A separate test shows the table was
     # really cut, so the silence is about a corpus that carries the defect.
     "cut_a_table_and_a_list": None,
+    # None, and for the reason its sibling above has: the whole of this one's
+    # effect is on the graph, where a word shared by fifty units joins all
+    # fifty. Nothing about the documents is malformed, and the checks here
+    # read documents.
+    "share_a_word_at_the_cap": None,
+    # None. A very long document is not a malformed one, and at any chunk size
+    # this platform uses by default it becomes many units of ordinary length.
+    # The failure appears only when a load is given a chunk size above the
+    # embedding model's window, so the pair for it lives with the loads.
+    "pad_a_section_past_the_model_window": None,
+    # None. Every length, number and heading stays in order and no text is
+    # lost: the corpus reads as a more finely divided version of itself, which
+    # is what makes the failure quiet. What it costs is measured on the index,
+    # by asking how much of an answering section a window still holds.
+    "split_every_section_in_two": None,
 }

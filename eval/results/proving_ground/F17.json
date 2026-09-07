@@ -1,6 +1,6 @@
 {
   "failure_id": "F17",
-  "recorded_at": "2026-09-07T07:00:55.882650+00:00",
+  "recorded_at": "2026-09-07T17:59:15.592440+00:00",
   "reproduced": false,
   "claim": "not staged: the document is found by both halves, so the merge is balanced and the signal the entry names reads only which half a fragment came from",
   "measured": {
@@ -10,6 +10,13 @@
     "from_the_lexical_half_alone_stuffed": 0.0,
     "signals_stuffed": [
       "detector:layer_bottleneck"
-    ]
+    ],
+    "closeness_to_the_questions": {
+      "the twelve commonest words repeated": 0.408,
+      "one frequent word repeated": 0.425,
+      "one word, once": 0.44
+    },
+    "closeness_of_a_real_document": 0.466,
+    "staging_needs": "a document the lexical half raises and the dense half does not; this model rates a salad of the corpus's own frequent words as close to a question as it rates a real document, so no stuffing is lexical only"
   }
 }

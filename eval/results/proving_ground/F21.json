@@ -1,6 +1,6 @@
 {
   "failure_id": "F21",
-  "recorded_at": "2026-09-07T07:00:27.803065+00:00",
+  "recorded_at": "2026-09-07T17:47:01.422588+00:00",
   "reproduced": false,
   "claim": "not staged by a setting: the signal reads which half supplied each chunk, and putting the whole weight on one half moves the order of the merged list without moving its membership",
   "measured": {
