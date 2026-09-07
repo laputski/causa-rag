@@ -2159,7 +2159,7 @@
         "by_name": "The corpus was indexed by '{{indexing}}' and this run embedded its queries with '{{querying}}'. A query vector from one model compared against vectors from another describes nothing, and every score in this run is such a comparison.",
         "by_version": "The corpus was indexed by {{indexing}} {{indexed_version}} and this run queried with {{querying}} {{querying_version}}. The name is the same and the vectors are not, so nothing about the mismatch appears in a collection name or a setting."
       },
-      "metric_without_grounds": "{{metrics}} metric(s) of this run were recorded against questions that cannot support them: {{told}}. Averaged into the run's numbers, these are confident values about something nobody measured.",
+      "metric_without_grounds": "{{metrics}} of this run's metrics were recorded against questions that cannot support them: {{grounds}}. Averaged into the run's numbers, these are confident values about something nobody measured.",
       "chunk_id_collision": "{{colliding}} of {{identifiers}} fragment identifiers in this run stand for more than one text, the first being {{first}}. Anything keyed on the identifier is describing whichever fragment it saw last.",
       "unmeasured_stage_cost": "{{stages}} stage(s) of this run left no duration behind: {{named}}. What the stage costs cannot be weighed against what it buys, so keeping it is a decision nobody can check."
     },
@@ -2169,7 +2169,13 @@
       "generation": "generation",
       "suspected_ungrounded_answer": "suspected ungrounded answer",
       "keyword": "keyword",
-      "semantic": "semantic"
+      "semantic": "semantic",
+      "reached_the_generator": "the run reached the generator",
+      "answerable": "the question is one the corpus covers",
+      "retrieved_something_relevant": "retrieval found at least one source the question needs"
+    },
+    "findingClause": {
+      "metric_without_grounds": "{{metric}} on {{count}} question(s) where it is not true that {{precondition}}"
     }
   },
   "runPage": {

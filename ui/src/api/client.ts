@@ -231,7 +231,11 @@ export interface DetectorItem {
   // compose its own instead of rendering the server's English. Optional: a run
   // stored before the server sent them has none, and the English detail is
   // what a finding without them renders.
-  params?: Record<string, string | number>
+  //
+  // A value may arrive as a list of parts and not as one string. That is
+  // the server declining to write a sentence: a clause it joined would be a
+  // clause in its own language, inside a frame in the reader's.
+  params?: Record<string, string | number | Record<string, string | number>[]>
   // Which sentence, when one id has more than one. Two findings are the same
   // finding on different evidence and share an id on purpose.
   detail_key?: string

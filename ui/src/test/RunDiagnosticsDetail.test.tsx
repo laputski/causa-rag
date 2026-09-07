@@ -80,6 +80,41 @@ describe('a finding’s detail reaches the reader in their language', () => {
     expect(detail.textContent).not.toContain('keyword')
   })
 
+  it('writes the clause as well as the frame, when the value arrives as parts', () => {
+    // The last of the four values that reached a reader in English whatever
+    // their language. The frame said "three metrics were recorded against
+    // questions that cannot support them" in theirs, and then named the three
+    // in the server's words.
+    renderPanel(run([{
+      id: 'metric_without_grounds', severity: 'error',
+      title: 'A metric was computed where it has no grounds',
+      detail: '2 metric(s) of this run were recorded against questions that cannot support '
+        + 'them: answer_similarity on 20 question(s) where the run reached the generator does '
+        + 'not hold. Averaged into the run’s numbers, these are confident values about '
+        + 'something nobody measured.',
+      action: '', failure_ids: [], detail_key: 'metric_without_grounds',
+      params: {
+        metrics: 2,
+        grounds: [
+          { metric: 'answer_similarity', count: 20, precondition: 'reached_the_generator' },
+          { metric: 'retrieval_recall_at_k', count: 7, precondition: 'answerable' },
+        ],
+      },
+    }]))
+    const detail = screen.getByText(/answer_similarity/, { selector: '.find-detail' })
+    // Both clauses, joined, each carrying its own numbers.
+    expect(detail.textContent).toContain('answer_similarity')
+    expect(detail.textContent).toContain('retrieval_recall_at_k')
+    expect(detail.textContent).toContain('20')
+    expect(detail.textContent).toContain('7')
+    // The precondition in the reader's words and never as the code it travels as.
+    expect(detail.textContent).toContain('прогон дошёл до генератора')
+    expect(detail.textContent).toContain('корпус покрывает')
+    expect(detail.textContent).not.toContain('reached_the_generator')
+    expect(detail.textContent).not.toContain('does not hold')
+    expect(detail.textContent).not.toContain('[object Object]')
+  })
+
   it('tells the two cases of one identifier apart', () => {
     // Both are "the index and the query do not use the same model", on
     // different evidence, under one identifier because the catalogue entry

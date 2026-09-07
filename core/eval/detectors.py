@@ -765,7 +765,7 @@ def detect_metric_without_grounds(run: dict[str, Any]) -> DiagnosticItem | None:
     from core.eval.metric_definitions import definition_of
 
     questions = run.get("question_results") or []
-    ungrounded: dict[str, tuple[str, int]] = {}
+    ungrounded: dict[str, tuple[str, str, int]] = {}
     for question in questions:
         for name in (question.get("metrics") or {}):
             definition = definition_of(name)
@@ -774,15 +774,16 @@ def detect_metric_without_grounds(run: dict[str, Any]) -> DiagnosticItem | None:
             for precondition in definition.requires:
                 if precondition.holds(run, question):
                     continue
-                says, count = ungrounded.get(name, (precondition.says, 0))
-                ungrounded[name] = (says, count + 1)
+                identifier, says, count = ungrounded.get(
+                    name, (precondition.id, precondition.says, 0))
+                ungrounded[name] = (identifier, says, count + 1)
                 break
 
     if not ungrounded:
         return None
     told = "; ".join(
         f"{name} on {count} question(s) where {says} does not hold"
-        for name, (says, count) in sorted(ungrounded.items())
+        for name, (_identifier, says, count) in sorted(ungrounded.items())
     )
     return DiagnosticItem(
         id="metric_without_grounds",
@@ -795,7 +796,22 @@ def detect_metric_without_grounds(run: dict[str, Any]) -> DiagnosticItem | None:
         ),
         action="Read each metric's declared preconditions and stop recording it where they "
                "do not hold, so the average is over the questions the number is about.",
-        params={"metrics": len(ungrounded), "told": told},
+        # The clauses as their parts, so the interface writes the sentence and
+        # not only the frame around it. This was the last of the four values
+        # that reached a reader in the server's English whatever their
+        # language: the frame said "three metrics were recorded against
+        # questions that cannot support them" in theirs, and then named the
+        # three in English. A precondition is one of three and carries an
+        # identifier, which is what makes the clause translatable; a metric's
+        # name stays as it is, because it is the name a reader has to search
+        # for to find the number.
+        params={
+            "metrics": len(ungrounded),
+            "grounds": [
+                {"metric": name, "count": count, "precondition": identifier}
+                for name, (identifier, _says, count) in sorted(ungrounded.items())
+            ],
+        },
     )
 
 

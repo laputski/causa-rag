@@ -71,13 +71,23 @@ const A_WORD_IN_ITS_OWN_RIGHT = new Set(['layer', 'half', 'other'])
 function DetectorPanelItem({ item }: { item: DetectorItem }) {
   const { t } = useTranslation()
   const toRealm = useRealmPath()
+  const key = item.detail_key ?? item.id
+  // A word this platform uses for a thing gets the reader's word for it; a
+  // list of parts gets assembled into a clause each and joined. Both exist for
+  // the same reason: a sentence the server finished writing is a sentence in
+  // the server's language, however well the frame around it is translated.
+  const word = (value: unknown) =>
+    t(`runDiagnostics.findingWord.${value}`, { defaultValue: String(value) })
   const params = Object.fromEntries(
-    Object.entries(item.params ?? {}).map(([name, value]) => [
-      name,
-      A_WORD_IN_ITS_OWN_RIGHT.has(name)
-        ? t(`runDiagnostics.findingWord.${value}`, { defaultValue: String(value) })
-        : value,
-    ]),
+    Object.entries(item.params ?? {}).map(([name, value]) => {
+      if (Array.isArray(value)) {
+        return [name, value.map(part => t(`runDiagnostics.findingClause.${key}`, {
+          ...part,
+          precondition: part.precondition === undefined ? undefined : word(part.precondition),
+        })).join('; ')]
+      }
+      return [name, A_WORD_IN_ITS_OWN_RIGHT.has(name) ? word(value) : value]
+    }),
   )
   // The title is looked up by the finding's id, and the server's English
   // sentence stays as the fallback for an id this file does not know yet.
@@ -104,7 +114,7 @@ function DetectorPanelItem({ item }: { item: DetectorItem }) {
             that disagreed, the metrics without grounds); those stay English
             inside a translated frame, and a test says which they are. */}
         <p className="find-detail">
-          {t(`runDiagnostics.findingDetail.${item.detail_key ?? item.id}`, {
+          {t(`runDiagnostics.findingDetail.${key}`, {
             defaultValue: item.detail, ...params,
           })}
         </p>

@@ -50,8 +50,16 @@ class Precondition:
     it is a confident number about something nobody measured.
     """
 
+    #: What this precondition is, in one word the interface can look up.
+    #:
+    #: The sentence below reaches a reader inside a finding, and a finding is
+    #: read in the reader's own language. There are three of these and there
+    #: will not be many more, so an identifier beside the sentence costs
+    #: nothing and is what makes the sentence translatable at all.
+    id: str
     #: What must hold, in the words a reader would use. Printed in the
-    #: finding, so it has to survive being read out of context.
+    #: finding when the interface has no words of its own for the identifier
+    #: above, so it has to survive being read out of context.
     says: str
     #: Whether it holds, given the run and one of its questions.
     holds: Callable[[Mapping[str, Any], Mapping[str, Any]], bool]
@@ -78,10 +86,13 @@ def _something_relevant_was_retrieved(run: Mapping[str, Any], question: Mapping[
 
 
 REACHED_THE_GENERATOR = Precondition(
+    "reached_the_generator",
     "the run reached the generator", _the_run_reached_the_generator)
 ANSWERABLE = Precondition(
+    "answerable",
     "the question is one the corpus covers", _the_question_is_answerable)
 RETRIEVED_SOMETHING_RELEVANT = Precondition(
+    "retrieved_something_relevant",
     "retrieval found at least one source the question needs", _something_relevant_was_retrieved)
 
 
