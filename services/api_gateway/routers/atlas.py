@@ -105,6 +105,31 @@ def _entry(f: catalogue.FailureMode, point: rag_space.Point | None = None) -> di
     }
 
 
+async def _declared_points() -> dict[str, rag_space.Point]:
+    """Architectures somebody registered, beside the ones this platform runs.
+
+    A registered system declares where it sits in the space, because a probe
+    cannot see it. The declaration decides which entries can occur in that
+    system at all, so it belongs here beside the platform's own points: a
+    declaration nothing reads is the decorative field this catalogue exists
+    to catch.
+
+    An unreachable store yields nothing, and the platform's own points still
+    answer. A registered system missing from the list reads as one nobody
+    declared coordinates for, which is what it is until somebody does.
+    """
+    try:
+        import adapters.mongodb as mdb
+        docs = await mdb.find_many("external_rags", {})
+    except Exception:  # noqa: BLE001 - the built-in points are the answer either way
+        return {}
+    return {
+        str(doc.get("name") or doc.get("id")): dict(doc["coordinates"])
+        for doc in docs
+        if doc.get("coordinates") and not doc.get("deleted_at")
+    }
+
+
 @router.get("")
 async def read_atlas(point: str | None = None) -> dict[str, Any]:
     """The catalogue, optionally narrowed to one architecture.
@@ -119,14 +144,16 @@ async def read_atlas(point: str | None = None) -> dict[str, Any]:
     ruled out. Collapsing it into false would report a failure excluded when it
     was only never asked about.
     """
+    points: dict[str, rag_space.Point] = {**rag_space.POINTS, **await _declared_points()}
+
     coordinates: rag_space.Point | None = None
     if point is not None:
-        if point not in rag_space.POINTS:
+        if point not in points:
             raise HTTPException(
                 status_code=404,
-                detail=f"Unknown architecture {point!r}. Known: {sorted(rag_space.POINTS)}",
+                detail=f"Unknown architecture {point!r}. Known: {sorted(points)}",
             )
-        coordinates = rag_space.POINTS[point]
+        coordinates = points[point]
 
     entries = [_entry(f, coordinates) for f in catalogue.FAILURES]
     payload: dict[str, Any] = {
@@ -151,8 +178,12 @@ async def read_atlas(point: str | None = None) -> dict[str, Any]:
                 "applicable": sum(
                     1 for f in catalogue.FAILURES if f.applies_to(coords) is True
                 ),
+                # Whose point it is. A system somebody registered is described
+                # by its own declaration, and a reader has to be able to tell
+                # that from a shape this platform runs itself.
+                "declared": name not in rag_space.POINTS,
             }
-            for name, coords in rag_space.POINTS.items()
+            for name, coords in points.items()
         },
     }
     if coordinates is not None:

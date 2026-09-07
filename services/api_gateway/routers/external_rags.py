@@ -62,6 +62,17 @@ class ExternalRagCreateRequest(BaseModel):
     # same decorative-field trap chunking_strategy/embedder/generator fell
     # into for in_process runs — see the design notes).
     supported_params: list[str] = []
+    # Where this system sits in the space of architectures, as
+    # {dimension code: value}: `{"C3": "rrf", "D1": "cross_encoder"}` for a
+    # standard hybrid. Declared for the same reason `supported_params` above
+    # is: it cannot be observed from a probe, and a guess dressed as a
+    # measurement is worse than an honest declaration.
+    #
+    # It decides which catalogue entries can occur in this system at all,
+    # which is the whole of what "applicable" means. Left empty, the failure
+    # atlas can say nothing about the system beyond what it says about every
+    # system, and says so instead of assuming a shape.
+    coordinates: dict[str, str] = {}
     # Realm membership. When set, this RAG endpoint belongs to the
     # named Realm and inherits its shared infrastructure (Qdrant/Neo4j/etc.).
     # Omit for backward compat (env-var-based connections still work).
@@ -193,6 +204,34 @@ async def get_external_rag_spec() -> dict[str, Any]:
 
 
 @router.post("", status_code=201)
+def _checked_coordinates(declared: dict[str, str]) -> dict[str, str]:
+    """The declaration, or a refusal naming what could not be resolved.
+
+    Checked against the published schema the platform keeps a verified copy
+    of, so a typo becomes an error at registration and never a system the
+    atlas quietly says nothing about. The alternative was storing whatever
+    arrived, and an unresolvable coordinate stored is a coordinate no entry
+    will ever match: the system would read as one no failure can happen in.
+    """
+    from core.eval import rag_space
+
+    problems: list[str] = []
+    for code, value in sorted(declared.items()):
+        dimension = rag_space.get(code)
+        if dimension is None:
+            problems.append(f"{code} is not a dimension of the schema")
+        elif value not in dimension.values:
+            problems.append(
+                f"{code}={value} is not one of {', '.join(dimension.values)}")
+    if problems:
+        raise HTTPException(
+            status_code=400,
+            detail=("Coordinates that do not resolve in the schema "
+                    f"{rag_space.SCHEMA_SOURCE}: {'; '.join(problems)}"),
+        )
+    return dict(declared)
+
+
 async def create_external_rag(body: ExternalRagCreateRequest) -> dict[str, Any]:
     doc = {
         "id": str(uuid.uuid4())[:8],
@@ -205,6 +244,7 @@ async def create_external_rag(body: ExternalRagCreateRequest) -> dict[str, Any]:
         "request_template": body.request_template,
         "response_mapping": body.response_mapping,
         "supported_params": body.supported_params,
+        "coordinates": _checked_coordinates(body.coordinates),
         # Populated by test(), not at registration time;
         # null until the first successful probe so the UI can show
         # "unchecked" rather than a fabricated default.

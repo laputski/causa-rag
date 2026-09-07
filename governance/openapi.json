@@ -3684,14 +3684,19 @@
         "tags": [
           "external-rags"
         ],
-        "summary": "Create External Rag",
-        "operationId": "create_external_rag_external_rags_post",
+        "summary": " Checked Coordinates",
+        "description": "The declaration, or a refusal naming what could not be resolved.\n\nChecked against the published schema the platform keeps a verified copy\nof, so a typo becomes an error at registration and never a system the\natlas quietly says nothing about. The alternative was storing whatever\narrived, and an unresolvable coordinate stored is a coordinate no entry\nwill ever match: the system would read as one no failure can happen in.",
+        "operationId": "_checked_coordinates_external_rags_post",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ExternalRagCreateRequest"
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "title": "Declared"
               }
             }
           }
@@ -3703,8 +3708,10 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Create External Rag External Rags Post"
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response  Checked Coordinates External Rags Post"
                 }
               }
             }
@@ -6538,148 +6545,6 @@
           "aggregate_metrics"
         ],
         "title": "ExperimentListItem"
-      },
-      "ExternalRagCreateRequest": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "url": {
-            "type": "string",
-            "title": "Url"
-          },
-          "description": {
-            "type": "string",
-            "title": "Description",
-            "default": ""
-          },
-          "headers": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object",
-            "title": "Headers",
-            "default": {}
-          },
-          "retrieve_endpoint": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Retrieve Endpoint"
-          },
-          "timeout_s": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Timeout S"
-          },
-          "request_template": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Request Template"
-          },
-          "response_mapping": {
-            "anyOf": [
-              {
-                "additionalProperties": {
-                  "type": "string"
-                },
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Response Mapping"
-          },
-          "supported_params": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Supported Params",
-            "default": []
-          },
-          "realm_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Realm Id"
-          },
-          "default_corpus_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Default Corpus Id"
-          },
-          "default_pipeline_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Default Pipeline Id"
-          },
-          "default_reranker_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Default Reranker Id"
-          },
-          "default_params": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Default Params",
-            "default": {}
-          },
-          "uses_realm_resources": {
-            "type": "boolean",
-            "title": "Uses Realm Resources",
-            "default": false
-          }
-        },
-        "type": "object",
-        "required": [
-          "name",
-          "url"
-        ],
-        "title": "ExternalRagCreateRequest"
       },
       "ExternalRagUpdateRequest": {
         "properties": {
