@@ -99,7 +99,17 @@ def ingest(
     files = _collect_files(source, exclude=exclude)
     if not files:
         log.warning("ingest.no_files", path=str(source))
-        return {"files": 0, "chunks": 0, "cache_hit_ratio": 0.0}
+        # The same keys a real load returns, and that is the whole point of
+        # listing them. This branch used to return three of them, one under a
+        # name nothing else uses, and the caller printing the cache ratio died
+        # with a KeyError on a path that had simply matched no files. Found by
+        # trying to stage the catalogue's entry for an index holding nothing:
+        # the failure could not be reached, because the loader crashed before
+        # it could happen.
+        return {
+            "files": 0, "chunks": 0, "hits": 0, "misses": 0, "hit_ratio": 0.0, "size": 0,
+            "qdrant_collection": None, "opensearch_index": None, "manifest": {},
+        }
 
     # Structure parser — resolved once via the domain-pack
     # registry by "<pack_id>/<parser_id>" (e.g. "manuals/manual_section"), never
@@ -392,6 +402,13 @@ def main() -> None:
             language=args.language,
             realm_id=args.realm_id,
         )
+        if not result["files"]:
+            # Said plainly and refused, because the quiet version of this is a
+            # catalogue entry: an index holding nothing answers every question
+            # with nothing, every retrieval metric comes back at zero, and zero
+            # is also what a catastrophically bad retriever produces.
+            print(f"No documents found in {args.path}. Nothing was indexed.")
+            sys.exit(1)
         print(f"Ingested {result['chunks']} chunks | cache hit ratio: {result['hit_ratio']:.2%}")
         if args.realm_id:
             print(_register_in_the_realm(args.realm_id, args.corpus_id, result))

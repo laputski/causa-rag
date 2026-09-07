@@ -1,0 +1,12 @@
+{
+  "failure_id": "F08",
+  "recorded_at": "2026-09-07T15:43:46.335265+00:00",
+  "reproduced": true,
+  "claim": "a table cut across fragments is in the index and every check is silent",
+  "measured": {
+    "defect": "cut_a_table_and_a_list",
+    "fragments_holding_rows": 8,
+    "of_them_without_the_header_row": 7,
+    "signals_seen": []
+  }
+}

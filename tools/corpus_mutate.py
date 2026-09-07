@@ -382,6 +382,125 @@ def _commonest_words(corpus: Corpus, count: int) -> list[str]:
     return [word for word, _ in seen.most_common(count)]
 
 
+def _leave_every_other_section_a_heading(corpus: Corpus) -> Corpus:
+    """Replace the text under every other heading with the heading's own words.
+
+    What a handbook becomes when an export walks the table of contents and
+    loses the body of the sections it does not understand: the title, the
+    numbering and the section list all survive, so a reader skimming the files
+    sees a corpus in order.
+
+    This is the failure that looks *most* like health from the retrieval side.
+    A title is a dense statement of its own subject, so a question about that
+    subject matches it better than most prose does: the search finds the right
+    unit, at a good score, and the unit has nothing under it to answer from.
+
+    Two measurements shaped it. Emptying a section outright leaves nothing at
+    all, because the chunker drops a heading with no text under it, and the
+    corpus came back empty: the mutation staged the wrong failure entirely.
+    And doing it to *every* section drops the average length under fifty,
+    where a different check calls the corpus short, so the defect provoked two
+    signals and a pair on it would have proved neither. Every other section
+    keeps more than a third of the units under the length that reads as a
+    heading while the average stays where a healthy corpus has it.
+    """
+    heading = re.compile(r"^(#{1,6})\s+(.*)$")
+
+    def strip(name: str, text: str) -> str:
+        out: list[str] = []
+        section = 0
+        skipping = False
+        stem = name.rsplit(".", 1)[0]
+        for line in text.splitlines():
+            match = heading.match(line)
+            if match:
+                section += 1
+                skipping = section % 2 == 0
+                out.append(line)
+                if skipping:
+                    # The heading's own words, and nothing else: what an export
+                    # writes when it has the title of a section and not its
+                    # body.
+                    #
+                    # Two measurements shaped the exact string. It is prefixed
+                    # with where it came from because two documents of the
+                    # proving ground's corpus carry a section under the same
+                    # name, so the residues came out byte identical and the
+                    # mutation staged a duplicate as well. And it is kept
+                    # under the length at which the language check will look
+                    # at a fragment at all: at twenty-six characters the
+                    # English half's residues were read as another language
+                    # and the mutation staged a second failure again. The
+                    # check calls that length unreliable itself, which is why
+                    # staying under it is the honest fix and not a dodge.
+                    out.append("")
+                    residue = f"{stem}.{section} {match.group(2)[:13].rstrip()}"
+                    out.append(residue[:19])
+                continue
+            if not skipping:
+                out.append(line)
+        return "\n".join(out).strip() + "\n"
+
+    return {name: strip(name, text) for name, text in corpus.items()}
+
+
+def _empty_the_corpus(corpus: Corpus) -> Corpus:
+    """Every document gone, and the directory still there.
+
+    The extreme of a load that failed, a path that pointed at the wrong place,
+    or a filter that matched nothing. It earns a defect of its own because of
+    what the *numbers* do with it, which is the part nobody expects: every
+    retrieval metric comes back at zero, and zero is also the shape of a
+    catastrophically bad retriever. Two configurations compared against an
+    empty index are equal, and the comparison reads as a finished measurement.
+    """
+    return {}
+
+
+def _cut_a_table_and_a_list(corpus: Corpus) -> Corpus:
+    """Add one document that is mostly a table and a long list.
+
+    Splitting by size knows nothing of a table: it cuts between two rows, and
+    the half carrying no header row is a grid of numbers whose columns have
+    lost their names. A list is cut the same way, and the tail arrives without
+    the sentence that said what the items are.
+
+    The staged failure is not that the split happens; it is that nothing says
+    so. The corpus stays well formed, every length, number and heading is in
+    order, and the checks report health, so this defect's pair is the reverse
+    kind: the defect is present and the honest expectation is silence.
+
+    Every word here is the corpus's own, for the reason a sibling defect
+    records: a sentence of this module's choosing is a sentence in this
+    module's language, and the first version of this one was written in
+    Russian and dropped into an English handbook, where it staged a language
+    failure instead of a table one. Measured, not foreseen.
+    """
+    words = _commonest_words(corpus, count=10)
+    if not words:
+        return dict(corpus)
+    out = dict(corpus)
+    number = len(corpus) + 1
+    columns = words[:4]
+    header = "| " + " | ".join(columns) + " |"
+    divider = "| " + " | ".join("---" for _ in columns) + " |"
+    rows = "\n".join(
+        "| " + " | ".join(f"{word} {i}" for word in columns) + " |"
+        for i in range(1, 61)
+    )
+    prose = " ".join(words)
+    items = "\n".join(f"- {prose}, {i}." for i in range(1, 61))
+    out[f"{number:02d}.md"] = (
+        f"# {number} {' '.join(words[:3])}\n\n"
+        f"{prose}, and the table below sets each of them out in turn.\n\n"
+        f"## {' '.join(words[3:6])}\n\n"
+        f"{header}\n{divider}\n{rows}\n\n"
+        f"## {' '.join(words[6:9])}\n\n"
+        f"{items}\n"
+    )
+    return out
+
+
 DEFECTS: tuple[Defect, ...] = (
     Defect("flatten_headings",
            "no document carries a heading, so nothing can build a structural tree",
@@ -413,6 +532,17 @@ DEFECTS: tuple[Defect, ...] = (
            ("F41",), _repeat_a_phrase_in_every_document,
            requires="carries headings, since the phrase is placed under the first of them",
            admits=lambda corpus: any("#" in text for text in corpus.values())),
+    Defect("leave_every_other_section_a_heading",
+           "every other section keeps its heading and loses the text under it",
+           ("F42",), _leave_every_other_section_a_heading,
+           requires="carries headings, since they are all that is left of it",
+           admits=lambda corpus: any("#" in text for text in corpus.values())),
+    Defect("empty_the_corpus",
+           "no documents at all, and every retrieval metric reporting zero",
+           ("F43",), _empty_the_corpus),
+    Defect("cut_a_table_and_a_list",
+           "one added document is mostly a table and a list, both longer than a chunk",
+           ("F08",), _cut_a_table_and_a_list),
 )
 
 _BY_NAME = {d.name: d for d in DEFECTS}

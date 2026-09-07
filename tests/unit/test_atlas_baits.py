@@ -617,17 +617,26 @@ def bait_F42_fragments_that_are_only_a_heading() -> set[str]:
     """A title matches a question about its subject better than most prose
     does, so retrieval looks right and the answer has nothing under it.
 
-    Each heading is its own, because identical ones stage a duplicate as
-    well and a pair proving two things proves neither. The length signal
-    fires beside this one and cannot be separated from it: a fragment
-    carrying a heading and nothing else is short by definition, which is a
-    fact about the two signals and not about this payload.
+    Three fragments in five, which is a window and not a round number. Below
+    a half the run-side check does not speak; at four in five the average
+    length falls under fifty, where a different check calls the corpus short
+    and the payload would stage two failures instead of one. The corpus
+    mutator measured the upper edge first, on a real chunker.
+
+    Each heading is its own, one step down from the same reasoning:
+    identical ones stage a duplicate as well.
     """
     run = clean_run()
-    for i, qr in enumerate(run["question_results"], start=1):
-        for j, ref in enumerate(qr["source_refs"], start=1):
-            ref["chunk_text"] = f"Section {i}.{j}."
-    chunks = [{**c, "text": f"Section {i}."} for i, c in enumerate(clean_chunks(), start=1)]
+    seen = 0
+    for qr in run["question_results"]:
+        for ref in qr["source_refs"]:
+            seen += 1
+            if seen % 5 < 3:
+                ref["chunk_text"] = f"Section {seen}."
+    chunks = [
+        {**c, "text": f"Section {i}."} if i % 5 < 3 else c
+        for i, c in enumerate(clean_chunks(), start=1)
+    ]
     return _detector_ids(run) | _health_ids(chunks)
 
 

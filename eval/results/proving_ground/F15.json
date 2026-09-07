@@ -1,6 +1,6 @@
 {
   "failure_id": "F15",
-  "recorded_at": "2026-09-07T07:41:55.482973+00:00",
+  "recorded_at": "2026-09-07T15:43:28.274749+00:00",
   "reproduced": false,
   "claim": "not staged: searched for a bare code the dense half returns the fragment carrying it first, so there is no miss to attribute to an identifier",
   "measured": {

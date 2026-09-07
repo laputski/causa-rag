@@ -1,0 +1,12 @@
+{
+  "failure_id": "F43",
+  "recorded_at": "2026-09-07T15:43:48.047115+00:00",
+  "reproduced": true,
+  "claim": "an index holding nothing is named as empty and not as a bad retriever",
+  "measured": {
+    "fragments": 0,
+    "signals_seen": [
+      "health:empty_corpus"
+    ]
+  }
+}

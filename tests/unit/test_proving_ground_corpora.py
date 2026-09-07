@@ -26,31 +26,12 @@ import pytest
 from core.chunking.structure_aware import StructureAwareChunkingStrategy
 from core.eval.corpus_health import analyze
 from core.models import Document
+from tests.unit.corpus_defect_expectations import PROVOKES
 from tools.corpus_mutate import DEFECTS, Corpus, CorpusCannotCarryDefect, mutate, read_corpus
 
 GROUND = Path(__file__).resolve().parents[2] / "corpus" / "proving-ground"
 LANGUAGES = ("base-ru", "base-en")
 
-PROVOKES = {
-    "flatten_headings": "no_structure",
-    "duplicate_documents": "duplicates",
-    "drop_a_numbered_document": "missing_structural_numbers",
-    "repeat_a_structural_number": "duplicate_structural_numbers",
-    "shrink_to_fragments": "too_short",
-    "add_a_second_language": "mixed_language",
-    # None, and deliberately. This defect's whole effect is on the graph: a
-    # keyword shared by every unit joins each to all the others, so the edges
-    # a link step produces grow with the square of the corpus. Corpus health
-    # reads documents and chunks and knows nothing of a graph, so the honest
-    # expectation here is silence, and the pair that proves the defect lives
-    # in tests/proving_ground against a loaded graph.
-    "repeat_a_phrase_in_every_document": None,
-    # None as well, and for the same kind of reason. This one adds a document
-    # of ordinary words, so nothing about the corpus on disk is malformed:
-    # every length, number and heading is in order, and what it does is to a
-    # lexical index. The pair that proves it runs a hybrid retrieval.
-    "stuff_a_document_with_the_corpus_own_words": None,
-}
 
 
 def _findings(corpus: Corpus, code: str) -> set[str]:

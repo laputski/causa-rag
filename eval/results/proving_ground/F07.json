@@ -1,6 +1,6 @@
 {
   "failure_id": "F07",
-  "recorded_at": "2026-09-07T07:41:47.295963+00:00",
+  "recorded_at": "2026-09-07T15:43:27.788447+00:00",
   "reproduced": false,
   "claim": "not staged: every reference names a whole document, so a unit spread across fragments is credited when any one of them is found",
   "measured": {

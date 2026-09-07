@@ -39,6 +39,7 @@ PAIRS: tuple[tuple[str, str, str], ...] = (
     ("repeat_a_structural_number", "F04", "health:duplicate_structural_numbers"),
     ("shrink_to_fragments", "F06", "health:too_short"),
     ("add_a_second_language", "F14", "health:mixed_language"),
+    ("leave_every_other_section_a_heading", "F42", "health:header_only"),
 )
 
 
@@ -344,3 +345,88 @@ def test_F15_cannot_be_staged_while_the_model_reads_the_codes(
            rank_of_the_first_carrying_it=1,
            staging_needs="an embedding model that tokenises a code away; this one is "
                          "multilingual and does not")
+
+
+def test_F08_a_table_is_cut_and_nothing_says_so(
+    embedder: Any, tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    """The reverse kind of pair: the defect is present and the honest
+    expectation is silence.
+
+    A reverse pair is worthless unless the corpus it was measured on really
+    carries the defect, so the cut is observed off the loaded index and not off
+    the files: some fragment holds table rows and not the row naming the
+    columns. Only then does the silence say what the entry claims, which is
+    that nothing inspects a fragment for a broken table.
+    """
+    defect = "cut_a_table_and_a_list"
+    namespace = _namespace(defect)
+    _drop(namespace)
+    directory = tmp_path_factory.mktemp(defect)
+    write_corpus(mutate(read_corpus(ROOT / "corpus" / "proving-ground" / CORPUS), defect),
+                 directory)
+    result = subprocess.run(
+        ["python3", "-m", "services.ingestion.cli", "ingest", str(directory),
+         "--strategy", "structure_aware", "--corpus-id", namespace,
+         "--language", LANGUAGE, "--realm-id", REALM],
+        cwd=str(ROOT), capture_output=True, text=True, timeout=900,
+        env={**_env(), "USE_REAL_BGE_M3": "true"}, check=False,
+    )
+    if result.returncode != 0:
+        pytest.skip(f"NOT RUN: loading {namespace} failed: {result.stderr[-400:]}")
+    shutil.rmtree(directory, ignore_errors=True)
+
+    from qdrant_client import QdrantClient
+
+    from adapters.qdrant import _collection_name
+
+    client = QdrantClient(host="localhost", port=6333)
+    points, _ = client.scroll(
+        collection_name=_collection_name("structure_aware", "bge_m3", namespace, REALM),
+        limit=10_000, with_payload=True)
+    rows = [p.payload.get("text", "") for p in points if p.payload.get("text", "").count("|") >= 4]
+    assert len(rows) > 1, "the table fits in one fragment, so the index carries no cut table"
+    headless = [t for t in rows if "---" not in t]
+    assert headless, "every fragment holding rows also holds the row naming the columns"
+
+    spoke = health_signals(namespace)
+    assert spoke == set(), (
+        f"something does see a cut table after all, which would make this entry detectable: "
+        f"{sorted(spoke)}"
+    )
+    record("F08", "a table cut across fragments is in the index and every check is silent",
+           defect=defect, fragments_holding_rows=len(rows),
+           of_them_without_the_header_row=len(headless), signals_seen=[])
+
+
+def test_F43_an_index_holding_nothing(embedder: Any) -> None:
+    """Staged by emptying an index, because the loader will not build one.
+
+    Loading a directory with no documents in it is refused and says so, which
+    is the fix this pair produced: it used to die with a KeyError instead. So
+    the state the entry describes is reached the other way an index reaches it,
+    by losing what it held, and what is measured is what the platform says
+    about an index holding nothing.
+    """
+    from qdrant_client import QdrantClient
+    from qdrant_client.models import Distance, VectorParams
+
+    from adapters.qdrant import _collection_name
+
+    namespace = _namespace("empty_the_corpus")
+    collection = _collection_name("structure_aware", "bge_m3", namespace, REALM)
+    client = QdrantClient(host="localhost", port=6333)
+    if collection in {c.name for c in client.get_collections().collections}:
+        client.delete_collection(collection_name=collection)
+    client.create_collection(
+        collection_name=collection,
+        vectors_config=VectorParams(size=1024, distance=Distance.COSINE))
+
+    held = client.count(collection_name=collection).count
+    assert held == 0, f"the index this measures is not empty: {held} fragments"
+    spoke = health_signals(namespace)
+    assert spoke == {"health:empty_corpus"}, (
+        f"an index holding nothing is reported as {sorted(spoke) or 'nothing at all'}"
+    )
+    record("F43", "an index holding nothing is named as empty and not as a bad retriever",
+           fragments=0, signals_seen=sorted(spoke))

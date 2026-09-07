@@ -22,6 +22,7 @@ import pytest
 from core.chunking.structure_aware import StructureAwareChunkingStrategy
 from core.eval.corpus_health import analyze
 from core.models import Document
+from tests.unit.corpus_defect_expectations import PROVOKES
 from tools.corpus_mutate import (
     DEFECTS,
     Corpus,
@@ -33,29 +34,6 @@ from tools.corpus_mutate import (
 
 CORPUS = Path(__file__).resolve().parents[2] / "corpus" / "demo_handbook"
 
-# What each defect is meant to make the corpus health checks say. Kept beside
-# the test and not inside the mutator, so the mutator cannot be edited into
-# agreement with itself.
-PROVOKES = {
-    "flatten_headings": "no_structure",
-    "duplicate_documents": "duplicates",
-    "drop_a_numbered_document": "missing_structural_numbers",
-    "repeat_a_structural_number": "duplicate_structural_numbers",
-    "shrink_to_fragments": "too_short",
-    "add_a_second_language": "mixed_language",
-    # None, and deliberately. This defect's whole effect is on the graph: a
-    # keyword shared by every unit joins each to all the others, so the edges
-    # a link step produces grow with the square of the corpus. Corpus health
-    # reads documents and chunks and knows nothing of a graph, so the honest
-    # expectation here is silence, and the pair that proves the defect lives
-    # in tests/proving_ground against a loaded graph.
-    "repeat_a_phrase_in_every_document": None,
-    # None as well, and for the same kind of reason. This one adds a document
-    # of ordinary words, so nothing about the corpus on disk is malformed:
-    # every length, number and heading is in order, and what it does is to a
-    # lexical index. The pair that proves it runs a hybrid retrieval.
-    "stuff_a_document_with_the_corpus_own_words": None,
-}
 
 
 def _findings(corpus: Corpus) -> set[str]:
@@ -187,3 +165,31 @@ def test_every_defect_names_the_catalogue_entries_it_serves() -> None:
             assert get(failure_id) is not None, (
                 f"{defect.name} names {failure_id}, which is not in the catalogue"
             )
+
+
+def test_the_table_defect_really_cuts_the_table(healthy: Corpus) -> None:
+    """The half a reverse pair needs, and the half that is easy to skip.
+
+    "Nothing fires" is worth nothing unless the corpus it was measured on
+    carries the defect. So the split is observed: some chunk holds table rows
+    and not the row that names the columns, and some chunk begins in the
+    middle of a row.
+    """
+    broken = mutate(healthy, "cut_a_table_and_a_list")
+    added = sorted(set(broken) - set(healthy))
+    assert len(added) == 1, f"the defect added {added}, and it adds exactly one document"
+
+    chunker = StructureAwareChunkingStrategy()
+    name = added[0]
+    chunks = chunker.chunk(Document(
+        source=f"demo_handbook/{name}", content=broken[name],
+        content_hash=hashlib.sha256(broken[name].encode()).hexdigest(),
+        metadata={"source_code": "demo_handbook", "article_no": name.split(".")[0]},
+    ))
+    with_rows = [c for c in chunks if c.text.count("|") >= 4]
+    assert len(with_rows) > 1, "the table fits in one chunk, so nothing was cut"
+    headless = [c for c in with_rows if "---" not in c.text]
+    assert headless, "every chunk holding rows also holds the row naming the columns"
+    assert any(not c.text.lstrip().startswith("|") for c in headless), (
+        "no chunk begins in the middle of a row"
+    )
