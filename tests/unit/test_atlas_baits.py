@@ -613,6 +613,30 @@ def bait_F41_the_guard_left_no_edges_at_all() -> set[str]:
     return _graph_ids(220, 0)
 
 
+def bait_F42_fragments_that_are_only_a_heading() -> set[str]:
+    """A title matches a question about its subject better than most prose
+    does, so retrieval looks right and the answer has nothing under it.
+
+    Each heading is its own, because identical ones stage a duplicate as
+    well and a pair proving two things proves neither. The length signal
+    fires beside this one and cannot be separated from it: a fragment
+    carrying a heading and nothing else is short by definition, which is a
+    fact about the two signals and not about this payload.
+    """
+    run = clean_run()
+    for i, qr in enumerate(run["question_results"], start=1):
+        for j, ref in enumerate(qr["source_refs"], start=1):
+            ref["chunk_text"] = f"Section {i}.{j}."
+    chunks = [{**c, "text": f"Section {i}."} for i, c in enumerate(clean_chunks(), start=1)]
+    return _detector_ids(run) | _health_ids(chunks)
+
+
+def bait_F43_an_index_holding_nothing() -> set[str]:
+    """Every retrieval metric comes back at zero, which is the shape a
+    catastrophically bad retriever makes too."""
+    return _health_ids([])
+
+
 BAITS = {
     "F01": bait_F01_reingest_duplicates,
     "F02": bait_F02_one_identifier_two_fragments,
@@ -644,6 +668,8 @@ BAITS = {
     "F36": bait_F36_a_difference_the_questions_cannot_see,
     "F37": bait_F37_the_number_is_the_best_of_a_search,
     "F41": bait_F41_the_guard_left_no_edges_at_all,
+    "F42": bait_F42_fragments_that_are_only_a_heading,
+    "F43": bait_F43_an_index_holding_nothing,
 }
 
 _CLAIMED = [f for f in FAILURES if f.detection != "none"]

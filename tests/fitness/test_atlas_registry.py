@@ -837,3 +837,21 @@ def test_each_listing_says_why() -> None:
     for listing in (REPORTS_A_CHECK_THAT_COULD_NOT_BE_MADE, AWAITING_AN_ENTRY):
         for signal, reason in listing.items():
             assert len(reason) > 60, f"{signal} is listed with no reason worth reading"
+
+
+def test_every_entry_has_a_title_in_both_languages() -> None:
+    """An entry declares `title_key` and the page reads it with the English
+    title as a fallback, so a missing key is not an error and not a blank
+    row: it is the English sentence on the Russian page, which reads as a
+    translation nobody got round to, and never as the defect it is.
+
+    Written after four entries had arrived that way and nothing had said so.
+    """
+    for lang in ("en", "ru"):
+        bundle = json.loads(
+            (ROOT / "ui" / "src" / "i18n" / "locales" / f"{lang}.json").read_text(encoding="utf-8"))
+        titles = bundle["atlasPage"]["entry"]
+        missing = sorted(f.id for f in FAILURES if f.id not in titles)
+        assert missing == [], f"{lang} has no title for {missing}"
+        orphaned = sorted(set(titles) - {f.id for f in FAILURES})
+        assert orphaned == [], f"{lang} keeps a title for an entry nobody wrote: {orphaned}"

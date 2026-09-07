@@ -70,7 +70,11 @@
       "F36": "The golden set is too small and too uniform to expose a defect",
       "F37": "Tuning was done on the same questions the measurement uses",
       "F38": "Linking units by shared words builds an edge count that grows with the square of the vocabulary",
-      "F39": "Communities look like structure while the grouping follows frequent words and not meaning"
+      "F39": "Communities look like structure while the grouping follows frequent words and not meaning",
+      "F40": "One half of the retrieval is absent and every setting still says two",
+      "F41": "The guard against a runaway link step leaves a graph with no edges at all",
+      "F42": "Fragments carry a heading and no body",
+      "F43": "The index holds nothing and every metric reports a total failure"
     },
     "gapDetail": "Nothing is known about failures peculiar to them. That is a gap in the catalogue, not a clean bill of health.",
     "gapTitle": "Some coordinates of this point are spoken about by no entry",

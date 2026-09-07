@@ -877,6 +877,49 @@ FAILURES: tuple[FailureMode, ...] = (
         ),
     ),
     FailureMode(
+        id="F42",
+        atlas_rows=(),
+        title="Fragments carry a heading and no body",
+        stage_origin="chunking",
+        stage_visible="generation",
+        severity=Severity(3, 3, 2),
+        origin="mechanism",
+        detection="detector",
+        instrument="corpus",
+        applies_when=(("A2", ("fixed", "structure_aware", "late_chunking", "semantic")),),
+        # Adjacent to the entry for fragments too small to carry the grounds
+        # and not the same one: there the fragment says too little, here it
+        # says the title of what it should have said. Retrieval looks right,
+        # because a title matches a question about its subject better than
+        # most prose does, and the answer has nothing under it.
+        #
+        # Two signals, and the difference between them is which question was
+        # asked. One reads a run's context and says this run was answered off
+        # titles; the other reads the whole index and says the corpus is made
+        # of them. A corpus can be sound and one context still be titles.
+        signals=(Signal("detector", "header_only"), Signal("health", "header_only")),
+        bait="tests/unit/test_atlas_baits.py::test_bait[F42]",
+    ),
+    FailureMode(
+        id="F43",
+        atlas_rows=(),
+        title="The index holds nothing and every metric reports a total failure",
+        stage_origin="ingest",
+        stage_visible="retrieval",
+        severity=Severity(1, 4, 2),
+        origin="mechanism",
+        detection="detector",
+        instrument="corpus",
+        applies_when=(),
+        # The quietest thing here is not the emptiness, which anybody would
+        # notice on the corpus page; it is what the numbers do with it. Every
+        # retrieval metric comes back at zero, which is the same shape a
+        # catastrophically bad retriever produces, and a reader comparing two
+        # configurations against an empty index compares nothing twice.
+        signals=(Signal("health", "empty_corpus"),),
+        bait="tests/unit/test_atlas_baits.py::test_bait[F43]",
+    ),
+    FailureMode(
         id="F41",
         atlas_rows=(),
         title="The guard against a runaway link step leaves a graph with no edges at all",
@@ -987,21 +1030,7 @@ REPORTS_A_CHECK_THAT_COULD_NOT_BE_MADE: dict[str, str] = {
     ),
 }
 
-AWAITING_AN_ENTRY: dict[str, str] = {
-    "detector:header_only": (
-        "a context of chunks carrying a heading and almost no body. Adjacent to the entry for "
-        "chunks too small to carry an answer, and not the same failure: those hold text and "
-        "too little of it, these hold a title and nothing."
-    ),
-    "health:header_only": (
-        "the same failure read off a corpus, and never off one run's context: the whole "
-        "index holds titles where it should hold text."
-    ),
-    "health:empty_corpus": (
-        "an index holding nothing at all, which every retrieval metric reports as a total "
-        "failure of the system, naming an empty corpus nowhere."
-    ),
-}
+AWAITING_AN_ENTRY: dict[str, str] = {}
 
 
 def signal_index() -> dict[str, list[str]]:
