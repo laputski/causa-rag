@@ -3,7 +3,9 @@ import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { ExternalLink } from 'lucide-react'
-import { api, type AtlasEntry, type Atlas, type AtlasSignal } from '../api/client'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { api, type AtlasCandidate, type AtlasEntry, type Atlas, type AtlasSignal } from '../api/client'
+import { useRealm } from '../context/RealmContext'
 
 /** What the platform can do about an entry today, decided by the catalogue.
  *
@@ -259,6 +261,149 @@ function SignalsTab() {
   )
 }
 
+/** Failures people have reported, kept apart from the catalogue on purpose.
+ *
+ *  The catalogue is read-only from here, and that is why its guarantees hold:
+ *  an entry claims a signal catches a failure, and the build refuses such a
+ *  claim without a bait. A candidate claims nothing of the kind, so it can be
+ *  written from the interface, and the refusal keeps holding for everything
+ *  that does.
+ *
+ *  Every open row says on its face that no bait has confirmed it. Not a
+ *  column and not a tooltip: a candidate and an entry look alike on a screen,
+ *  and a reader who skims has to see the difference without reading a legend.
+ */
+function CandidatesSection() {
+  const { t } = useTranslation()
+  const { activeRealmId } = useRealm()
+  const queryClient = useQueryClient()
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState({
+    title: '', looked_like: '', observed_on: '', suspected_signal: '',
+  })
+
+  const { data } = useQuery({
+    queryKey: ['atlas-candidates', activeRealmId],
+    queryFn: () => api.atlas.candidates(activeRealmId),
+  })
+
+  const report = useMutation({
+    mutationFn: () => api.atlas.report(form, activeRealmId),
+    onSuccess: () => {
+      setForm({ title: '', looked_like: '', observed_on: '', suspected_signal: '' })
+      setOpen(false)
+      queryClient.invalidateQueries({ queryKey: ['atlas-candidates', activeRealmId] })
+    },
+  })
+
+  const candidates = data?.candidates ?? []
+  const promoted = candidates.filter(c => c.promoted_to)
+  const openOnes = candidates.filter(c => !c.promoted_to)
+
+  // The title and what looked like it worked are what the server requires, and
+  // it says so by refusing a shorter one. Asking here as well means the reader
+  // learns it before typing and not after submitting.
+  const enough = form.title.trim().length >= 8 && form.looked_like.trim().length >= 8
+
+  return (
+    <section className="section">
+      <div className="section-rule flush">
+        <h2 className="section-title">{t('atlasPage.candidates.title')}</h2>
+        <span className="section-meta">
+          {t('atlasPage.candidates.counts', { open: openOnes.length, promoted: promoted.length })}
+        </span>
+      </div>
+      <p className="hint-line">{t('atlasPage.candidates.lead')}</p>
+
+      {candidates.length > 0 && (
+        <div className="table-wrap mt-8">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>{t('atlasPage.candidates.column.reported')}</th>
+                <th>{t('atlasPage.candidates.column.what')}</th>
+                <th>{t('atlasPage.candidates.column.state')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {candidates.map(c => <CandidateRow key={c.candidate_id} candidate={c} />)}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <details className="mt-8" open={open}
+               onToggle={e => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
+        <summary><strong>{t('atlasPage.candidates.report')}</strong></summary>
+        <form className="cand-form" onSubmit={e => { e.preventDefault(); report.mutate() }}>
+          <label>
+            {t('atlasPage.candidates.field.title')}
+            <input type="text" value={form.title} maxLength={200}
+                   onChange={e => setForm({ ...form, title: e.target.value })} />
+          </label>
+          <label>
+            {t('atlasPage.candidates.field.lookedLike')}
+            <textarea value={form.looked_like} maxLength={2000}
+                      onChange={e => setForm({ ...form, looked_like: e.target.value })} />
+          </label>
+          <label>
+            {t('atlasPage.candidates.field.observedOn')}
+            <input type="text" value={form.observed_on} maxLength={500}
+                   onChange={e => setForm({ ...form, observed_on: e.target.value })} />
+          </label>
+          <label>
+            {t('atlasPage.candidates.field.suspectedSignal')}
+            <input type="text" value={form.suspected_signal} maxLength={200}
+                   onChange={e => setForm({ ...form, suspected_signal: e.target.value })} />
+          </label>
+          <div className="cand-actions">
+            <button type="submit" className="btn btn-primary"
+                    disabled={!enough || report.isPending}>
+              {t('atlasPage.candidates.submit')}
+            </button>
+            <span className="text-muted">{t('atlasPage.candidates.harmless')}</span>
+          </div>
+          {report.isError && (
+            <p className="hint-line bad">{String((report.error as Error).message)}</p>
+          )}
+        </form>
+      </details>
+    </section>
+  )
+}
+
+/** One reported failure. A promoted one points at the entry it became and
+ *  drops the unconfirmed mark, because an entry arrives with its bait. */
+function CandidateRow({ candidate }: { candidate: AtlasCandidate }) {
+  const { t } = useTranslation()
+  const state = candidate.promoted_to ? 'promoted' : candidate.status
+  return (
+    <tr>
+      <td className="mono-sm nowrap">
+        {candidate.candidate_id}
+        <div className="text-muted">{candidate.created_at.slice(0, 10)}</div>
+      </td>
+      <td>
+        <div className="cand-title">{candidate.title}</div>
+        <div className="cand-said">{candidate.looked_like}</div>
+        {candidate.observed_on && <div className="mono-sm text-muted">{candidate.observed_on}</div>}
+        {candidate.note && <div className="cand-said">{candidate.note}</div>}
+        {!candidate.confirmed_by_a_bait && !candidate.promoted_to && (
+          <span className="cand-unbaited">{t('atlasPage.candidates.unbaited')}</span>
+        )}
+      </td>
+      <td className="nowrap">
+        <span className={`det-state cand-${state}`}>
+          <i className="det-bar" />
+          {t(`atlasPage.candidates.state.${state}`)}
+          {candidate.promoted_to && ` → ${candidate.promoted_to}`}
+        </span>
+      </td>
+    </tr>
+  )
+}
+
+
 export default function AtlasPage() {
   const { t } = useTranslation()
   const [tab, setTab] = useState<'catalogue' | 'signals'>('catalogue')
@@ -427,6 +572,12 @@ export default function AtlasPage() {
           </details>
         )}
       </section>
+
+      {/* Below the catalogue and never inside it. A candidate and an entry look
+          alike on a screen and only one of them has been proven to be caught by
+          anything; mixing them would let this page assert what nobody checked,
+          which is what the catalogue's read-only rule exists to prevent. */}
+      <CandidatesSection />
     </div>
   )
 }

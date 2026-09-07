@@ -135,7 +135,33 @@
     "title": "Failure atlas",
     "undetermined": "{{count}} entries whose applicability is not established",
     "undeterminedHint": "this architecture records nothing about a coordinate they depend on",
-    "unavailable": "The catalogue is unavailable."
+    "unavailable": "The catalogue is unavailable.",
+    "candidates": {
+      "title": "Reported, not yet in the catalogue",
+      "lead": "A person who meets a failure writes it down without editing the catalogue. No row here has been confirmed by a bait, and until one is, it does not become a catalogue entry.",
+      "counts": "{{open}} open · {{promoted}} promoted",
+      "report": "Report a failure you met",
+      "submit": "Report it",
+      "harmless": "Nothing here changes the catalogue.",
+      "unbaited": "no bait has confirmed this",
+      "column": {
+        "reported": "Reported",
+        "what": "What looked like it worked",
+        "state": "State"
+      },
+      "field": {
+        "title": "What went wrong, in a sentence",
+        "lookedLike": "What looked like it worked while it was failing",
+        "observedOn": "Where you saw it",
+        "suspectedSignal": "Which signal you think should have caught it — your guess, kept as yours"
+      },
+      "state": {
+        "proposed": "proposed",
+        "accepted": "accepted",
+        "rejected": "rejected",
+        "promoted": "promoted"
+      }
+    }
   },
   "app": {
     "title": "RAG Platform"

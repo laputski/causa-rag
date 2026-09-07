@@ -790,11 +790,45 @@ export interface AtlasSignal {
   bait_level: string[]
 }
 
+export interface AtlasCandidate {
+  candidate_id: string
+  realm_id: string
+  title: string
+  looked_like: string
+  observed_on: string
+  suspected_signal: string
+  status: 'proposed' | 'accepted' | 'rejected'
+  note: string
+  promoted_to: string
+  created_at: string
+  updated_at: string
+  /** Said on every candidate, on every path out of the server. A candidate and
+   *  an entry look alike on a screen and only one of them has been proven to
+   *  be caught by anything. */
+  confirmed_by_a_bait: boolean
+}
+
+export interface AtlasCandidateRequest {
+  title: string
+  looked_like: string
+  observed_on: string
+  suspected_signal: string
+}
+
 export const api = {
   atlas: {
     read: (point?: string) =>
       req<Atlas>(`/atlas${point ? `?point=${encodeURIComponent(point)}` : ''}`),
     signals: () => req<{ signals: AtlasSignal[] }>('/atlas/signals'),
+    // Failures people have reported, which the catalogue does not hold and
+    // never will until somebody writes the entry and its bait.
+    candidates: (realmId?: string | null) =>
+      req<{ candidates: AtlasCandidate[] }>(
+        `/atlas/candidates${realmId ? `?realm_id=${encodeURIComponent(realmId)}` : ''}`),
+    report: (body: AtlasCandidateRequest, realmId?: string | null) =>
+      req<AtlasCandidate>(
+        `/atlas/candidates${realmId ? `?realm_id=${encodeURIComponent(realmId)}` : ''}`,
+        { method: 'POST', body: JSON.stringify(body) }),
   },
   experiments: {
     list: (params?: { sort_by?: string; dataset?: string; realmId?: string | null }) => {

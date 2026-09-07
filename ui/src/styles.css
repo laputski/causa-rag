@@ -3154,6 +3154,44 @@ details[open] > .qrow-summary .qrow-caret { transform: rotate(90deg); color: var
 .det-none     { color: var(--color-text-muted) }
 .det-none     .det-bar { background: repeating-linear-gradient(90deg, var(--color-text-muted) 0 3px, transparent 3px 6px) }
 
+/* A reported failure, and how much of it is established.
+   The bar language is the catalogue's own, one section above: solid for
+   settled, part-filled for partly, dashed for nothing. A proposed candidate
+   gets the dashed bar because nothing about it is established; a promoted one
+   gets the solid bar, because an entry and its bait now exist. */
+.cand-proposed { color: var(--color-text-muted) }
+.cand-proposed .det-bar { background: repeating-linear-gradient(90deg, var(--color-text-muted) 0 3px, transparent 3px 6px) }
+.cand-accepted { color: var(--color-warning) }
+.cand-accepted .det-bar { background: linear-gradient(90deg, var(--color-warning) 40%, var(--color-border) 40%) }
+.cand-rejected { color: var(--color-danger) }
+.cand-rejected .det-bar { background: linear-gradient(90deg, var(--color-danger) 18%, var(--color-border) 18%) }
+.cand-promoted { color: var(--color-success) }
+.cand-promoted .det-bar { background: var(--color-success) }
+
+.cand-title { font-weight: 500 }
+
+/* What the reporter wrote, under the title of their report. Not `.hint-line`,
+   which carries a rule above it: inside a table cell that rule reads as a row
+   boundary and cut every report into three. */
+.cand-said {
+  font-size: var(--fs-2xs); color: var(--color-text-muted); line-height: 1.5;
+  margin-top: 3px; max-width: var(--measure);
+}
+
+/* On the row and not in a column: a reader who skims has to meet it without
+   reading a legend. Dashed, because the border says the same thing the words
+   do and an unbroken one would read as a settled label. */
+.cand-unbaited {
+  display: inline-block; margin-top: 6px; padding: 1px 6px;
+  font-size: var(--fs-2xs); color: var(--color-text-muted);
+  border: 1px dashed var(--color-border); border-radius: 3px;
+}
+
+.cand-form { display: grid; gap: 10px; margin-top: 12px; max-width: 68ch }
+.cand-form label { display: grid; gap: 4px; font-size: var(--fs-xs); color: var(--color-text-muted) }
+.cand-form textarea { min-height: 62px; resize: vertical }
+.cand-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap }
+
 /* A coordinate of the configuration space. Monospaced because it is a code and
    not a word, and bordered because it is a value somebody else defines: the
    link beside it goes to that definition. */
