@@ -107,6 +107,15 @@ def _parse_result(data: dict[str, Any], stem: str = "") -> ExperimentResult | No
         r.stopped = data.get("stopped", False)
         r.generator_model = data.get("generator_model", "")
         r.coverage_check = data.get("coverage_check") or {}
+        # What ran, and what the corpus was built from. Both were written by
+        # the run and dropped here, which is the failure the catalogue calls
+        # "the read path loses data" happening to the two fields added to
+        # catch three others: every check consulting the load record went
+        # silent the moment a run was read back from the store,
+        # and a silent check is indistinguishable from a passing one.
+        r.applied = data.get("applied") or {}
+        r.corpus_manifest = data.get("corpus_manifest") or {}
+        r.unavailable_components = data.get("unavailable_components") or []
         for qd in data.get("question_results", []):
             r.question_results.append(QuestionResult(
                 question_id=qd.get("question_id", ""),
