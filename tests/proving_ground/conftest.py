@@ -153,6 +153,11 @@ def _registry(embedder: Any, corpus_id: str, language: str, strategy: str,
 #: another corpus entirely.
 NEO4J = os.getenv("PROVING_GROUND_NEO4J", "bolt://localhost:7478")
 
+#: The analyser the base corpora were indexed under. An OpenSearch index
+#: carries its analyser for life, so a suite querying through another one
+#: reads the right index through the wrong stemmer.
+LANGUAGE = "ru_be"
+
 
 def _graph_retriever() -> Any:
     """The realm's graph, or None when it is not up.

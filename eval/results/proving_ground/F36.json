@@ -1,0 +1,17 @@
+{
+  "failure_id": "F36",
+  "recorded_at": "2026-09-07T06:17:31.627326+00:00",
+  "claim": "a difference smaller than the scatter of the questions, and none at all",
+  "measured": {
+    "signals_on_the_small_difference": [
+      "compare:below_the_sets_resolution",
+      "compare:metric_missing_in_one_run"
+    ],
+    "signals_on_no_difference": [
+      "compare:same_run"
+    ],
+    "recall_control": 0.9411764705882353,
+    "recall_without_the_reranker": 1.0,
+    "questions": 19
+  }
+}
