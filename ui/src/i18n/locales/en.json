@@ -2149,7 +2149,7 @@
       "empty_answers": "{{bad}}/{{answers}} answers are empty or say nothing was found ({{share}}).",
       "incorrect_refusals": "{{wrong}}/{{scored}} questions got the refusal decision wrong ({{share}}): either a refusal on an answerable question, which is a retrieval miss, or a confident answer with no source in the corpus, which is a hallucination.",
       "layer_bottleneck": "{{count}}/{{total}} answerable questions failed at the {{layer}} layer ({{share}}).",
-      "unverified_coverage": "Answerability classes were taken from the dataset's own refs without checking them against the index ({{reason}}). A question whose source is absent from the index counts as answerable in this run, so the uncovered count may be lower than the truth.",
+      "unverified_coverage": "Answerability classes were taken from the dataset's own refs without checking them against the index: {{reason}}{{note}}. A question whose source is absent from the index counts as answerable in this run, so the uncovered count may be lower than the truth.",
       "undeclared_metric": "{{undeclared}} of {{metrics}} metrics in this run declare nothing about what they compute or over which questions: {{names}}. Their names are all a reader has, so a name that stopped matching its definition would look exactly like this run does.",
       "aggregate_disagrees": "{{disagreeing}} of {{metrics}} metrics do not survive being recomputed from the questions of this same run: {{named}}. Whatever these numbers describe, it is not what the questions recorded.",
       "segmentation_broke_its_promise": "The corpus was loaded with '{{strategy}}' and its own check of the result did not pass: {{unmet}}.",
@@ -2172,10 +2172,24 @@
       "semantic": "semantic",
       "reached_the_generator": "the run reached the generator",
       "answerable": "the question is one the corpus covers",
-      "retrieved_something_relevant": "retrieval found at least one source the question needs"
+      "retrieved_something_relevant": "retrieval found at least one source the question needs",
+      "no_resolver_configured": "no resolver was configured",
+      "the_retriever_cannot_enumerate": "the retriever cannot list what the index holds",
+      "the_index_is_too_large": "the index is too large to verify in full",
+      "the_index_is_unreachable": "the index could not be reached",
+      "the_index_is_empty_or_absent": "the index is empty, or there is none for this corpus",
+      "structure_aware": "the headings could not be read, so this load produced the same fragments the plain fixed-window strategy would have produced under another name",
+      "fixed": "fragments came back wider than the requested window, so the setting that names the window did not decide it",
+      "sentence": "most fragments end mid-sentence, so the boundaries came from somewhere other than the sentence segmenter this strategy is named for",
+      "paragraph": "most fragments end mid-sentence, so neither the paragraph split nor the sentence fallback beneath it decided the boundaries"
     },
     "findingClause": {
-      "metric_without_grounds": "{{metric}} on {{count}} question(s) where it is not true that {{precondition}}"
+      "metric_without_grounds": "{{metric}} on {{count}} question(s) where it is not true that {{precondition}}",
+      "aggregate_disagrees": {
+        "on_no_question_at_all": "{{metric}}: {{recorded}} in the run and on no question at all",
+        "against_the_mean": "{{metric}}: {{recorded}} in the run and {{mean}} across the {{questions}} questions carrying it"
+      },
+      "segmentation_broke_its_promise": "{{promise}}"
     }
   },
   "runPage": {

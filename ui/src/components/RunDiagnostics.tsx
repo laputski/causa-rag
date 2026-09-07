@@ -66,7 +66,9 @@ function DiagItem({ item }: { item: DiagnosticItem }) {
 // or a name: a funnel layer, a half of a merge. The server sends the code and
 // never a label, because a label composed there is an English word arriving
 // inside a Russian sentence.
-const A_WORD_IN_ITS_OWN_RIGHT = new Set(['layer', 'half', 'other'])
+const A_WORD_IN_ITS_OWN_RIGHT = new Set([
+  'layer', 'half', 'other', 'reason', 'precondition', 'promise',
+])
 
 function DetectorPanelItem({ item }: { item: DetectorItem }) {
   const { t } = useTranslation()
@@ -81,10 +83,18 @@ function DetectorPanelItem({ item }: { item: DetectorItem }) {
   const params = Object.fromEntries(
     Object.entries(item.params ?? {}).map(([name, value]) => {
       if (Array.isArray(value)) {
-        return [name, value.map(part => t(`runDiagnostics.findingClause.${key}`, {
-          ...part,
-          precondition: part.precondition === undefined ? undefined : word(part.precondition),
-        })).join('; ')]
+        return [name, value.map(part => {
+          // A part may name which of several sentences it is. One finding says
+          // two things about a metric: that the questions never carried it,
+          // and that they carried it and disagreed. They are two
+          // sentences with different parts, under one identifier because they
+          // are one finding.
+          const shape = part.shape === undefined ? '' : `.${part.shape}`
+          const spelled = Object.fromEntries(Object.entries(part).map(([field, held]) => [
+            field, A_WORD_IN_ITS_OWN_RIGHT.has(field) ? word(held) : held,
+          ]))
+          return t(`runDiagnostics.findingClause.${key}${shape}`, spelled)
+        }).join('; ')]
       }
       return [name, A_WORD_IN_ITS_OWN_RIGHT.has(name) ? word(value) : value]
     }),

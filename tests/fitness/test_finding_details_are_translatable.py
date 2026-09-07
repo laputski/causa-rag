@@ -28,68 +28,104 @@ ROOT = Path(__file__).resolve().parents[2]
 
 pytestmark = pytest.mark.fitness
 
-#: Values that are themselves a sentence the server composed, and the reason
-#: each one is. They arrive inside a translated frame and stay English, which
-#: is worth naming, and never worth leaving for a reader to notice: half a
-#: line in one language is a smaller gap than a whole line, and still a gap.
+#: Values that are not this platform's to translate, and the reason each is.
 #:
-#: Closing one means giving the detector structured pieces instead of a joined
-#: string, so the interface can compose that part too. Listed here so the work
-#: is a known remainder and not a discovery.
-COMPOSED_ON_THE_SERVER: dict[str, str] = {
-    "unverified_coverage.reason": (
-        "free text from whatever could not be checked, and not a sentence with a shape"
-    ),
-    "aggregate_disagrees.named": (
-        "one clause per metric, each naming the metric and both numbers it disagreed between"
-    ),
-    "segmentation_broke_its_promise.unmet": (
-        "one clause per promise the strategy declared and its own check did not find kept"
+#: Four values used to reach a reader in the server's English whatever their
+#: language, and all four are closed now: three named a thing from a closed set
+#: and needed an identifier beside the sentence, and the fourth was two
+#: sentences under one identifier and needed to say which. What is left here is
+#: one value that nobody can translate, because nobody here wrote it.
+NOT_OURS_TO_TRANSLATE: dict[str, str] = {
+    "unverified_coverage.note": (
+        "a library's own exception message, shown as it arrived; parenthesised on the way "
+        "out because only this side knows whether there is one"
     ),
 }
 
 #: Values that arrive as their parts, so the interface writes the clause and
 #: not only the frame around it, and what each becomes when it does.
-#:
-#: The fourth of the composed values above used to be one of them. Its clause
-#: named a metric, a count and a precondition, and a precondition is one of
-#: three, so an identifier beside its sentence was all that was missing.
 ASSEMBLED_BY_THE_INTERFACE: dict[str, str] = {
     "metric_without_grounds.grounds": (
         "one clause per metric; a precondition is one of three and carries an identifier, "
         "and a metric's own name stays as it is because that is what a reader searches for"
+    ),
+    "aggregate_disagrees.named": (
+        "one clause per metric, in two shapes: a number the questions never carried at all, "
+        "and a number they carried and disagreed with"
+    ),
+    "segmentation_broke_its_promise.unmet": (
+        "one clause per promise; a promise belongs to exactly one segmentation strategy, so "
+        "the strategy's own name identifies the promise it broke"
     ),
 }
 
 PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z_][\w]*)\s*\}\}")
 
 
-def _parts() -> dict[str, dict[str, set[str]]]:
-    """For each finding, the params that arrive as a list, and the fields of
-    one item of that list.
+def _parts() -> dict[str, dict[str, dict[str, set[str]]]]:
+    """For each finding, the params that arrive as a list, and for each shape
+    of item in that list, the fields it carries.
 
-    Read off the source, and off the dictionary the list is built from, so a
+    Read off the source, and off the dictionaries the list is built from, so a
     field renamed in the detector and not in the clause is caught by the same
-    pass that catches a missing clause.
+    pass that catches a missing clause. A list may be built inside the call or
+    appended to before it, so both are followed; the empty string is the shape
+    of an item that does not name one.
     """
     tree = ast.parse((ROOT / "core" / "eval" / "detectors.py").read_text(encoding="utf-8"))
-    found: dict[str, dict[str, set[str]]] = {}
-    for node in ast.walk(tree):
-        if not (isinstance(node, ast.Call) and getattr(node.func, "id", "") == "DiagnosticItem"):
-            continue
-        keywords = {k.arg: k.value for k in node.keywords}
-        identifier = keywords["id"].value
-        key = keywords["detail_key"].value if "detail_key" in keywords else identifier
-        for name, value in zip(keywords["params"].keys, keywords["params"].values, strict=True):
-            if not isinstance(value, ast.ListComp | ast.List):
+    functions = [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
+    found: dict[str, dict[str, dict[str, set[str]]]] = {}
+    for function in functions:
+        for node in ast.walk(function):
+            if not (isinstance(node, ast.Call)
+                    and getattr(node.func, "id", "") == "DiagnosticItem"):
                 continue
-            item = next((inner for inner in ast.walk(value) if isinstance(inner, ast.Dict)), None)
-            assert item is not None, (
-                f"{key}.{name.value} is a list of something this cannot read, so the clause "
-                "for it cannot be checked against what the detector sends"
-            )
-            found.setdefault(key, {})[name.value] = {field.value for field in item.keys}
+            keywords = {k.arg: k.value for k in node.keywords}
+            identifier = keywords["id"].value
+            key = keywords["detail_key"].value if "detail_key" in keywords else identifier
+            params = keywords["params"]
+            for name, value in zip(params.keys, params.values, strict=True):
+                items = _dictionaries_behind(value, function)
+                if not items:
+                    continue
+                shapes: dict[str, set[str]] = {}
+                for item in items:
+                    fields = {field.value for field in item.keys}
+                    shape = next((v.value for f, v in zip(item.keys, item.values, strict=True)
+                                  if f.value == "shape"), "")
+                    shapes[shape] = fields - {"shape"}
+                found.setdefault(key, {})[name.value] = shapes
     return found
+
+
+def _dictionaries_behind(value: ast.expr, function: ast.FunctionDef) -> list[ast.Dict]:
+    """The dictionary literals one param's value is built from, if it is a list
+    of them at all.
+
+    A list written inside the call is read from the call. A list named there
+    and built above is followed to where it was built, whether that was one
+    expression or a series of appends: a detector with two shapes of clause
+    has to write it the second way, and one with a single shape usually
+    writes it the first.
+    """
+    if isinstance(value, ast.ListComp | ast.List):
+        return [node for node in ast.walk(value) if isinstance(node, ast.Dict)]
+    if not isinstance(value, ast.Name):
+        return []
+    appended: list[ast.Dict] = []
+    for node in ast.walk(function):
+        if (isinstance(node, ast.Assign)
+                and any(getattr(target, "id", "") == value.id for target in node.targets)
+                and isinstance(node.value, ast.ListComp | ast.List)):
+            appended.extend(inner for inner in ast.walk(node.value)
+                            if isinstance(inner, ast.Dict))
+        if (isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "append"
+                and getattr(node.func.value, "id", "") == value.id
+                and node.args and isinstance(node.args[0], ast.Dict)):
+            appended.append(node.args[0])
+    return appended
 
 
 def _emitted() -> dict[str, set[str]]:
@@ -164,11 +200,11 @@ def test_every_value_the_detector_sends_reaches_the_reader(lang: str) -> None:
         assert dropped == [], f"{lang}.{key} never shows {dropped}, which the detector measured"
 
 
-def test_each_value_composed_on_the_server_is_still_one() -> None:
-    """The listing above is a remainder, so it has to shrink by somebody doing
-    the work and never by the entry quietly outliving its value."""
+def test_each_value_nobody_can_translate_is_still_one() -> None:
+    """The listing is a remainder, so it has to shrink by somebody doing the
+    work and never by an entry quietly outliving its value."""
     emitted = _emitted()
-    for qualified, why in COMPOSED_ON_THE_SERVER.items():
+    for qualified, why in NOT_OURS_TO_TRANSLATE.items():
         key, _, param = qualified.rpartition(".")
         assert key in emitted, f"{qualified} names a finding nothing sends"
         assert param in emitted[key], f"{qualified} names a value {key} no longer sends"
@@ -193,37 +229,88 @@ def test_every_value_that_arrives_as_parts_has_a_clause(lang: str) -> None:
     clauses = bundle["runDiagnostics"]["findingClause"]
     for key, params in _parts().items():
         assert key in clauses, f"{lang} has no clause for {key}, so its parts render as objects"
-        named = set(PLACEHOLDER.findall(clauses[key]))
-        for name, fields in params.items():
-            assert named == fields, (
-                f"{lang}.{key} writes {sorted(named)} and the detector sends {sorted(fields)} "
-                f"in {name}"
-            )
+        written = clauses[key]
+        for name, shapes in params.items():
+            for shape, fields in shapes.items():
+                sentence = written if shape == "" else written.get(shape)
+                assert isinstance(sentence, str), (
+                    f"{lang}.{key} has no sentence for the shape {shape!r} of {name}"
+                )
+                named = set(PLACEHOLDER.findall(sentence))
+                assert named == fields, (
+                    f"{lang}.{key}.{shape} writes {sorted(named)} and the detector sends "
+                    f"{sorted(fields)} in {name}"
+                )
+        if isinstance(written, dict):
+            spare = sorted(set(written) - {s for shapes in params.values() for s in shapes})
+            assert spare == [], f"{lang}.{key} writes a sentence for shapes nobody sends: {spare}"
 
 
 @pytest.mark.parametrize("lang", ["en", "ru"])
-def test_a_field_naming_a_thing_has_the_readers_word_for_it(lang: str) -> None:
+def test_every_code_a_finding_can_carry_has_the_readers_word_for_it(lang: str) -> None:
     """A clause's part may be one of the platform's own codes. Rendered as the
-    code it is, a translated clause still hands the reader an English word."""
-    from core.eval.metric_definitions import REACHED_THE_GENERATOR
+    code it is, a translated clause still hands the reader an English word, or
+    worse an identifier with underscores in it.
 
+    Every closed set a finding draws a code from is read from the module that
+    declares it. Written for preconditions alone first, this passed while a
+    promise had no word in one language: the clause was that word and nothing
+    else, so the finding read `structure_aware` and said nothing at all.
+    """
     bundle = json.loads(
         (ROOT / "ui" / "src" / "i18n" / "locales" / f"{lang}.json").read_text(encoding="utf-8"))
     words = bundle["runDiagnostics"]["findingWord"]
-    for name in _preconditions():
-        assert name in words, f"{lang} has no word for the precondition {name!r}"
-    assert REACHED_THE_GENERATOR.id in words, (
-        "a precondition the catalogue's own detector names is missing a word"
-    )
+    for what, codes in _the_codes_a_finding_can_carry().items():
+        assert codes, f"no {what} could be read, so this checks nothing"
+        missing = sorted(codes - set(words))
+        assert missing == [], f"{lang} has no word for the {what} {missing}"
 
 
-def _preconditions() -> set[str]:
-    """Every precondition identifier, read off the module that declares them."""
-    tree = ast.parse(
-        (ROOT / "core" / "eval" / "metric_definitions.py").read_text(encoding="utf-8"))
+def _the_codes_a_finding_can_carry() -> dict[str, set[str]]:
+    """Every closed set a finding draws a code from, read where it is declared.
+
+    Not one list here: a set maintained beside the check is a second place to
+    forget, and forgetting it looks exactly like having nothing to add.
+    """
+    from core.chunking.post_conditions import PROMISES
+
+    return {
+        "precondition": _constructed_with("core/eval/metric_definitions.py", "Precondition"),
+        "promise": set(PROMISES),
+        "reason coverage was not checked": _named_argument(
+            "services/api_gateway/routers/experiments.py", "UnknownRefResolver", "reason_id")
+        | _default_of("core/eval/ref_resolution.py", "reason_id"),
+    }
+
+
+def _constructed_with(path: str, name: str) -> set[str]:
+    """The first positional argument of every construction of `name`."""
+    tree = ast.parse((ROOT / path).read_text(encoding="utf-8"))
     return {
         node.args[0].value
         for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "Precondition"
+        if isinstance(node, ast.Call) and getattr(node.func, "id", "") == name
         and node.args and isinstance(node.args[0], ast.Constant)
+    }
+
+
+def _named_argument(path: str, call: str, argument: str) -> set[str]:
+    tree = ast.parse((ROOT / path).read_text(encoding="utf-8"))
+    return {
+        keyword.value.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and getattr(node.func, "id", "") == call
+        for keyword in node.keywords
+        if keyword.arg == argument and isinstance(keyword.value, ast.Constant)
+    }
+
+
+def _default_of(path: str, field: str) -> set[str]:
+    """The default a dataclass field carries, which is the case nobody names."""
+    tree = ast.parse((ROOT / path).read_text(encoding="utf-8"))
+    return {
+        node.value.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.AnnAssign) and getattr(node.target, "id", "") == field
+        and isinstance(node.value, ast.Constant)
     }

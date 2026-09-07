@@ -481,6 +481,11 @@ def detect_unverified_coverage(run: dict[str, Any]) -> DiagnosticItem | None:
     if not coverage or coverage.get("checked"):
         return None
     reason = coverage.get("reason") or "no reason given"
+    # The identifier if the run carries one, and the sentence otherwise. A run
+    # stored before resolvers named their reasons has only the sentence, and a
+    # sentence read as an identifier resolves to nothing, so the interface
+    # falls back to showing it as it is.
+    named = coverage.get("reason_id") or reason
     return DiagnosticItem(
         id="unverified_coverage",
         severity="warn",
@@ -491,7 +496,10 @@ def detect_unverified_coverage(run: dict[str, Any]) -> DiagnosticItem | None:
             "as answerable in this run, so the uncovered count may be lower than the truth."
         ),
         action="Check that the index for this corpus is reachable, then re-run to get verified classes.",
-        params={"reason": reason},
+        # The note is a library's own message and is shown as it arrived,
+        # parenthesised here because only this side knows whether there is one.
+        params={"reason": named,
+                "note": f" ({coverage['note']})" if coverage.get("note") else ""},
     )
 
 
@@ -551,7 +559,11 @@ def detect_aggregate_disagrees_with_questions(run: dict[str, Any]) -> Diagnostic
     if not aggregate or not questions:
         return None
 
-    disagreements: list[str] = []
+    # Two shapes, because they are two findings about one metric: a number
+    # the questions never carried at all, and a number they carried and
+    # disagreed with. Each travels as its parts, so the interface writes the
+    # clause; the shape says which of the two sentences it is.
+    disagreements: list[dict[str, Any]] = []
     for name, recorded in sorted(aggregate.items()):
         definition = definition_of(name)
         if definition is not None and definition.aggregated_by != "mean":
@@ -563,30 +575,44 @@ def detect_aggregate_disagrees_with_questions(run: dict[str, Any]) -> Diagnostic
             if isinstance(value := (qr.get("metrics") or {}).get(name), int | float)
         ]
         if not values:
-            disagreements.append(f"{name}: {recorded:.4f} in the run and on no question at all")
+            disagreements.append({
+                "shape": "on_no_question_at_all",
+                "metric": name,
+                "recorded": f"{recorded:.4f}",
+            })
             continue
         mean = sum(values) / len(values)
         if abs(mean - recorded) > 1e-6:
-            disagreements.append(
-                f"{name}: {recorded:.4f} in the run and {mean:.4f} across the "
-                f"{len(values)} questions carrying it"
-            )
+            disagreements.append({
+                "shape": "against_the_mean",
+                "metric": name,
+                "recorded": f"{recorded:.4f}",
+                "mean": f"{mean:.4f}",
+                "questions": len(values),
+            })
 
     if not disagreements:
         return None
+    told = "; ".join(
+        f"{one['metric']}: {one['recorded']} in the run and on no question at all"
+        if one["shape"] == "on_no_question_at_all" else
+        f"{one['metric']}: {one['recorded']} in the run and {one['mean']} across the "
+        f"{one['questions']} questions carrying it"
+        for one in disagreements
+    )
     return DiagnosticItem(
         id="aggregate_disagrees",
         severity="error",
         title="The run's numbers are not its questions' numbers",
         detail=(
             f"{len(disagreements)} of {len(aggregate)} metrics do not survive being recomputed "
-            f"from the questions of this same run: {'; '.join(disagreements)}. Whatever these "
+            f"from the questions of this same run: {told}. Whatever these "
             "numbers describe, it is not what the questions recorded."
         ),
         action="Compare what the run wrote with what a read of it returns; a question lost on "
                "the way out moves the aggregate and leaves everything else looking correct.",
         params={"disagreeing": len(disagreements), "metrics": len(aggregate),
-                "named": "; ".join(disagreements)},
+                "named": disagreements},
     )
 
 
@@ -604,22 +630,25 @@ def detect_segmentation_did_not_do_what_it_says(run: dict[str, Any]) -> Diagnost
     to. A rule written here would be this module's reading of that name,
     which is the thing in dispute.
     """
+    from core.chunking.post_conditions import breach_of
+
     unmet = list((run.get("corpus_manifest") or {}).get("post_conditions_unmet") or [])
     if not unmet:
         return None
     manifest = run.get("corpus_manifest") or {}
+    broken = [{"promise": promise} for promise in unmet]
     return DiagnosticItem(
         id="segmentation_broke_its_promise",
         severity="error",
         title="The segmentation did not do what its name says",
         detail=(
             f"The corpus was loaded with {manifest.get('chunking_strategy', 'a strategy')!r} "
-            f"and its own check of the result did not pass: {'; '.join(unmet)}."
+            f"and its own check of the result did not pass: "
+            f"{'; '.join(breach_of(promise) for promise in unmet)}."
         ),
         action="Load the corpus again with a strategy whose promise its documents can keep, or "
                "fix what stopped this one keeping it.",
-        params={"strategy": manifest.get("chunking_strategy", "a strategy"),
-                "unmet": "; ".join(unmet)},
+        params={"strategy": manifest.get("chunking_strategy", "a strategy"), "unmet": broken},
     )
 
 

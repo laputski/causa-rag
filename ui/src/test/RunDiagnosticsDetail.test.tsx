@@ -115,6 +115,69 @@ describe('a finding’s detail reaches the reader in their language', () => {
     expect(detail.textContent).not.toContain('[object Object]')
   })
 
+  it('writes both shapes of a clause, when one finding says two things', () => {
+    renderPanel(run([{
+      id: 'aggregate_disagrees', severity: 'error',
+      title: 'The run’s numbers are not its questions’ numbers',
+      detail: 'server English', action: '', failure_ids: [],
+      detail_key: 'aggregate_disagrees',
+      params: {
+        disagreeing: 2, metrics: 9,
+        named: [
+          { shape: 'against_the_mean', metric: 'recall_at_k', recorded: '0.9000',
+            mean: '0.1000', questions: 20 },
+          { shape: 'on_no_question_at_all', metric: 'faithfulness', recorded: '0.5000' },
+        ],
+      },
+    }]))
+    const detail = screen.getByText(/recall_at_k/, { selector: '.find-detail' })
+    expect(detail.textContent).toContain('0.9000')
+    expect(detail.textContent).toContain('ни на одном вопросе')
+    expect(detail.textContent).toContain('вопросам, которые её несут')
+    expect(detail.textContent).not.toContain('in the run')
+    expect(detail.textContent).not.toContain('[object Object]')
+  })
+
+  it('says which promise a segmentation broke, in the reader’s words', () => {
+    renderPanel(run([{
+      id: 'segmentation_broke_its_promise', severity: 'error',
+      title: 'The segmentation did not do what its name says',
+      detail: 'server English', action: '', failure_ids: [],
+      detail_key: 'segmentation_broke_its_promise',
+      params: { strategy: 'structure_aware', unmet: [{ promise: 'structure_aware' }] },
+    }]))
+    const detail = screen.getByText(/structure_aware/, { selector: '.find-detail' })
+    expect(detail.textContent).toContain('заголовки прочитать не удалось')
+    expect(detail.textContent).not.toContain('the headings could not be read')
+  })
+
+  it('names why coverage was not checked, and shows a library’s own words as they came', () => {
+    renderPanel(run([{
+      id: 'unverified_coverage', severity: 'warn',
+      title: 'Corpus coverage was not verified',
+      detail: 'server English', action: '', failure_ids: [],
+      detail_key: 'unverified_coverage',
+      params: { reason: 'the_index_is_unreachable', note: ' (Connection refused)' },
+    }]))
+    const detail = screen.getByText(/Connection refused/, { selector: '.find-detail' })
+    expect(detail.textContent).toContain('до указателя не удалось достучаться')
+    expect(detail.textContent).not.toContain('the_index_is_unreachable')
+  })
+
+  it('shows a reason from a run stored before reasons were named', () => {
+    // The identifier arrives beside the sentence and never instead of it, so
+    // a stored run that has only the sentence still reads.
+    renderPanel(run([{
+      id: 'unverified_coverage', severity: 'warn',
+      title: 'Corpus coverage was not verified',
+      detail: 'server English', action: '', failure_ids: [],
+      detail_key: 'unverified_coverage',
+      params: { reason: 'index unreachable: boom', note: '' },
+    }]))
+    const detail = screen.getByText(/index unreachable: boom/, { selector: '.find-detail' })
+    expect(detail.textContent).toContain('Классы отвечаемости')
+  })
+
   it('tells the two cases of one identifier apart', () => {
     // Both are "the index and the query do not use the same model", on
     // different evidence, under one identifier because the catalogue entry

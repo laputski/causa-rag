@@ -111,7 +111,17 @@ class UnknownRefResolver:
     retrieval metric.
     """
 
+    #: Which of the ways coverage could not be checked this is, in one word
+    #: the interface can look up. The sentence beside it reaches a reader
+    #: inside a finding, and a finding is read in the reader's own language.
+    #: There are five of these and each is a decision this platform made, so
+    #: an identifier costs nothing and is what makes the sentence
+    #: translatable.
+    reason_id: str = "no_resolver_configured"
     reason: str = "no resolver configured"
+    #: What a library said, when a library is why. Never ours to translate and
+    #: never composed here: an exception's own message, shown as it arrived.
+    note: str = ""
 
     def presence(self, ref: str) -> Presence:
         return "unknown"

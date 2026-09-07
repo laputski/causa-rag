@@ -1265,7 +1265,8 @@ async def _build_ref_resolver(
         retriever = _rebind_corpus_id(base._retriever, corpus_id, realm_id, qdrant_cfg, None)
         scroll = getattr(retriever, "scroll", None)
         if scroll is None:
-            return UnknownRefResolver(reason="retriever cannot enumerate chunks")
+            return UnknownRefResolver(reason_id="the_retriever_cannot_enumerate",
+                                       reason="retriever cannot enumerate chunks")
 
         chunks: list[Any] = []
         offset = None
@@ -1277,11 +1278,14 @@ async def _build_ref_resolver(
             if offset is None:
                 break
         else:
-            return UnknownRefResolver(reason="index too large to verify coverage in full")
+            return UnknownRefResolver(reason_id="the_index_is_too_large",
+                                       reason="index too large to verify coverage in full")
         if offset is not None:
-            return UnknownRefResolver(reason="index too large to verify coverage in full")
+            return UnknownRefResolver(reason_id="the_index_is_too_large",
+                                       reason="index too large to verify coverage in full")
     except Exception as exc:
-        return UnknownRefResolver(reason=f"index unreachable: {exc}")
+        return UnknownRefResolver(reason_id="the_index_is_unreachable",
+                                   reason=f"index unreachable: {exc}", note=str(exc))
 
     # A zero-chunk read is NOT evidence of an empty corpus. Found live:
     # QdrantRetriever.scroll against a collection that does not exist returns
@@ -1294,7 +1298,8 @@ async def _build_ref_resolver(
     # answers no question at all, and core/eval/corpus_health.py already
     # reports that case loudly and separately as an `empty_corpus` error.
     if not chunks:
-        return UnknownRefResolver(reason="index empty or unavailable for this corpus")
+        return UnknownRefResolver(reason_id="the_index_is_empty_or_absent",
+                                   reason="index empty or unavailable for this corpus")
 
     return resolver_from_chunks(chunks)
 
@@ -1648,6 +1653,11 @@ async def _run_experiment_background(
             result.coverage_check = {
                 "checked": bool(getattr(ref_resolver, "checked", False)),
                 "reason": str(getattr(ref_resolver, "reason", "")),
+                # Beside the sentence and never instead of it: a run stored
+                # before the identifier existed carries only the sentence, and
+                # the finding falls back to it.
+                "reason_id": str(getattr(ref_resolver, "reason_id", "")),
+                "note": str(getattr(ref_resolver, "note", "")),
             }
         # Split every retrieval failure into its actual cause
         # before the result is stored, so the run carries the answer rather

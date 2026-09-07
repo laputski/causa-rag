@@ -96,16 +96,33 @@ PROMISES: dict[str, tuple[str, str]] = {
 
 
 def unmet(strategy_id: str, chunks: Sequence[Any], chunk_size: int = 0) -> list[str]:
-    """The promises this load did not keep, each in the words of the promise.
+    """The promises this load did not keep, each named by the strategy that
+    made it.
+
+    The identifier and never the sentence, because the sentence reaches a
+    reader inside a finding and a finding is read in the reader's own
+    language. There are four promises here and each belongs to exactly one
+    strategy, so the strategy's own name identifies the promise it broke, and
+    `PROMISES` holds the words for whoever needs them.
 
     An unknown strategy returns nothing, and that is the honest answer: a
     strategy that never declared a promise has not broken one.
     """
     breached: list[str] = []
     if strategy_id == "structure_aware" and _structural_paths_are_real(chunks) > _ENOUGH:
-        breached.append(PROMISES["structure_aware"][1])
+        breached.append("structure_aware")
     if strategy_id == "fixed" and _sizes_are_within_the_window(chunks, chunk_size) > 0:
-        breached.append(PROMISES["fixed"][1])
+        breached.append("fixed")
     if strategy_id in ("sentence", "paragraph") and _ends_are_sentence_ends(chunks) > _ENOUGH:
-        breached.append(PROMISES[strategy_id][1])
+        breached.append(strategy_id)
     return breached
+
+
+def breach_of(promise: str) -> str:
+    """What breaking that promise looks like, in the words the strategy used.
+
+    For a promise nobody declared the identifier is returned as it is, which
+    is what a corpus loaded before promises carried identifiers holds.
+    """
+    declared = PROMISES.get(promise)
+    return declared[1] if declared else promise
