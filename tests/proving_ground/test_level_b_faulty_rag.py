@@ -247,3 +247,43 @@ def test_F30_an_overfilled_context_answered_from_its_edges_goes_unremarked(
            signals_on_the_control=sorted(_signals(control)),
            context_support_control=_metric(control, "context_support"),
            context_support_broken=_metric(broken, "context_support"))
+
+
+def test_F29_is_not_stageable_on_this_corpus_and_the_reason_is_measured(
+    embedder: Any, control: dict[str, Any]
+) -> None:
+    """The entry's signal has nothing to read here, and that is a fact about
+    the corpus and not about the instrument.
+
+    `citation_number_coverage` looks for the structural number of a retrieved
+    fragment occurring in the answer text. In this corpus only the top-level
+    heading of each document is numbered; every subsection is a bare title,
+    and retrieval returns subsections. So the signal has no candidate number
+    for almost every question, and a run against a server that moves every
+    citation scores exactly like its control, which was measured twice before
+    it was traced to this.
+    """
+    import re
+
+    labelled = numbered = 0
+    for question in control["question_results"]:
+        for source in question.get("source_refs") or []:
+            label = re.search(r"\[([^\]]+)\]", source.get("structural_path") or "")
+            if not label:
+                continue
+            labelled += 1
+            if re.search(r"\d", label.group(1)):
+                numbered += 1
+
+    assert labelled > 0, "no retrieved fragment carries a bracketed label at all"
+    assert numbered < labelled // 2, (
+        f"{numbered} of {labelled} retrieved labels carry a number, so the signal has "
+        "candidates after all and this entry is stageable here"
+    )
+    record("F29", "not staged: retrieval returns subsections, whose labels carry no number, "
+                  "so the signal the entry names has nothing to look for",
+           reproduced=False,
+           retrieved_labels=labelled, of_them_numbered=numbered,
+           coverage_recorded_by_the_control=control["aggregate_metrics"].get(
+               "citation_number_coverage"),
+           baited_at="tests/unit/test_atlas_baits.py, on a payload whose labels carry numbers")

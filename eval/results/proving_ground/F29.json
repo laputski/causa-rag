@@ -1,0 +1,12 @@
+{
+  "failure_id": "F29",
+  "recorded_at": "2026-09-07T07:05:28.363008+00:00",
+  "reproduced": false,
+  "claim": "not staged: retrieval returns subsections, whose labels carry no number, so the signal the entry names has nothing to look for",
+  "measured": {
+    "retrieved_labels": 95,
+    "of_them_numbered": 21,
+    "coverage_recorded_by_the_control": 0.1111111111111111,
+    "baited_at": "tests/unit/test_atlas_baits.py, on a payload whose labels carry numbers"
+  }
+}

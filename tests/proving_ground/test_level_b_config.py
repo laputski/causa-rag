@@ -109,6 +109,9 @@ def test_one_half_deciding_is_not_stageable_by_a_setting(
     how the agreed set is ordered and not which chunks it contains, so nothing
     for the signal to see is created.
 
+    Filed as a measured blocker and not skipped, so the report can tell an
+    entry somebody measured from one nobody tried.
+
     This passed once, before the two halves were able to recognise a chunk as
     one chunk at all. It was reading a merge of two disjoint lists, where every
     chunk had exactly one provenance by construction, so it was evidence about
@@ -126,17 +129,19 @@ def test_one_half_deciding_is_not_stageable_by_a_setting(
     assert share < 0.8, (
         "one half now supplies the merged list, so this failure is stageable here after all"
     )
-    pytest.skip(
-        f"NOT STAGED BY A SETTING: the signal reads which half supplied each chunk, and "
-        f"putting the whole weight on one half moves the order of the merged list without "
-        f"moving its membership. Measured on the merged list before the reranker: "
-        f"{len(dense_only)} of {len(merged)} chunks came from the semantic half alone, "
-        f"{share:.0%} against the signal's threshold of 80 per cent. Both halves draw on the "
-        "same corpus, so no weight shuts one out. It is staged by a load instead, and proved "
-        "there: see test_level_b_ingest.py, where a lexical index that was never built leaves "
-        "one half supplying every chunk of every context. The first reason recorded here "
-        "blamed the size of the corpus, which measuring on one of twice the size disproved."
-    )
+    # Filed and not skipped. A skip says nothing to the report, so an entry
+    # whose blocker somebody measured looked exactly like one nobody had
+    # tried, which is the difference the third state exists to draw.
+    record("F21", "not staged by a setting: the signal reads which half supplied each chunk, "
+                  "and putting the whole weight on one half moves the order of the merged "
+                  "list without moving its membership",
+           reproduced=False,
+           from_the_semantic_half_alone=len(dense_only), merged=len(merged),
+           share=round(share, 3), the_signal_s_threshold=0.8,
+           staged_instead_by="a load: see test_level_b_ingest.py, where a lexical index that "
+                             "was never built leaves one half supplying every chunk",
+           first_reason_recorded_here="the size of the corpus, which measuring on one of "
+                                      "twice the size disproved")
 
 
 def test_F22_pinning_the_fusion_constant_changes_the_order_and_nothing_speaks(
