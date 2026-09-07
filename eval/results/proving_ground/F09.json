@@ -1,0 +1,15 @@
+{
+  "failure_id": "F09",
+  "recorded_at": "2026-09-07T05:42:11.369333+00:00",
+  "claim": "one corpus id over two different sets of documents, and the runs say so",
+  "measured": {
+    "documents_before": 40,
+    "documents_after": 39,
+    "digest_before": "4cc51929d38a8f89",
+    "digest_after": "440b7b1474a5056a",
+    "signals": [
+      "compare:corpus_changed"
+    ],
+    "signals_on_one_loading": []
+  }
+}

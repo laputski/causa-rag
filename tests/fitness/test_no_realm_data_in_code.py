@@ -90,6 +90,13 @@ ALLOWED_CORPUS_IDS = {
     # listed them as bare tuple positions, so a corpus called anything at all
     # passed. Found by planting one.
     "base-ru", "base-en",
+    # Corpora a proving-ground pair loads for the length of its own run: one
+    # flattened so the structural strategy has no headings to read, one loaded
+    # twice with a document dropped between the loads. Named here because the
+    # guard asks for that, and `base-ru-flat` is on the list for the same
+    # reason although the pattern below cannot see it: it is passed as a
+    # positional argument and never as a `corpus_id=` field.
+    "base-ru-flat", "base-ru-changing", "base-ru-mismatched",
 }
 
 # A dotted lowerCamel path is an i18n key and not an id: `corpusId:
