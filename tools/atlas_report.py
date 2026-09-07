@@ -45,7 +45,16 @@ def _staged(f: FailureMode) -> bool:
     first says nobody looked, the second says somebody looked and nothing
     spoke.
     """
-    return (EVIDENCE / f"{f.id}.json").is_file()
+    evidence = EVIDENCE / f"{f.id}.json"
+    if not evidence.is_file():
+        return False
+    # A file recording why an entry cannot be staged here is not a staging.
+    # Counting one would put an entry in the reproduced column for having
+    # proved that it could not be reproduced.
+    try:
+        return bool(json.loads(evidence.read_text(encoding="utf-8")).get("reproduced", True))
+    except (OSError, ValueError):
+        return True
 
 
 def rows(point_name: str) -> list[dict[str, Any]]:

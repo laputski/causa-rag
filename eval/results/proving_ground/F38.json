@@ -1,6 +1,7 @@
 {
   "failure_id": "F38",
-  "recorded_at": "2026-09-07T05:29:37.021497+00:00",
+  "recorded_at": "2026-09-07T06:52:22.202474+00:00",
+  "reproduced": false,
   "claim": "not staged here: the linker drops a keyword once it passes its frequency cap, so a shared phrase empties the graph and does not fill it",
   "measured": {
     "edges_per_unit_control": 17.07,

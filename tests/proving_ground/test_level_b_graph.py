@@ -207,6 +207,7 @@ def test_F38_and_F39_cannot_be_staged_here_and_the_reason_is_measured(
         record(failure_id,
                "not staged here: the linker drops a keyword once it passes its frequency "
                "cap, so a shared phrase empties the graph and does not fill it",
+               reproduced=False,
                edges_per_unit_control=round(control["edges_per_unit"], 2),
                edges_per_unit_broken=round(broken["edges_per_unit"], 2),
                keyword_frequency_cap=50, keywords_per_unit=8,

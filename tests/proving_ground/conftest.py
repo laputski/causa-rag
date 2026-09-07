@@ -311,7 +311,7 @@ def recall_before_rerank(run: dict[str, Any]) -> float:
     return float(run["aggregate_metrics"].get("pre_rerank_recall_at_k", -1.0))
 
 
-def record(failure_id: str, claim: str, **measured: Any) -> None:
+def record(failure_id: str, claim: str, reproduced: bool = True, **measured: Any) -> None:
     """File what a bait observed, one document per catalogue entry.
 
     This is what `tools/atlas_report.py` reads to say whether an entry has been
@@ -321,6 +321,13 @@ def record(failure_id: str, claim: str, **measured: Any) -> None:
 
     Written by the passing bait and never by hand: a file here is a claim that
     a run was made and that the numbers beside it came out of that run.
+
+    `reproduced` is False for a pair that measured why an entry cannot be
+    staged here. Those are worth filing, because a blocker somebody measured
+    is worth more than a row saying nobody looked, and they are not
+    reproductions: the report counted a file's existence, so recording one
+    would otherwise have moved an entry into the reproduced column for
+    proving that it could not be.
     """
     from datetime import UTC, datetime
 
@@ -329,6 +336,7 @@ def record(failure_id: str, claim: str, **measured: Any) -> None:
     (out / f"{failure_id}.json").write_text(json.dumps({
         "failure_id": failure_id,
         "recorded_at": datetime.now(UTC).isoformat(),
+        "reproduced": reproduced,
         "claim": claim,
         "measured": measured,
     }, ensure_ascii=False, indent=2), encoding="utf-8")
