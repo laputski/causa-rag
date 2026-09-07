@@ -5,7 +5,8 @@ import { useQuery } from '@tanstack/react-query'
 import { ExternalLink } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, type AtlasCandidate, type AtlasEntry, type Atlas, type AtlasSignal } from '../api/client'
-import { useRealm } from '../context/RealmContext'
+import { Link } from 'react-router-dom'
+import { useRealm, useRealmPath } from '../context/RealmContext'
 
 /** What the platform can do about an entry today, decided by the catalogue.
  *
@@ -261,6 +262,124 @@ function SignalsTab() {
   )
 }
 
+/** Where a report says it was seen, with the things this platform can open
+ *  turned into links.
+ *
+ *  The field is free text on purpose: somebody who has just met a failure
+ *  should not have to know which of the platform's nouns applies to it. So
+ *  this recognises and never demands, and anything it does not recognise
+ *  stands exactly as it was written. Guessing at an identifier would send a
+ *  reader to a page about something else, which is worse than plain text.
+ */
+const REFERENCE = /\b(run|прогон|corpus|корпус)\s+([A-Za-z0-9][\w-]*)/gi
+
+function ObservedOn({ text }: { text: string }) {
+  const realmPath = useRealmPath()
+  const parts: Array<string | { label: string; to: string }> = []
+  let last = 0
+  for (const match of text.matchAll(REFERENCE)) {
+    const [whole, noun, id] = match
+    const at = match.index ?? 0
+    if (at > last) parts.push(text.slice(last, at))
+    const run = /^(run|прогон)$/i.test(noun)
+    parts.push({
+      label: whole,
+      to: realmPath(run ? `/experiments/${id}` : `/data/content?corpus_id=${id}`),
+    })
+    last = at + whole.length
+  }
+  if (last < text.length) parts.push(text.slice(last))
+
+  return (
+    <div className="mono-sm text-muted">
+      {parts.map((part, i) =>
+        typeof part === 'string'
+          ? <span key={i}>{part}</span>
+          : <Link key={i} to={part.to}>{part.label}</Link>,
+      )}
+    </div>
+  )
+}
+
+
+/** Deciding what a report is, and recording what it became. Two acts, weeks
+ *  apart and by different work, so two panels and never one: a panel offering
+ *  both would put a field for an entry that does not exist beside the question
+ *  of whether it should.
+ */
+function TriagePanel({ candidate }: { candidate: AtlasCandidate }) {
+  const { t } = useTranslation()
+  const { activeRealmId } = useRealm()
+  const queryClient = useQueryClient()
+  const [note, setNote] = useState('')
+  const [entryId, setEntryId] = useState('')
+
+  const done = () =>
+    queryClient.invalidateQueries({ queryKey: ['atlas-candidates', activeRealmId] })
+
+  const decide = useMutation({
+    mutationFn: (status: 'accepted' | 'rejected') =>
+      api.atlas.decide(candidate.candidate_id, { status, note }),
+    onSuccess: done,
+  })
+  const promote = useMutation({
+    mutationFn: () => api.atlas.promote(candidate.candidate_id, entryId.trim()),
+    onSuccess: done,
+  })
+
+  const failed = (decide.error ?? promote.error) as Error | undefined
+
+  if (candidate.status === 'accepted') {
+    return (
+      <div className="cand-panel">
+        <p className="cand-why">{t('atlasPage.candidates.promoteWhy')}</p>
+        <pre className="cand-cmd">{`python3 -m tools.atlas_report --scaffold ${candidate.candidate_id}`}</pre>
+        <label className="tight">
+          {t('atlasPage.candidates.field.entry')}
+          <input type="text" value={entryId} maxLength={8} className="cand-entry"
+                 onChange={e => setEntryId(e.target.value)} />
+        </label>
+        <div className="cand-actions">
+          <button type="button" className="btn btn-primary"
+                  disabled={!entryId.trim() || promote.isPending}
+                  onClick={() => promote.mutate()}>
+            {t('atlasPage.candidates.recordPointer')}
+          </button>
+          <span className="text-muted">{t('atlasPage.candidates.refusedUntil')}</span>
+        </div>
+        {/* The server's own sentence, shown as it arrives. Rewriting it here
+            would give the reader a second version of the rule to reconcile
+            with the first. */}
+        {failed && <p className="hint-line bad">{failed.message}</p>}
+      </div>
+    )
+  }
+
+  return (
+    <div className="cand-panel">
+      <p className="cand-why">{t('atlasPage.candidates.decideWhy')}</p>
+      <label className="tight">
+        {t('atlasPage.candidates.field.note')}
+        <textarea value={note} maxLength={2000} rows={2}
+                  onChange={e => setNote(e.target.value)} />
+      </label>
+      <div className="cand-actions">
+        <button type="button" className="btn btn-primary" disabled={decide.isPending}
+                onClick={() => decide.mutate('accepted')}>
+          {t('atlasPage.candidates.accept')}
+        </button>
+        <button type="button" className="btn" disabled={!note.trim() || decide.isPending}
+                onClick={() => decide.mutate('rejected')}>
+          {t('atlasPage.candidates.reject')}
+        </button>
+        <span className="text-muted">{t('atlasPage.candidates.rejectNeedsReason')}</span>
+      </div>
+      {failed && <p className="hint-line bad">{failed.message}</p>}
+    </div>
+  )
+}
+
+
 /** Failures people have reported, kept apart from the catalogue on purpose.
  *
  *  The catalogue is read-only from here, and that is why its guarantees hold:
@@ -376,7 +495,12 @@ function CandidatesSection() {
  *  drops the unconfirmed mark, because an entry arrives with its bait. */
 function CandidateRow({ candidate }: { candidate: AtlasCandidate }) {
   const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
   const state = candidate.promoted_to ? 'promoted' : candidate.status
+  // Deciding a report needs the report in front of you, so the panel opens
+  // where the report already is. A page of its own would carry all three of
+  // its fields across and be this screen with an extra click.
+  const actionable = !candidate.promoted_to && candidate.status !== 'rejected'
   return (
     <tr>
       <td className="mono-sm nowrap">
@@ -386,11 +510,20 @@ function CandidateRow({ candidate }: { candidate: AtlasCandidate }) {
       <td>
         <div className="cand-title">{candidate.title}</div>
         <div className="cand-said">{candidate.looked_like}</div>
-        {candidate.observed_on && <div className="mono-sm text-muted">{candidate.observed_on}</div>}
+        {candidate.observed_on && <ObservedOn text={candidate.observed_on} />}
         {candidate.note && <div className="cand-said">{candidate.note}</div>}
         {!candidate.confirmed_by_a_bait && !candidate.promoted_to && (
           <span className="cand-unbaited">{t('atlasPage.candidates.unbaited')}</span>
         )}
+        {actionable && (
+          <div>
+            <button type="button" className="btn btn-sm cand-open"
+                    aria-expanded={open} onClick={() => setOpen(!open)}>
+              {t(`atlasPage.candidates.${candidate.status === 'accepted' ? 'promoteIt' : 'decideIt'}`)}
+            </button>
+          </div>
+        )}
+        {actionable && open && <TriagePanel candidate={candidate} />}
       </td>
       <td className="nowrap">
         <span className={`det-state cand-${state}`}>

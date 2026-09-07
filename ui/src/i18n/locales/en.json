@@ -153,14 +153,25 @@
         "title": "What went wrong, in a sentence",
         "lookedLike": "What looked like it worked while it was failing",
         "observedOn": "Where you saw it",
-        "suspectedSignal": "Which signal you think should have caught it — your guess, kept as yours"
+        "suspectedSignal": "Which signal you think should have caught it — your guess, kept as yours",
+        "note": "Why, if you are rejecting it",
+        "entry": "The entry it became"
       },
       "state": {
         "proposed": "proposed",
         "accepted": "accepted",
         "rejected": "rejected",
         "promoted": "promoted"
-      }
+      },
+      "decideIt": "Decide",
+      "promoteIt": "Promote",
+      "decideWhy": "Is this a failure a served system can have, or one of ours? The line is the catalogue's own: an entry is written without a single identifier of this repository in it.",
+      "promoteWhy": "Promotion is a change to the repository, because an entry arrives with its bait and a bait is a test. Run this, write the entry and the bait it drafts, then record the pointer here.",
+      "accept": "A served system's failure",
+      "reject": "Reject as ours",
+      "rejectNeedsReason": "A rejection needs its reason first.",
+      "recordPointer": "Record the pointer",
+      "refusedUntil": "Refused until the catalogue holds it."
     }
   },
   "app": {

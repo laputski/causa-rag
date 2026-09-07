@@ -829,6 +829,15 @@ export const api = {
       req<AtlasCandidate>(
         `/atlas/candidates${realmId ? `?realm_id=${encodeURIComponent(realmId)}` : ''}`,
         { method: 'POST', body: JSON.stringify(body) }),
+    decide: (id: string, body: { status: 'accepted' | 'rejected'; note: string }) =>
+      req<AtlasCandidate>(`/atlas/candidates/${encodeURIComponent(id)}/decide`,
+        { method: 'POST', body: JSON.stringify(body) }),
+    // Refused while the catalogue holds no such entry, and the refusal is the
+    // reader's answer: promotion is a change to the repository, because an
+    // entry arrives with its bait.
+    promote: (id: string, failureId: string) =>
+      req<AtlasCandidate>(`/atlas/candidates/${encodeURIComponent(id)}/promoted`,
+        { method: 'POST', body: JSON.stringify({ failure_id: failureId }) }),
   },
   experiments: {
     list: (params?: { sort_by?: string; dataset?: string; realmId?: string | null }) => {

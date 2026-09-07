@@ -3187,10 +3187,29 @@ details[open] > .qrow-summary .qrow-caret { transform: rotate(90deg); color: var
   border: 1px dashed var(--color-border); border-radius: 3px;
 }
 
-.cand-form { display: grid; gap: 10px; margin-top: 12px; max-width: 68ch }
-.cand-form label { display: grid; gap: 4px; font-size: var(--fs-xs); color: var(--color-text-muted) }
-.cand-form textarea { min-height: 62px; resize: vertical }
-.cand-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap }
+/* Compact on purpose. These forms are read once and filled once, and a
+   loose one pushes what a person is deciding about off the screen. */
+.cand-form { display: grid; gap: 7px; margin-top: 10px; max-width: 62ch }
+.cand-form label, .cand-panel label { display: grid; gap: 2px;
+  font-size: var(--fs-2xs); color: var(--color-text-muted) }
+.cand-form input, .cand-panel input,
+.cand-form textarea, .cand-panel textarea { padding: 5px 8px }
+.cand-form textarea { min-height: 46px; resize: vertical }
+.cand-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  font-size: var(--fs-2xs); margin-top: 2px }
+
+/* Deciding a report, and recording what it became: two panels, never one. */
+.cand-panel { display: grid; gap: 7px; margin-top: 8px; padding: 10px;
+  border: 1px solid var(--color-border); border-radius: var(--radius);
+  background: var(--color-surface); max-width: 62ch }
+.cand-why { margin: 0; font-size: var(--fs-2xs); color: var(--color-text-muted);
+  max-width: var(--measure) }
+.cand-cmd { margin: 0; padding: 7px 9px; font-family: var(--font-mono);
+  font-size: var(--fs-2xs); background: var(--color-code-bg);
+  border: 1px solid var(--color-border); border-radius: var(--radius);
+  overflow-x: auto; color: var(--color-text) }
+.cand-entry { max-width: 12ch }
+.cand-open { margin-top: 7px }
 
 /* A coordinate of the configuration space. Monospaced because it is a code and
    not a word, and bordered because it is a value somebody else defines: the
