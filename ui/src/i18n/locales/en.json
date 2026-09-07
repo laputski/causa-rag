@@ -2136,7 +2136,41 @@
     },
     "traceGaps": "What this run made impossible to check",
     "noTraceGaps": "The run recorded everything every check needs.",
-    "diagnosisDepth": "Diagnosis depth"
+    "diagnosisDepth": "Diagnosis depth",
+    "findingDetail": {
+      "stub_embedder": {
+        "by_the_load_record": "The load record for this corpus says its vectors were produced by the stub, which hashes text into a vector of the right width and no meaning (loaded {{loaded_at}}). Every similarity in this run is between a real query vector and a hash.",
+        "by_the_scores": "{{at_the_floor}}/{{chunks}} chunks have a dense score at the floor while the sparse side reports real values, so the corpus was probably indexed with random vectors."
+      },
+      "embedder_unverified": "None of the {{chunks}} retrieved chunks carries a per-signal score split, which is what a dense-only pipeline and an external system both look like. Nothing here distinguishes a corpus indexed with a real model from one indexed with random vectors.",
+      "duplicates": "{{repeats}} repeated chunks inside a single question's context, across {{questions}} question(s).",
+      "header_only": "{{header_only}}/{{chunks}} chunks carry almost no body: a structural path and nothing under it.",
+      "bm25_dominance": "{{count}}/{{chunks}} of the chunks that reached the answer were contributed by the {{half}} half alone ({{share}}). The {{other}} half is being paid for and is barely reaching the context.",
+      "empty_answers": "{{bad}}/{{answers}} answers are empty or say nothing was found ({{share}}).",
+      "incorrect_refusals": "{{wrong}}/{{scored}} questions got the refusal decision wrong ({{share}}): either a refusal on an answerable question, which is a retrieval miss, or a confident answer with no source in the corpus, which is a hallucination.",
+      "layer_bottleneck": "{{count}}/{{total}} answerable questions failed at the {{layer}} layer ({{share}}).",
+      "unverified_coverage": "Answerability classes were taken from the dataset's own refs without checking them against the index ({{reason}}). A question whose source is absent from the index counts as answerable in this run, so the uncovered count may be lower than the truth.",
+      "undeclared_metric": "{{undeclared}} of {{metrics}} metrics in this run declare nothing about what they compute or over which questions: {{names}}. Their names are all a reader has, so a name that stopped matching its definition would look exactly like this run does.",
+      "aggregate_disagrees": "{{disagreeing}} of {{metrics}} metrics do not survive being recomputed from the questions of this same run: {{named}}. Whatever these numbers describe, it is not what the questions recorded.",
+      "segmentation_broke_its_promise": "The corpus was loaded with '{{strategy}}' and its own check of the result did not pass: {{unmet}}.",
+      "tuned_on_the_measurement_set": "{{tried}} other configuration(s) were run on '{{dataset}}' before this one. A figure chosen after a search over a question set is partly the search, and how much of it cannot be recovered from the figure.",
+      "fusion_constant_never_varied": "Every rank-fusion run on '{{dataset}}' used the same constant, {{constant}}. It is the value the method was published with, and on this corpus and these questions nobody has measured whether it is a good one.",
+      "index_and_query_models_differ": {
+        "by_name": "The corpus was indexed by '{{indexing}}' and this run embedded its queries with '{{querying}}'. A query vector from one model compared against vectors from another describes nothing, and every score in this run is such a comparison.",
+        "by_version": "The corpus was indexed by {{indexing}} {{indexed_version}} and this run queried with {{querying}} {{querying_version}}. The name is the same and the vectors are not, so nothing about the mismatch appears in a collection name or a setting."
+      },
+      "metric_without_grounds": "{{metrics}} metric(s) of this run were recorded against questions that cannot support them: {{told}}. Averaged into the run's numbers, these are confident values about something nobody measured.",
+      "chunk_id_collision": "{{colliding}} of {{identifiers}} fragment identifiers in this run stand for more than one text, the first being {{first}}. Anything keyed on the identifier is describing whichever fragment it saw last.",
+      "unmeasured_stage_cost": "{{stages}} stage(s) of this run left no duration behind: {{named}}. What the stage costs cannot be weighed against what it buys, so keeping it is a decision nobody can check."
+    },
+    "findingWord": {
+      "retrieval": "retrieval",
+      "rerank": "rerank",
+      "generation": "generation",
+      "suspected_ungrounded_answer": "suspected ungrounded answer",
+      "keyword": "keyword",
+      "semantic": "semantic"
+    }
   },
   "runPage": {
     "avgLatencyHeading": "Pipeline — average latency across the dataset",

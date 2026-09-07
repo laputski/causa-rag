@@ -227,6 +227,14 @@ export interface DetectorItem {
   title: string
   detail: string
   action?: string
+  // The numbers and names the sentences are composed from, so this side can
+  // compose its own instead of rendering the server's English. Optional: a run
+  // stored before the server sent them has none, and the English detail is
+  // what a finding without them renders.
+  params?: Record<string, string | number>
+  // Which sentence, when one id has more than one. Two findings are the same
+  // finding on different evidence and share an id on purpose.
+  detail_key?: string
 }
 
 // Phase 4 — the document an external system's owner works from

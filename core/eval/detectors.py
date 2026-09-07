@@ -54,6 +54,25 @@ class DiagnosticItem:
     # catalogue, so a detector is never edited because a description of it
     # changed. Empty on a finding no entry names, which is a fact worth seeing.
     failure_ids: list[str] = field(default_factory=list)
+    #: The numbers and names this finding's sentences are composed from, sent
+    #: beside the English so the interface can compose its own.
+    #:
+    #: `title` and `action` are one sentence each and were already translated
+    #: by identifier; `detail` carries what the detector measured, so it was
+    #: the one line of a finding that stayed in the server's English on a
+    #: Russian screen. The pattern is the one `CompatWarning` has used since
+    #: the comparison screen was built: the identifier and the values travel,
+    #: and the English text is what a client renders for an identifier it does
+    #: not know yet.
+    params: dict[str, Any] = field(default_factory=dict)
+    #: Which sentence, when one identifier has more than one.
+    #:
+    #: Two findings here are the same finding on different evidence and say so
+    #: under one identifier on purpose, because the entry they evidence is one
+    #: entry. Their details differ, so translating a detail by the identifier
+    #: alone would render one case's sentence for the other's numbers. Empty
+    #: means the identifier is the key, which is true of every other finding.
+    detail_key: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -63,6 +82,8 @@ class DiagnosticItem:
             "detail": self.detail,
             "action": self.action,
             "failure_ids": list(self.failure_ids),
+            "params": dict(self.params),
+            "detail_key": self.detail_key or self.id,
         }
 
 
@@ -135,6 +156,8 @@ def detect_stub_embedder(
                 "similarity in this run is between a real query vector and a hash."
             ),
             action="Load the corpus again with the embedding model switched on.",
+            params={"loaded_at": (manifest or {}).get("loaded_at", "at an unrecorded time")},
+            detail_key="stub_embedder.by_the_load_record",
         )
 
     dense = [r.get("dense_score") or 0.0 for r in refs]
@@ -160,6 +183,7 @@ def detect_stub_embedder(
             "indexed with random vectors.",
             action="Read the run's recall against its reference sources: a corpus indexed "
                    "with random vectors cannot reach a high one.",
+            params={"chunks": len(dense)},
         )
 
     nonzero = [d for d in dense if d > 0.01]
@@ -172,6 +196,8 @@ def detect_stub_embedder(
             "the floor while the sparse side reports real values, so the corpus was probably "
             "indexed with random vectors.",
             action="Re-index the corpus with the real embedding model switched on.",
+            params={"at_the_floor": len(dense) - len(nonzero), "chunks": len(dense)},
+            detail_key="stub_embedder.by_the_scores",
         )
     return None
 
@@ -212,6 +238,7 @@ def detect_duplicates(run: dict[str, Any]) -> DiagnosticItem | None:
             detail=f"{per_question} repeated chunks inside a single question's context, "
                    f"across {affected} question(s).",
             action="Check that chunk_id is deterministic, then drop the collection and re-index.",
+            params={"repeats": per_question, "questions": affected},
         )
     return None
 
@@ -230,6 +257,7 @@ def detect_header_only(refs: list[dict[str, Any]]) -> DiagnosticItem | None:
             detail=f"{len(header_only)}/{len(candidates)} chunks carry almost no body "
             "(structural_path only).",
             action="Raise min_chars, or switch to sentence or paragraph chunking.",
+            params={"header_only": len(header_only), "chunks": len(candidates)},
         )
     return None
 
@@ -285,6 +313,8 @@ def detect_bm25_dominance(refs: list[dict[str, Any]]) -> DiagnosticItem | None:
                 "being paid for and is barely reaching the context.",
                 action="Compare the two halves' own recall separately before changing the "
                        "merge: one of them may simply have nothing to add on this corpus.",
+                params={"count": count, "chunks": len(scored), "half": half,
+                        "other": other, "share": f"{share:.0%}"},
             )
     return None
 
@@ -322,6 +352,7 @@ def detect_empty_answers(answers: list[str]) -> DiagnosticItem | None:
             title="Many empty or \"not found\" answers",
             detail=f"{len(bad)}/{len(answers)} answers are empty or say nothing was found ({frac:.0%}).",
             action="Check corpus coverage, and whether the model's thinking mode is consuming the num_predict budget.",
+            params={"bad": len(bad), "answers": len(answers), "share": f"{frac:.0%}"},
         )
     return None
 
@@ -358,6 +389,7 @@ def detect_incorrect_refusals(run: dict[str, Any]) -> DiagnosticItem | None:
             action="Read each question's answerability class (core.eval.answerability). "
             "For answerable ones, ask why retrieval missed the source; for "
             "uncovered or out_of_scope ones, ask why the model did not refuse.",
+            params={"wrong": wrong, "scored": len(scored), "share": f"{frac:.0%}"},
         )
     return None
 
@@ -419,6 +451,12 @@ def detect_layer_bottleneck(run: dict[str, Any]) -> DiagnosticItem | None:
         f"\"{label}\" layer ({frac:.0%}).",
         action="Open the individual questions carrying this verdict on the run page to see "
         "the specific failures and decide what to fix.",
+        # The layer travels as its own code and never as the label above: the
+        # interface has a word for each layer in each language, and a label
+        # composed here would arrive as an English word inside a Russian
+        # sentence. The same holds for the two halves of a merge.
+        params={"count": worst_count, "total": total_applicable, "layer": worst_layer,
+                "share": f"{frac:.0%}"},
     )
 
 
@@ -453,6 +491,7 @@ def detect_unverified_coverage(run: dict[str, Any]) -> DiagnosticItem | None:
             "as answerable in this run, so the uncovered count may be lower than the truth."
         ),
         action="Check that the index for this corpus is reachable, then re-run to get verified classes.",
+        params={"reason": reason},
     )
 
 
@@ -486,6 +525,8 @@ def detect_undeclared_metric(run: dict[str, Any]) -> DiagnosticItem | None:
         ),
         action="Declare each metric beside its name, saying what it computes and over which "
                "questions, so the name can be checked against it.",
+        params={"undeclared": len(undeclared), "metrics": len(aggregate),
+                "names": ", ".join(undeclared)},
     )
 
 
@@ -544,6 +585,8 @@ def detect_aggregate_disagrees_with_questions(run: dict[str, Any]) -> Diagnostic
         ),
         action="Compare what the run wrote with what a read of it returns; a question lost on "
                "the way out moves the aggregate and leaves everything else looking correct.",
+        params={"disagreeing": len(disagreements), "metrics": len(aggregate),
+                "named": "; ".join(disagreements)},
     )
 
 
@@ -575,6 +618,8 @@ def detect_segmentation_did_not_do_what_it_says(run: dict[str, Any]) -> Diagnost
         ),
         action="Load the corpus again with a strategy whose promise its documents can keep, or "
                "fix what stopped this one keeping it.",
+        params={"strategy": manifest.get("chunking_strategy", "a strategy"),
+                "unmet": "; ".join(unmet)},
     )
 
 
@@ -604,6 +649,7 @@ def detect_tuned_on_the_measurement_set(run: dict[str, Any]) -> DiagnosticItem |
         ),
         action="Report the number on a question set no configuration was chosen on, or say "
                "how many were tried beside it.",
+        params={"tried": tried, "dataset": provenance.get("dataset_name")},
     )
 
 
@@ -635,6 +681,7 @@ def detect_fusion_constant_never_varied(run: dict[str, Any]) -> DiagnosticItem |
         ),
         action="Run the same configuration once with a different fusion constant and compare, "
                "so the value in use is a measured choice.",
+        params={"dataset": provenance.get("dataset_name"), "constant": tried[0]},
     )
 
 
@@ -671,6 +718,8 @@ def detect_index_and_query_models_differ(run: dict[str, Any]) -> DiagnosticItem 
             ),
             action="Query with the model the corpus was indexed by, or load the corpus again "
                    "with the model the run uses.",
+            params={"indexing": indexing, "querying": querying},
+            detail_key="index_and_query_models_differ.by_name",
         )
 
     indexed_version = manifest.get("embedder_version")
@@ -683,7 +732,8 @@ def detect_index_and_query_models_differ(run: dict[str, Any]) -> DiagnosticItem 
             # translates a finding by its identifier, so two titles under one
             # identifier would render as whichever was translated, and this
             # one is true of both: a different version is not the same model.
-            # What separates them is the detail, which carries the values.
+            # What separates them is the detail, which carries the values, and
+            # which the interface therefore translates by its own key.
             title="The index and the query do not use the same model",
             detail=(
                 f"The corpus was indexed by {indexing} {indexed_version} and this run queried "
@@ -692,6 +742,9 @@ def detect_index_and_query_models_differ(run: dict[str, Any]) -> DiagnosticItem 
             ),
             action="Load the corpus again with the model in use now, so its vectors and the "
                    "query's come from the same weights.",
+            params={"indexing": indexing, "indexed_version": indexed_version,
+                    "querying": querying, "querying_version": querying_version},
+            detail_key="index_and_query_models_differ.by_version",
         )
     return None
 
@@ -742,6 +795,7 @@ def detect_metric_without_grounds(run: dict[str, Any]) -> DiagnosticItem | None:
         ),
         action="Read each metric's declared preconditions and stop recording it where they "
                "do not hold, so the average is over the questions the number is about.",
+        params={"metrics": len(ungrounded), "told": told},
     )
 
 
@@ -784,6 +838,7 @@ def detect_chunk_id_collision(run: dict[str, Any]) -> DiagnosticItem | None:
         ),
         action="Check how the identifier is derived at load time: a source path missing from "
                "the derivation collapses fragments of different documents onto one value.",
+        params={"colliding": len(colliding), "identifiers": len(texts), "first": colliding[0]},
     )
 
 
@@ -849,6 +904,7 @@ def detect_unmeasured_stage_cost(run: dict[str, Any]) -> DiagnosticItem | None:
         ),
         action="Record a duration for every stage the pipeline runs, so its price can be "
                "compared with the gain it is kept for.",
+        params={"stages": len(unmeasured), "named": "; ".join(unmeasured)},
     )
 
 

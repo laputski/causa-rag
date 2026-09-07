@@ -62,9 +62,23 @@ function DiagItem({ item }: { item: DiagnosticItem }) {
 // DiagnosticItem's frontend-computed items below — rendered as inline text
 // rather than a button for that reason, same as the pre-restructure
 // DetectorSection.
+// Params whose value is a code the platform uses for a thing, and not a number
+// or a name: a funnel layer, a half of a merge. The server sends the code and
+// never a label, because a label composed there is an English word arriving
+// inside a Russian sentence.
+const A_WORD_IN_ITS_OWN_RIGHT = new Set(['layer', 'half', 'other'])
+
 function DetectorPanelItem({ item }: { item: DetectorItem }) {
   const { t } = useTranslation()
   const toRealm = useRealmPath()
+  const params = Object.fromEntries(
+    Object.entries(item.params ?? {}).map(([name, value]) => [
+      name,
+      A_WORD_IN_ITS_OWN_RIGHT.has(name)
+        ? t(`runDiagnostics.findingWord.${value}`, { defaultValue: String(value) })
+        : value,
+    ]),
+  )
   // The title is looked up by the finding's id, and the server's English
   // sentence stays as the fallback for an id this file does not know yet.
   // Corpus health has done it this way for a while; this panel rendered raw
@@ -75,19 +89,25 @@ function DetectorPanelItem({ item }: { item: DetectorItem }) {
       <span className={`find-dot find-${item.severity}`} aria-hidden="true" />
       <div>
         <div className="find-title">
-          {t(`runDiagnostics.finding.${item.id}`, { defaultValue: item.title })}
+          {t(`runDiagnostics.finding.${item.id}`, { defaultValue: item.title, ...params })}
           {(item.failure_ids ?? []).map(id => (
             <Link key={id} className="link-btn mono-sm ml-8" to={toRealm(`/atlas?entry=${id}`)}>
               {id}
             </Link>
           ))}
         </div>
-        {/* The detail carries the numbers the detector measured, interpolated
-            into a sentence on the server, so it cannot be translated by
-            identifier the way the title and the action are: the numbers would
-            have to arrive separately for that. It stays in the server's
-            English, and this is the one line of a finding that does. */}
-        <p className="find-detail">{item.detail}</p>
+        {/* The detail carries what the detector measured. The numbers and names
+            now arrive beside it, so the sentence is composed here and the
+            server's English is the fallback, the same as the title and the
+            action above. Four of the values are themselves sentences the
+            server composed (a reason, a list of unmet promises, the metrics
+            that disagreed, the metrics without grounds); those stay English
+            inside a translated frame, and a test says which they are. */}
+        <p className="find-detail">
+          {t(`runDiagnostics.findingDetail.${item.detail_key ?? item.id}`, {
+            defaultValue: item.detail, ...params,
+          })}
+        </p>
         {item.action && (
           <p className="find-detail find-action">
             {t(`runDiagnostics.findingAction.${item.id}`, { defaultValue: item.action })}
