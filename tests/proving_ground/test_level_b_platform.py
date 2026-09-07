@@ -191,8 +191,10 @@ def test_F27_a_stage_that_ran_and_left_no_duration_is_reported(
     silent = copy.deepcopy(reranked)
     for question in silent["question_results"]:
         trace = question.get("stage_trace") or {}
-        if trace:
-            trace["rerank_ms"] = 0.0
+        # Removed and not zeroed. A recorded zero is a stage measured and
+        # found fast, which a merge of fifty candidates genuinely is; the
+        # failure is a field that was never written.
+        trace.pop("rerank_ms", None)
 
     spoke = _signals(silent)
     assert "detector:unmeasured_stage_cost" in spoke, (

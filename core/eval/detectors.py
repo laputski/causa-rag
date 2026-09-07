@@ -826,7 +826,13 @@ def detect_unmeasured_stage_cost(run: dict[str, Any]) -> DiagnosticItem | None:
         ran = sum(1 for trace in traces if float(trace.get(evidence) or 0) > 0)
         if not ran:
             continue
-        timed = sum(1 for trace in traces if float(trace.get(timing) or 0) > 0)
+        # Whether the field is there, and never whether it is above zero. A
+        # merge of fifty candidates takes less than the tenth of a
+        # millisecond the trace rounds to, so reading a recorded zero as an
+        # absence reported every hybrid run as leaving its merge unmeasured.
+        # Found by a reverse bait one entry over, which had asserted that
+        # nothing speaks and then heard this.
+        timed = sum(1 for trace in traces if timing in trace)
         if timed == 0:
             unmeasured.append(f"{label}, which ran on {ran} of {len(traces)} questions")
 

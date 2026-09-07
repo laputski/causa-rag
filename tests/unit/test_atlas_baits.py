@@ -432,8 +432,10 @@ def bait_F27_the_reranker_costs_an_unknown_amount() -> set[str]:
     run = clean_run()
     for qr in run["question_results"]:
         qr["stage_trace"] = {
+            # No `rerank_ms` at all, which is the failure: a recorded zero is
+            # a stage measured and found fast, and several genuinely are.
             "embed_ms": 4.0, "dense_retrieve_ms": 20.0, "generate_ms": 900.0,
-            "output_tokens": 120, "n_reranked": 5, "rerank_ms": 0.0, "total_ms": 930.0,
+            "output_tokens": 120, "n_reranked": 5, "total_ms": 930.0,
         }
     return _detector_ids(run)
 
