@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { DraftNote } from '../components/DraftNotice'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   Layers, Zap, Database, Search, Cpu, Bot, BarChart2,
   AlertTriangle, HelpCircle, Scissors, GitMerge, Clock,
@@ -1971,23 +1971,21 @@ pipeline = build_pipeline(retriever, generator)`}</pre>
       return (
       <div>
         <p className="guide-lead">{t('guidePage.problemsSection.lead')}</p>
+        {/* Two catalogues, and they are not the same catalogue. What a served
+            system can suffer belongs to the failure atlas, where an entry
+            claims a signal catches it and the build refuses that claim without
+            a bait. What is left here is this platform's own history: defects
+            of the software you are reading and of running it. Fourteen cards
+            stood here that belonged in the atlas, and a reader had no way to
+            tell which kind a card was. */}
+        <p className="guide-lead">
+          <Trans i18nKey="guidePage.problemsSection.elsewhere">
+            <Link to="/atlas" />
+          </Trans>
+        </p>
         <div className="stack-8">
-          <ProblemCard title={t('guidePage.problemsSection.problem1Title')} symptom={t('guidePage.problemsSection.problem1Symptom')} cause={t('guidePage.problemsSection.problem1Cause')} fix={t('guidePage.problemsSection.problem1Fix')} />
-          <ProblemCard title={t('guidePage.problemsSection.problem2Title')} symptom={t('guidePage.problemsSection.problem2Symptom')} cause={t('guidePage.problemsSection.problem2Cause')} fix={t('guidePage.problemsSection.problem2Fix')} />
-          <ProblemCard title={t('guidePage.problemsSection.problem3Title')} symptom={t('guidePage.problemsSection.problem3Symptom')} cause={t('guidePage.problemsSection.problem3Cause')} fix={t('guidePage.problemsSection.problem3Fix')} />
-          <ProblemCard title={t('guidePage.problemsSection.problem4Title')} symptom={t('guidePage.problemsSection.problem4Symptom')} cause={t('guidePage.problemsSection.problem4Cause')} fix={t('guidePage.problemsSection.problem4Fix')} />
           <ProblemCard title={t('guidePage.problemsSection.problem5Title')} symptom={t('guidePage.problemsSection.problem5Symptom')} cause={t('guidePage.problemsSection.problem5Cause')} fix={t('guidePage.problemsSection.problem5Fix')} />
-          <ProblemCard title={t('guidePage.problemsSection.problem6Title')} symptom={t('guidePage.problemsSection.problem6Symptom')} cause={t('guidePage.problemsSection.problem6Cause')} fix={t('guidePage.problemsSection.problem6Fix')} />
-          <ProblemCard title={t('guidePage.problemsSection.problem7Title')} symptom={t('guidePage.problemsSection.problem7Symptom')} cause={t('guidePage.problemsSection.problem7Cause')} fix={t('guidePage.problemsSection.problem7Fix')} />
-          <ProblemCard title={t('guidePage.problemsSection.problem8Title')} symptom={t('guidePage.problemsSection.problem8Symptom')} cause={t('guidePage.problemsSection.problem8Cause')} fix={t('guidePage.problemsSection.problem8Fix')} />
-          <ProblemCard title={t('guidePage.problemsSection.problem9Title')} symptom={t('guidePage.problemsSection.problem9Symptom')} cause={t('guidePage.problemsSection.problem9Cause')} fix={t('guidePage.problemsSection.problem9Fix')} />
-          <ProblemCard title={t('guidePage.problemsSection.problem10Title')} symptom={t('guidePage.problemsSection.problem10Symptom')} cause={t('guidePage.problemsSection.problem10Cause')} fix={t('guidePage.problemsSection.problem10Fix')} />
-          <ProblemCard title={t('guidePage.problemsSection.problem11Title')} symptom={t('guidePage.problemsSection.problem11Symptom')} cause={t('guidePage.problemsSection.problem11Cause')} fix={t('guidePage.problemsSection.problem11Fix')} />
-          <ProblemCard title={t('guidePage.problemsSection.problem12Title')} symptom={t('guidePage.problemsSection.problem12Symptom')} cause={t('guidePage.problemsSection.problem12Cause')} fix={t('guidePage.problemsSection.problem12Fix')} />
-          <ProblemCard title={t('guidePage.problemsSection.problem13Title')} symptom={t('guidePage.problemsSection.problem13Symptom')} cause={t('guidePage.problemsSection.problem13Cause')} fix={t('guidePage.problemsSection.problem13Fix')} />
           <ProblemCard title={t('guidePage.problemsSection.problem14Title')} symptom={t('guidePage.problemsSection.problem14Symptom')} cause={t('guidePage.problemsSection.problem14Cause')} fix={t('guidePage.problemsSection.problem14Fix')} />
-          <ProblemCard title={t('guidePage.problemsSection.problem15Title')} symptom={t('guidePage.problemsSection.problem15Symptom')} cause={t('guidePage.problemsSection.problem15Cause')} fix={t('guidePage.problemsSection.problem15Fix')} />
-          <ProblemCard title={t('guidePage.problemsSection.problem16Title')} symptom={t('guidePage.problemsSection.problem16Symptom')} cause={t('guidePage.problemsSection.problem16Cause')} fix={t('guidePage.problemsSection.problem16Fix')} />
         </div>
       </div>
       )
