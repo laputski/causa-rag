@@ -155,22 +155,34 @@ def test_the_worst_rate_named_here_is_the_worst_rate_stored_here() -> None:
         WORST_BYTES_PER_QUESTION,
     )
 
-    stored = sorted((ROOT / "eval" / "results" / "runs").glob("*.json"))
-    if not stored:
+    LIMIT = 16 * 1024 * 1024
+    files = sorted((ROOT / "eval" / "results" / "runs").glob("*.json"))
+    if not files:
         pytest.skip("NOT RUN: no stored run to measure")
 
     worst = 0
     fattest = ""
-    for path in stored:
+    for path in files:
         run = json.loads(path.read_text(encoding="utf-8"))
         questions = len(run.get("question_results") or [])
         if not questions:
             continue
-        # As the engine stores it. The default escaping writes a Cyrillic
-        # character as six bytes where UTF-8 writes two, which on this corpus
-        # reports two and a half times the real size.
-        rate = len(json.dumps(run, separators=(",", ":"),
+        # As the engine stores it, in two respects. UTF-8, because the
+        # default escaping writes a Cyrillic character as six bytes where
+        # UTF-8 writes two and reports two and a half times the real size.
+        # And without the retrieval windows, because those are written to
+        # documents of their own, one per question, and the run document is
+        # what the ceiling is about.
+        stored, windows = E._split_windows(run)
+        rate = len(json.dumps(stored, separators=(",", ":"),
                               ensure_ascii=False).encode("utf-8")) // questions
+        widest = max((len(json.dumps(w, separators=(",", ":"),
+                                     ensure_ascii=False).encode("utf-8"))
+                      for w in windows), default=0)
+        assert widest < LIMIT, (
+            f"{path.name} has a single question whose retrieval window is {widest} bytes, "
+            "which is a document the engine will refuse on its own"
+        )
         if rate > worst:
             worst, fattest = rate, path.name
 

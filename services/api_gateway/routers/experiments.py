@@ -45,20 +45,18 @@ _errors: dict[str, str] = {}
 _stop_requested: set[str] = set()
 #: What a run costs in the database, per question, at its worst.
 #:
-#: Measured over every run stored in this repository and never estimated, and
-#: named here because two places stated it in prose with nothing holding them
-#: to a measurement. The number they stated turned out to be right; what was
-#: missing was anything that would notice if it stopped being.
+#: Measured over every run stored in this repository and never estimated, on
+#: the document as it is written now, which is without the retrieval windows:
+#: those live one per question in `_WINDOWS_COLLECTION` and are bounded on
+#: their own. Before they moved out, the same runs cost 212 KB a question and
+#: the ceiling below was seventy-nine.
 #:
 #: Measured the way the engine stores it, which is UTF-8. Serialising with the
 #: default escaping puts every Cyrillic character in six bytes instead of two
 #: and reports two and a half times this, which is how the figure was briefly
-#: revised to 522 KB and the ceiling to thirty-one questions. Nothing was over
-#: the limit then either.
-#:
-#: The rate is driven by `candidate_source_refs`, which carries the whole text
-#: of every candidate: a wide fetch window with a reranker is what reaches it.
-WORST_BYTES_PER_QUESTION = 212_235
+#: revised to 522 KB and the ceiling to thirty-one. Nothing was over the limit
+#: then either.
+WORST_BYTES_PER_QUESTION = 35_795
 #: How many questions a run of that shape can hold before the engine refuses
 #: the document. The engine's own limit is 16 MiB.
 QUESTIONS_A_RUN_CAN_HOLD = 16 * 1024 * 1024 // WORST_BYTES_PER_QUESTION
@@ -68,6 +66,92 @@ _running_meta: dict[str, dict[str, Any]] = {}
 
 
 # ── Persistence ───────────────────────────────────────────────────────────────
+
+#: Where the retrieval windows of a run live, one document per question.
+#:
+#: They used to live in the run document, and they are almost all of it:
+#: measured over every run stored here, the candidate window is 55% of the
+#: whole store and the pre-rerank list another 29%, because each entry carries
+#: the full text of its fragment. A run of fifty questions with a wide window
+#: reached 10 MiB of a 16 MiB limit with those two lists and 1.5 MiB without.
+#:
+#: One document per question and not one per run, which is the whole point: a
+#: per-run windows document would carry the same 8.5 MiB and move the ceiling
+#: from seventy-nine questions to ninety-five. Per question, the run document
+#: is what bounds a run, and it now holds nothing that grows with the width of
+#: a retrieval.
+_WINDOWS_COLLECTION = "experiment_run_windows"
+
+#: The two lists that move. Everything else a question carries is small.
+_HEAVY_FIELDS = ("pre_rerank_source_refs", "candidate_source_refs")
+
+
+def _split_windows(data: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """The run without its retrieval windows, and the windows one by one.
+
+    The run document is copied and never mutated: the caller writes the whole
+    of `data` to a file, where there is no size limit and where a complete run
+    is worth more than a small one.
+    """
+    windows: list[dict[str, Any]] = []
+    questions: list[dict[str, Any]] = []
+    for position, question in enumerate(data.get("question_results") or []):
+        held = {field: question.get(field) for field in _HEAVY_FIELDS
+                if question.get(field)}
+        questions.append({k: v for k, v in question.items() if k not in _HEAVY_FIELDS})
+        if held:
+            windows.append({
+                "run_id": data.get("run_id", ""),
+                # The question's own identifier where it has one, and its
+                # position otherwise. A run written before question ids were
+                # stable still has to be able to find its own windows.
+                "question_id": question.get("question_id") or "",
+                "position": position,
+                **held,
+            })
+    return {**data, "question_results": questions}, windows
+
+
+def _merge_windows(data: dict[str, Any], windows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Put the windows back on the questions they belong to.
+
+    Fills only what is absent, so a run stored before the split, which carries
+    its windows inline, is returned exactly as it was written.
+    """
+    if not windows:
+        return data
+    by_id = {w.get("question_id"): w for w in windows if w.get("question_id")}
+    by_position = {w.get("position"): w for w in windows}
+    questions = []
+    for position, question in enumerate(data.get("question_results") or []):
+        found = by_id.get(question.get("question_id")) or by_position.get(position)
+        if found:
+            question = {**question,
+                        **{f: found[f] for f in _HEAVY_FIELDS
+                           if f in found and not question.get(f)}}
+        questions.append(question)
+    return {**data, "question_results": questions}
+
+
+async def _windows_of(run_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+    """Every stored window of the runs named, grouped by run.
+
+    Returns nothing at all when the database cannot be reached, which is the
+    same answer a run that has none gives: the caller then serves what the
+    run document itself carries, and a screen that needed a window reports the
+    gap it always reported when one was missing.
+    """
+    if not run_ids:
+        return {}
+    found: dict[str, list[dict[str, Any]]] = {}
+    try:
+        import adapters.mongodb as mdb
+        for doc in await mdb.find_many(_WINDOWS_COLLECTION, {"run_id": {"$in": run_ids}}):
+            found.setdefault(doc.get("run_id", ""), []).append(doc)
+    except Exception:
+        return {}
+    return found
+
 
 async def _save(result: ExperimentResult) -> None:
     """Write the run to the database and to a file beside it.
@@ -84,9 +168,17 @@ async def _save(result: ExperimentResult) -> None:
     without a line anywhere saying so.
     """
     data = result.to_dict()
+    light, windows = _split_windows(data)
     try:
         import adapters.mongodb as mdb
-        await mdb.upsert_one("experiment_runs", {"run_id": result.run_id}, data)
+        await mdb.upsert_one("experiment_runs", {"run_id": result.run_id}, light)
+        # Replaced and never added to: a run written twice under one id would
+        # otherwise keep both sets of windows and serve whichever the engine
+        # returned first, which is the re-ingestion failure this platform has
+        # an entry for, committed against itself.
+        await mdb.delete_many(_WINDOWS_COLLECTION, {"run_id": result.run_id})
+        for window in windows:
+            await mdb.insert_one(_WINDOWS_COLLECTION, window)
     except Exception as exc:
         import structlog
         structlog.get_logger().warning(
@@ -158,8 +250,14 @@ def _parse_result(data: dict[str, Any], stem: str = "") -> ExperimentResult | No
         return None
 
 
-async def _get_results() -> dict[str, ExperimentResult]:
+async def _get_results(with_windows: bool = True) -> dict[str, ExperimentResult]:
     """Every run, from both places it can live.
+
+    `with_windows` False leaves out the retrieval windows, which live in their
+    own documents and are almost the whole weight of the store. Only a caller
+    that reads nothing from them may pass it: what a run says about its own
+    completeness is computed from whether those lists are present, so a run
+    served without them reports two gaps in its trace that it does not have.
 
     The two are merged, and no longer tried in order. The file store used to be a
     fallback reached only when the database returned nothing at all, so a run
@@ -175,8 +273,11 @@ async def _get_results() -> dict[str, ExperimentResult]:
     try:
         import adapters.mongodb as mdb
         docs = await mdb.find_many("experiment_runs", sort=[("started_at", -1)])
+        windows = ({} if not with_windows
+                   else await _windows_of([d.get("run_id", "") for d in docs]))
         for data in docs:
-            r = _parse_result(data, data.get("run_id", ""))
+            run_id = data.get("run_id", "")
+            r = _parse_result(_merge_windows(data, windows.get(run_id, [])), run_id)
             if r:
                 results[r.run_id] = r
     except Exception:
@@ -214,7 +315,8 @@ async def _get_one_result(run_id: str) -> ExperimentResult | None:
         import adapters.mongodb as mdb
         doc = await mdb.find_one("experiment_runs", {"run_id": run_id})
         if doc:
-            return _parse_result(doc, doc.get("run_id", run_id))
+            windows = (await _windows_of([run_id])).get(run_id, [])
+            return _parse_result(_merge_windows(doc, windows), doc.get("run_id", run_id))
     except Exception:
         pass
     path = _STORE_DIR / f"{run_id}.json"
@@ -541,7 +643,10 @@ async def list_experiments(
     # back-compat for callers that don't pass a Realm context).
     realm_id: str | None = None,
 ) -> list[ExperimentListItem]:
-    results = await _get_results()
+    # The one caller that reads no window: a row of the list carries a
+    # count and a metric and never a fragment, and this is the request
+    # that pays for every run in the store at once.
+    results = await _get_results(with_windows=False)
     baseline_id = await _get_baseline_run_id()
     items = [
         ExperimentListItem(

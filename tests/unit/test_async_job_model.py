@@ -237,7 +237,12 @@ def test_list_experiments_reflects_stopped_run(monkeypatch):
         ],
     )
 
-    async def _fake_get_results():
+    async def _fake_get_results(with_windows: bool = True):
+        # The list asks for runs without their retrieval windows, which live
+        # in documents of their own; a stand-in that refused the argument
+        # would fail for a reason that has nothing to do with what this test
+        # is about.
+        assert with_windows is False, "the list should not be paying for every window"
         return {r.run_id: r for r in (stopped_result, finished_result)}
 
     monkeypatch.setattr(exp_module, "_get_results", _fake_get_results)
