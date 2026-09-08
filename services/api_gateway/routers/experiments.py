@@ -86,6 +86,79 @@ _WINDOWS_COLLECTION = "experiment_run_windows"
 _HEAVY_FIELDS = ("pre_rerank_source_refs", "candidate_source_refs")
 
 
+#: The three lists of retrieved fragments a question carries. A fragment that
+#: reaches the answer is in all three, and it used to carry its own text in
+#: each of them.
+_REF_FIELDS = ("source_refs", "pre_rerank_source_refs", "candidate_source_refs")
+
+
+def _dedupe_texts(data: dict[str, Any]) -> dict[str, Any]:
+    """One copy of a fragment's text per question, and references after it.
+
+    A question's candidate window, its pre-rerank list and its final context
+    are three views of one retrieval, so a fragment that reached the answer
+    appears in all three and used to carry its own text in each. Measured over
+    every run stored here: each distinct fragment is written 1.8 times inside
+    its own question, and the repeats are 71 MiB of a 206 MiB store.
+
+    Only inside one question, which is what keeps this cheap to undo. A table
+    shared by a whole run would save more and would grow with the corpus the
+    run reached and never with its questions, which is the shape that put a
+    ceiling on a run in the first place.
+
+    The text is dropped and never emptied: a reader restoring it fills the key
+    where it is absent, so a fragment whose text really is empty stays empty.
+    """
+    questions = []
+    for question in data.get("question_results") or []:
+        seen: set[str] = set()
+        rewritten = dict(question)
+        for field in _REF_FIELDS:
+            refs = question.get(field)
+            if not refs:
+                continue
+            out = []
+            for ref in refs:
+                chunk_id = ref.get("chunk_id")
+                if chunk_id and chunk_id in seen:
+                    out.append({k: v for k, v in ref.items() if k != "chunk_text"})
+                else:
+                    if chunk_id:
+                        seen.add(chunk_id)
+                    out.append(ref)
+            rewritten[field] = out
+        questions.append(rewritten)
+    return {**data, "question_results": questions}
+
+
+def _restore_texts(data: dict[str, Any]) -> dict[str, Any]:
+    """Put a fragment's text back on every reference to it in its question.
+
+    A run written before the texts were deduplicated carries all of them, and
+    every key is present, so this fills nothing and returns what it was given.
+    """
+    questions = []
+    for question in data.get("question_results") or []:
+        texts: dict[str, str] = {}
+        for field in _REF_FIELDS:
+            for ref in question.get(field) or []:
+                chunk_id = ref.get("chunk_id")
+                if chunk_id and "chunk_text" in ref and chunk_id not in texts:
+                    texts[chunk_id] = ref["chunk_text"]
+        rewritten = dict(question)
+        for field in _REF_FIELDS:
+            refs = question.get(field)
+            if not refs:
+                continue
+            rewritten[field] = [
+                ref if "chunk_text" in ref or ref.get("chunk_id") not in texts
+                else {**ref, "chunk_text": texts[ref["chunk_id"]]}
+                for ref in refs
+            ]
+        questions.append(rewritten)
+    return {**data, "question_results": questions}
+
+
 def _split_windows(data: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """The run without its retrieval windows, and the windows one by one.
 
@@ -168,7 +241,11 @@ async def _save(result: ExperimentResult) -> None:
     without a line anywhere saying so.
     """
     data = result.to_dict()
-    light, windows = _split_windows(data)
+    # Deduplicated before the split, because the three lists of one question
+    # are what repeat and two of them are about to move to another document.
+    # The file below keeps `data` whole: there is no size limit there, and a
+    # complete record is worth more than a small one.
+    light, windows = _split_windows(_dedupe_texts(data))
     try:
         import adapters.mongodb as mdb
         await mdb.upsert_one("experiment_runs", {"run_id": result.run_id}, light)
@@ -277,7 +354,8 @@ async def _get_results(with_windows: bool = True) -> dict[str, ExperimentResult]
                    else await _windows_of([d.get("run_id", "") for d in docs]))
         for data in docs:
             run_id = data.get("run_id", "")
-            r = _parse_result(_merge_windows(data, windows.get(run_id, [])), run_id)
+            r = _parse_result(
+                _restore_texts(_merge_windows(data, windows.get(run_id, []))), run_id)
             if r:
                 results[r.run_id] = r
     except Exception:
@@ -316,7 +394,8 @@ async def _get_one_result(run_id: str) -> ExperimentResult | None:
         doc = await mdb.find_one("experiment_runs", {"run_id": run_id})
         if doc:
             windows = (await _windows_of([run_id])).get(run_id, [])
-            return _parse_result(_merge_windows(doc, windows), doc.get("run_id", run_id))
+            return _parse_result(
+                _restore_texts(_merge_windows(doc, windows)), doc.get("run_id", run_id))
     except Exception:
         pass
     path = _STORE_DIR / f"{run_id}.json"

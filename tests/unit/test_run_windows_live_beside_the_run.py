@@ -149,3 +149,93 @@ def test_a_second_write_of_one_run_replaces_its_windows(monkeypatch: pytest.Monk
         "the windows of an earlier write are still there when the new ones arrive"
     )
     assert ("insert", E._WINDOWS_COLLECTION) in calls
+
+
+# ── One copy of a fragment's text per question ────────────────────────────────
+
+def _shared(chunk_id: str, text: str) -> dict[str, Any]:
+    return {"chunk_id": chunk_id, "chunk_text": text, "score": 0.5}
+
+
+def _question_seeing_one_fragment_three_times() -> dict[str, Any]:
+    ref = _shared("c1", "the same eight hundred characters " * 20)
+    return {
+        "run_id": "r1", "config": {}, "aggregate_metrics": {},
+        "question_results": [{
+            "question_id": "q0", "question": "q", "reference_answer": "",
+            "generated_answer": "a", "metrics": {},
+            "source_refs": [dict(ref)],
+            "pre_rerank_source_refs": [dict(ref), _shared("c2", "another one")],
+            "candidate_source_refs": [dict(ref), _shared("c2", "another one"),
+                                      _shared("c3", "a third")],
+        }],
+    }
+
+
+def test_a_fragment_carries_its_text_once_in_its_question() -> None:
+    """The three lists are three views of one retrieval, so a fragment that
+    reached the answer is in all of them. Measured over every run stored here,
+    each distinct fragment is written 1.8 times inside its own question and
+    the repeats are 71 MiB of a 206 MiB store."""
+    compressed = E._dedupe_texts(_question_seeing_one_fragment_three_times())
+    question = compressed["question_results"][0]
+    carrying = [ref for field in E._REF_FIELDS for ref in question[field]
+                if "chunk_text" in ref]
+    assert sorted(ref["chunk_id"] for ref in carrying) == ["c1", "c2", "c3"], (
+        "a fragment's text is stored more than once inside one question"
+    )
+
+
+def test_the_text_comes_back_on_every_reference_to_it() -> None:
+    original = _question_seeing_one_fragment_three_times()
+    assert E._restore_texts(E._dedupe_texts(original)) == original
+
+
+def test_a_run_written_before_this_is_returned_as_it_was() -> None:
+    """Every key is present, so there is nothing to fill."""
+    original = _question_seeing_one_fragment_three_times()
+    assert E._restore_texts(original) == original
+
+
+def test_a_fragment_whose_text_is_empty_stays_empty() -> None:
+    """The text is dropped and never emptied, so the two cases stay apart: a
+    reader fills the key where it is absent, and an empty string is an
+    answer."""
+    data = {
+        "run_id": "r1", "question_results": [{
+            "question_id": "q0",
+            "source_refs": [{"chunk_id": "c1", "chunk_text": ""}],
+            "pre_rerank_source_refs": [{"chunk_id": "c1", "chunk_text": ""}],
+        }],
+    }
+    compressed = E._dedupe_texts(data)
+    assert "chunk_text" not in compressed["question_results"][0]["pre_rerank_source_refs"][0]
+    restored = E._restore_texts(compressed)
+    assert restored["question_results"][0]["pre_rerank_source_refs"][0]["chunk_text"] == ""
+
+
+def test_two_questions_do_not_share_a_text() -> None:
+    """Deduplicated inside one question and never across a run: a table shared
+    by a whole run would grow with the corpus the run reached and never with
+    its questions, which is the shape that put a ceiling on a run at all."""
+    ref = _shared("c1", "text")
+    data = {"run_id": "r1", "question_results": [
+        {"question_id": "q0", "source_refs": [dict(ref)]},
+        {"question_id": "q1", "source_refs": [dict(ref)]},
+    ]}
+    compressed = E._dedupe_texts(data)
+    for question in compressed["question_results"]:
+        assert "chunk_text" in question["source_refs"][0]
+
+
+def test_a_reference_that_carries_no_text_anywhere_is_left_alone() -> None:
+    """An external system returns references without the text of a fragment,
+    and a run of one is stored that way. Restoring must find nothing and
+    change nothing, and must not read a key that is not there."""
+    data = {"run_id": "r1", "question_results": [{
+        "question_id": "q0",
+        "source_refs": [{"chunk_id": "c1", "score": 0.4}],
+        "pre_rerank_source_refs": [{"chunk_id": "c1", "score": 0.4}],
+    }]}
+    assert E._restore_texts(data) == data
+    assert E._restore_texts(E._dedupe_texts(data)) == data
