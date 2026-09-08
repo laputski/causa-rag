@@ -1604,11 +1604,11 @@ async def _build_ref_resolver(
     from core.eval.ref_resolution import UnknownRefResolver, resolver_from_chunks
 
     try:
-        from core.experiment.runner import _rebind_corpus_id
+        from core.experiment.runner import _for_the_corpus
         from core.registry import registry
 
         base = registry.resolve("pipeline", "naive")
-        retriever = _rebind_corpus_id(base._retriever, corpus_id, realm_id, qdrant_cfg, None)
+        retriever = _for_the_corpus(base._retriever, corpus_id, realm_id, qdrant_cfg, None)
         scroll = getattr(retriever, "scroll", None)
         if scroll is None:
             return UnknownRefResolver(reason_id="the_retriever_cannot_enumerate",
@@ -2099,7 +2099,7 @@ async def create_experiment(body: NewExperimentRequest) -> dict[str, Any]:
     # above: Mongo is async, ExperimentRunner.run() is sync) so an in_process
     # run against a non-default Realm hits THAT Realm's own Qdrant/OpenSearch
     # host:port instead of always the gateway's startup-time env-var instance
-    # (see core/experiment/runner.py#_rebind_corpus_id). No-op (None, None)
+    # (see core/experiment/runner.py#_for_the_corpus). No-op (None, None)
     # for the pre-Realm/backward-compat "" realm_id case.
     _qdrant_cfg = None
     _opensearch_cfg = None

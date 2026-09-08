@@ -18,9 +18,13 @@ forbidden_modules =
 # each has to be named. `tests/fitness/test_optional_dependencies.py` is the
 # check that does make the distinction, and it is what stops one of these
 # becoming a real top-level import behind the exemption.
+# Three of these are gone: the experiment builder used to rebuild a retriever
+# or a generator by looking at the name of its class and importing the adapter
+# of that name, so `core` reached into `adapters.qdrant`, `adapters.opensearch`
+# and `adapters.ollama_generator` to do it. Making a variant of itself is the
+# component's own knowledge now (`core.interfaces.BoundToACorpus` and the three
+# protocols beside it), so `core` asks and imports nothing. This checker fails
+# on an exemption that matches nothing, which is how it says so.
 ignore_imports =
     core.pipeline -> adapters.langfuse_tracer
-    core.experiment.runner -> adapters.qdrant
-    core.experiment.runner -> adapters.opensearch
     core.experiment.runner -> adapters.http_pipeline
-    core.experiment.runner -> adapters.ollama_generator

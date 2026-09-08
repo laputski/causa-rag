@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import Any
 
 from core.experiment.config import ComponentRef, ExperimentConfig
-from core.experiment.runner import _rebind_merge
+from core.experiment.runner import _fusing_as
 from core.retrieval.hybrid import HybridRetriever
 
 
@@ -80,7 +80,7 @@ def test_setting_it_changes_the_fingerprint() -> None:
 # ── the application ───────────────────────────────────────────────────────────
 
 def test_the_value_asked_for_is_the_value_the_retriever_gets() -> None:
-    assert _rebind_merge(_hybrid(merge="rrf"), None, None, 200)._rrf_k == 200
+    assert _fusing_as(_hybrid(merge="rrf"), None, None, 200)._rrf_k == 200
 
 
 def test_changing_the_merge_weight_no_longer_resets_the_constant() -> None:
@@ -88,26 +88,26 @@ def test_changing_the_merge_weight_no_longer_resets_the_constant() -> None:
     a merge-weight change carrying 60. Two settings on the same wrapper, and
     moving one silently returned the other to its default."""
     built = _hybrid(merge="rrf", alpha=0.5, rrf_k=10)
-    assert _rebind_merge(built, "weighted", 0.7)._rrf_k == 10
+    assert _fusing_as(built, "weighted", 0.7)._rrf_k == 10
 
 
 def test_asking_for_nothing_keeps_what_was_built() -> None:
-    assert _rebind_merge(_hybrid(merge="rrf", rrf_k=10), None, None, None)._rrf_k == 10
+    assert _fusing_as(_hybrid(merge="rrf", rrf_k=10), None, None, None)._rrf_k == 10
 
 
 def test_a_retriever_already_carrying_the_value_is_not_rebuilt() -> None:
-    """Rebuilding is not free and, more to the point, `_rebind_corpus_id` has
+    """Rebuilding is not free and, more to the point, `_for_the_corpus` has
     already bound these retrievers to the right corpus by the time this runs;
     an unnecessary rebuild is an unnecessary chance to undo that."""
     built = _hybrid(merge="rrf", alpha=0.5, rrf_k=10)
-    assert _rebind_merge(built, "rrf", 0.5, 10) is built
+    assert _fusing_as(built, "rrf", 0.5, 10) is built
 
 
 def test_a_dense_only_retriever_is_left_alone() -> None:
     """Nothing to merge, so nothing to say. Raising at a caller that merely
     passed its config along would fail runs over a field that cannot apply."""
     dense = _Stub()
-    assert _rebind_merge(dense, "rrf", 0.5, 10) is dense
+    assert _fusing_as(dense, "rrf", 0.5, 10) is dense
 
 
 # ── that the setting has a consequence ────────────────────────────────────────

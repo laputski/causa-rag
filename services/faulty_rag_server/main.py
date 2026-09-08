@@ -309,9 +309,10 @@ app = FastAPI(title="Faulty RAG Server (a system that answers badly on purpose)"
 def _in_realm(body: ExternalRagRequest) -> Any:
     """The reference server's pipeline, bound to this server's realm.
 
-    Rebound and not rebuilt: `_rebind_corpus_id` walks down to the leaf
-    retrievers and rebuilds them around the same embedder and generator, which
-    is exactly what the platform's own runner does for an in-process run.
+    Rebound and not rebuilt: `_for_the_corpus` asks the retriever for a copy
+    of itself reading this corpus, which walks down to the leaves around the
+    same embedder and generator, exactly what the platform's own runner does
+    for an in-process run.
     Without it the collection name carries no realm and the query reaches an
     index that is not there, which comes back as an answer with no sources and
     reads like a system that found nothing.
@@ -322,10 +323,10 @@ def _in_realm(body: ExternalRagRequest) -> Any:
     key = (body.pipeline_id, body.corpus_id, body.reranker_id or "")
     if key in _bound:
         return _bound[key]
-    from core.experiment.runner import _rebind_corpus_id
+    from core.experiment.runner import _for_the_corpus
 
     _bound[key] = type(pipeline)(
-        retriever=_rebind_corpus_id(pipeline._retriever, body.corpus_id, REALM),
+        retriever=_for_the_corpus(pipeline._retriever, body.corpus_id, REALM),
         embedder=pipeline._embedder, generator=pipeline._generator,
         pipeline_id=pipeline.pipeline_id, reranker=pipeline._reranker,
     )

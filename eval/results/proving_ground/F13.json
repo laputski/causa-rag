@@ -1,6 +1,6 @@
 {
   "failure_id": "F13",
-  "recorded_at": "2026-09-08T10:50:48.439443+00:00",
+  "recorded_at": "2026-09-08T16:04:43.490961+00:00",
   "reproduced": true,
   "claim": "a unit of sixty thousand characters is stored with a vector its end never reached, and every check reports a corpus in order",
   "measured": {

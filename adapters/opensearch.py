@@ -190,6 +190,32 @@ class OpenSearchRetriever:
         )
         self._ensure_index()
 
+    def for_corpus(
+        self,
+        corpus_id: str,
+        realm_id: str | None = None,
+        resources: dict[str, dict[str, Any] | None] | None = None,
+    ) -> Any:
+        """A copy of this reading `corpus_id` in `realm_id`, on that Realm's
+        own instance where it keeps one. See `core.interfaces.BoundToACorpus`.
+
+        The language travels with the copy. Dropped, it reverts to the default
+        analyser, so an Arabic corpus ingested as Arabic would be queried
+        through an index this copy insists is Russian: either the wrong
+        stemmer or a refusal, and both arrive long after the choice was made.
+        """
+        instance = (resources or {}).get("opensearch") or {}
+        if corpus_id == self._corpus_id and realm_id == self._realm_id and not instance:
+            return self
+        return OpenSearchRetriever(
+            host=instance.get("host", self._host),
+            port=int(instance.get("port", self._port)),
+            strategy_id=self._strategy_id,
+            corpus_id=corpus_id,
+            realm_id=realm_id,
+            language=self._language,
+        )
+
     def _ensure_index(self) -> None:
         """Create the index with this corpus's analyser, or refuse a mismatch.
 

@@ -23,7 +23,7 @@ through the same HTTP contract, not just the dense-only default.
 
 `corpus_id` (request field, default "default") selects which corpus
 namespace to query, mirroring ExperimentConfig.corpus_id for in_process
-pipelines (core/experiment/runner.py:_rebind_corpus_id) — without this, an
+pipelines (core/experiment/runner.py:_for_the_corpus) — without this, an
 ExperimentConfig's corpus_id had no field to travel through on the native
 HTTP contract at all, so this server always answered from whatever corpus it
 started up against (the "default" 2-code corpus) regardless of which corpus
@@ -134,8 +134,8 @@ def _resolve_pipeline(pipeline_id: str, corpus_id: str, reranker_id: str | None 
     cached = _bound_cache.get(key)
     if cached is not None:
         return cached
-    from core.experiment.runner import _rebind_corpus_id
-    retriever = base._retriever if corpus_id == "default" else _rebind_corpus_id(base._retriever, corpus_id)
+    from core.experiment.runner import _for_the_corpus
+    retriever = base._retriever if corpus_id == "default" else _for_the_corpus(base._retriever, corpus_id)
     rebound = type(base)(
         retriever=retriever, embedder=base._embedder, generator=base._generator,
         pipeline_id=base.pipeline_id, reranker=reranker,

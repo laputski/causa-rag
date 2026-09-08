@@ -1,6 +1,6 @@
 {
   "failure_id": "F10",
-  "recorded_at": "2026-09-08T10:49:40.724255+00:00",
+  "recorded_at": "2026-09-08T16:03:57.728645+00:00",
   "reproduced": true,
   "claim": "a corpus embedded by the stub retrieves worse, and most of it before the reranker",
   "measured": {

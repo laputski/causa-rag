@@ -18,13 +18,13 @@ from adapters.reranker import (
     CrossEncoderRerankerLocal,
     CrossEncoderRerankerStub,
 )
-from core.experiment.runner import _rebind_reranker
+from core.experiment.runner import _on_the_model
 
 MULTILINGUAL = "BAAI/bge-reranker-v2-m3"
 
 
 def test_the_model_a_run_asks_for_is_the_model_it_gets() -> None:
-    rebound = _rebind_reranker(CrossEncoderRerankerLocal(), {"model_name": MULTILINGUAL})
+    rebound = _on_the_model(CrossEncoderRerankerLocal(), MULTILINGUAL)
     assert rebound._model_name == MULTILINGUAL
 
 
@@ -37,33 +37,35 @@ def test_the_platform_default_is_english_only_which_is_what_makes_this_matter() 
 
 def test_asking_for_nothing_keeps_what_was_registered() -> None:
     registered = CrossEncoderRerankerLocal()
-    assert _rebind_reranker(registered, None) is registered
-    assert _rebind_reranker(registered, {}) is registered
+    assert _on_the_model(registered, None) is registered
+    assert _on_the_model(registered, "") is registered
 
 
 def test_asking_for_what_is_already_bound_does_not_rebuild() -> None:
     """A cross-encoder loads its weights on first use, so a needless rebuild
     throws away a loaded model and pays for it again on the next question."""
     registered = CrossEncoderRerankerLocal(model_name=MULTILINGUAL)
-    assert _rebind_reranker(registered, {"model_name": MULTILINGUAL}) is registered
+    assert _on_the_model(registered, MULTILINGUAL) is registered
 
 
 def test_a_reranker_with_no_model_to_swap_is_left_alone() -> None:
     """The stub takes no model name. Raising here would fail a whole run over
     a field that cannot apply to the component the registry handed back."""
     stub = CrossEncoderRerankerStub()
-    assert _rebind_reranker(stub, {"model_name": MULTILINGUAL}) is stub
+    assert _on_the_model(stub, MULTILINGUAL) is stub
 
 
-def test_a_constructor_that_refuses_the_keyword_degrades_instead_of_failing() -> None:
+def test_a_component_with_no_way_to_change_its_model_is_left_alone() -> None:
+    """It used to be attempted anyway: the builder read the model off any
+    component carrying the attribute and called its constructor, catching
+    whatever came back. Whether a component can change its model is the
+    component's own answer now, and one that has no answer is left as it is.
+    """
     class Awkward:
         _model_name = "a"
 
-        def __init__(self) -> None:
-            pass
-
     awkward = Awkward()
-    assert _rebind_reranker(awkward, {"model_name": MULTILINGUAL}) is awkward
+    assert _on_the_model(awkward, MULTILINGUAL) is awkward
 
 
 def test_the_pipeline_builder_threads_the_params_through() -> None:
@@ -73,7 +75,7 @@ def test_the_pipeline_builder_threads_the_params_through() -> None:
     import pathlib
 
     source = (pathlib.Path(__file__).parents[2] / "core" / "experiment" / "runner.py").read_text(encoding="utf-8")
-    assert "_rebind_reranker(_maybe(\"reranker\", config.reranker)" in source, (
+    assert "_on_the_model(\n                _maybe(\"reranker\", config.reranker)" in source, (
         "the pipeline builder resolves a reranker without applying the run's params"
     )
 

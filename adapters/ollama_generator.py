@@ -26,6 +26,19 @@ class OllamaGenerator:
         self._model = model or os.getenv("OLLAMA_MODEL", "qwen3:8b")
         self._timeout = timeout
 
+    def with_model(self, model: str) -> Any:
+        """A copy of this running another model. See
+        `core.interfaces.ChoosingItsModel`.
+
+        The pipelines the gateway registers are built once at start-up with
+        whatever model was current then, so a run asking for another one used
+        the start-up model and the only way to change it was a process-wide
+        setting that moved every Realm's chat with it.
+        """
+        if not model or model == self._model:
+            return self
+        return OllamaGenerator(base_url=self._base_url, model=model, timeout=self._timeout)
+
     def generate(self, prompt: str, **params: Any) -> str:
         temperature: float = params.get("temperature", 0.1)
         num_predict: int = params.get("max_tokens", 1024)

@@ -58,7 +58,7 @@ class HttpPipeline:
         response_mapping: dict[str, str] | None = None,
         # Which corpus namespace the external RAG should
         # query, mirroring ExperimentConfig.corpus_id for in_process pipelines
-        # (core/experiment/runner.py:_rebind_corpus_id). Without this, a
+        # (core/experiment/runner.py:_for_the_corpus). Without this, a
         # config's corpus_id silently had no effect on an external RAG — the
         # native contract had no field for it at all, so an external RAG
         # built against multiple corpora (e.g. services/reference_rag_server)

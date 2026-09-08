@@ -54,8 +54,12 @@ class _Leaf:
         self.generator_id = name
         self._model_name = name
 
-    def retrieve(self, **kwargs: Any) -> list:
-        return []
+    def retrieve(self, query: str = "", k: int = 5, filters: Any = None, **kwargs: Any) -> list:
+        from core.models import Chunk, ScoredChunk
+        return [ScoredChunk(
+            chunk=Chunk(chunk_id="c1", doc_id="d1", text="a fragment", ordinal=0),
+            score=1.0,
+        )]
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         return [[0.1]] * len(texts)
@@ -64,51 +68,28 @@ class _Leaf:
         return ""
 
 
-class QdrantRetriever:
-    """Named for the class the build recognises.
-
-    The build rebuilds a retriever bound to another corpus by looking at the
-    name of its class and importing the adapter of that name, so a stand-in
-    has to carry the name to be rebound at all, and the adapter itself has to
-    be replaced by this one for the rebuild to stay in this process. Both are
-    the fixture below. That the build dispatches on a class name is a fragility
-    worth seeing written down.
-    """
-
-    retriever_id = "qdrant_dense"
-
-    def __init__(self, host: str = "h", port: int = 1, strategy_id: str = "fixed",
-                 embedder_id: str = "bge", vector_size: int = 1024,
-                 corpus_id: str = "default", realm_id: str | None = None) -> None:
-        self._host, self._port = host, port
-        self._strategy_id, self._embedder_id = strategy_id, embedder_id
-        self._corpus_id, self._realm_id = corpus_id, realm_id
-
-    def retrieve(self, **kwargs: Any) -> list:
-        return []
-
-
-class OpenSearchRetriever(QdrantRetriever):
-    retriever_id = "opensearch"
-
-    def __init__(self, host: str = "h", port: int = 2, strategy_id: str = "fixed",
-                 corpus_id: str = "default", realm_id: str | None = None,
-                 language: str = "ru") -> None:
-        super().__init__(host, port, strategy_id, "bge", 1024, corpus_id, realm_id)
-        self._language = language
-
-
 @pytest.fixture(autouse=True)
-def _adapters_that_stay_in_this_process(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The real adapters open connections in their constructors, and the
-    build constructs one whenever a run names another corpus."""
-    monkeypatch.setattr("adapters.qdrant.QdrantRetriever", QdrantRetriever)
-    monkeypatch.setattr("adapters.opensearch.OpenSearchRetriever", OpenSearchRetriever)
+def _adapters_without_their_connections(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The real store adapters, minus the two clients and the two calls that
+    reach a server. The build asks a retriever for a copy reading another
+    corpus, and only a real one can answer."""
+    import opensearchpy
+    import qdrant_client
+
+    from adapters.opensearch import OpenSearchRetriever
+    from adapters.qdrant import QdrantRetriever
+
+    monkeypatch.setattr(qdrant_client, "QdrantClient", lambda **kw: object())
+    monkeypatch.setattr(opensearchpy, "OpenSearch", lambda **kw: object())
+    monkeypatch.setattr(QdrantRetriever, "_ensure_collection", lambda self, *a: None)
+    monkeypatch.setattr(OpenSearchRetriever, "_ensure_index", lambda self: None)
 
 
 @pytest.fixture
 def runner() -> ExperimentRunner:
     from adapters.ollama_generator import OllamaGenerator
+    from adapters.opensearch import OpenSearchRetriever
+    from adapters.qdrant import QdrantRetriever
     from core.pipeline import NaivePipeline
     from core.retrieval.graph_hybrid import GraphHybridRetriever
     from core.retrieval.hybrid import HybridRetriever
@@ -136,6 +117,11 @@ def runner() -> ExperimentRunner:
         retriever=HybridRetriever(dense_retriever=dense, sparse_retriever=sparse,
                                   embedder=embedder),
         embedder=embedder, generator=generator, pipeline_id="hybrid_rrf"))
+    # A pipeline that answers, for the one observation below that runs
+    # rather than builds. The others read what was built and never call it.
+    registry.register("pipeline", "answering", NaivePipeline(
+        retriever=_Leaf("a_retriever"), embedder=embedder, generator=generator,
+        pipeline_id="answering"))
     registry.register("pipeline", "graph", NaivePipeline(
         retriever=GraphHybridRetriever(graph_retriever=_Leaf("graph"), base_retriever=dense),
         embedder=embedder, generator=generator, pipeline_id="graph"))
@@ -388,10 +374,11 @@ def test_a_retrieval_only_run_stops_before_the_generator(runner: ExperimentRunne
     watched = ComponentRef(kind="generator", component_id="watched")
     dataset = make_stub_dataset(n=2)
 
-    runner.run(_config(generator=watched, retrieval_only=True), dataset)
+    answering = {"pipeline_id": "answering", "generator": watched}
+    runner.run(_config(**answering, retrieval_only=True), dataset)
     assert reached == [], "a retrieval-only run reached the generator"
 
-    runner.run(_config(generator=watched), dataset)
+    runner.run(_config(**answering), dataset)
     assert reached, "a run that asked for an answer never reached the generator"
 
 

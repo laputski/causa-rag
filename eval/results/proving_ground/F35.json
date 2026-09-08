@@ -1,6 +1,6 @@
 {
   "failure_id": "F35",
-  "recorded_at": "2026-09-08T10:53:37.239605+00:00",
+  "recorded_at": "2026-09-08T16:06:44.640994+00:00",
   "reproduced": true,
   "claim": "a real run's retrieval metrics kept on questions with nothing to retrieve",
   "measured": {

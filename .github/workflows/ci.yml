@@ -107,7 +107,7 @@ jobs:
       # thousand references to development-stage numbers were removed, and a
       # great many of them were written with a dash after the number.
       - name: Prose style
-        run: python3 -m tools.check_style --max-em 1708 --max-contrastive 512
+        run: python3 -m tools.check_style --max-em 1688 --max-contrastive 508
 
   ui:
     runs-on: ubuntu-latest

@@ -183,9 +183,11 @@ NOT_APPLIED: dict[str, str] = {
         "naming a strategy here selects nothing. The index a run really read is "
         "recorded as applied.index_chunking_strategy, and the corpus manifest "
         "records the one it was built with, which is what a comparison of the "
-        "two reads. Applying it would mean binding the retriever to the index of "
-        "the named strategy, and pointing a run at an index nobody built would "
-        "return nothing while looking like a search that found nothing"
+        "two reads. Applying it is one protocol away now that a retriever knows "
+        "how to make a copy of itself: bind it to the index of the named "
+        "strategy. What stops that is the answer when nobody built one, since "
+        "a run pointed at a collection that does not exist returns nothing and "
+        "reads exactly like a search that found nothing"
     ),
     "retrievers": (
         "the pipeline decides which retriever it holds, and this list sits "

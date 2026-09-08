@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 from core.experiment.config import ComponentRef, ExperimentConfig
-from core.experiment.runner import _rebind_graph
+from core.experiment.runner import _walking_as
 from core.retrieval.graph_hybrid import GraphHybridRetriever
 
 
@@ -57,19 +57,19 @@ def test_neither_field_moves_a_historical_configuration_hash() -> None:
 
 
 def test_setting_the_weight_reaches_the_retriever() -> None:
-    assert _rebind_graph(_graph(graph_weight=0.4), 0.9, None)._graph_weight == 0.9
+    assert _walking_as(_graph(graph_weight=0.4), 0.9, None)._graph_weight == 0.9
 
 
 def test_setting_the_hops_reaches_the_retriever() -> None:
-    assert _rebind_graph(_graph(hops=1), None, 4)._hops == 4
+    assert _walking_as(_graph(hops=1), None, 4)._hops == 4
 
 
 def test_setting_one_leaves_the_other_where_it_was() -> None:
     """The failure the merge rebind had: rebuilding for one parameter reset
     another to its default, so changing the weight silently moved the hops."""
-    rebound = _rebind_graph(_graph(graph_weight=0.25, hops=3), 0.9, None)
+    rebound = _walking_as(_graph(graph_weight=0.25, hops=3), 0.9, None)
     assert rebound._hops == 3
-    assert _rebind_graph(_graph(graph_weight=0.25, hops=3), None, 4)._graph_weight == 0.25
+    assert _walking_as(_graph(graph_weight=0.25, hops=3), None, 4)._graph_weight == 0.25
 
 
 def test_setting_neither_returns_the_retriever_untouched() -> None:
@@ -77,7 +77,7 @@ def test_setting_neither_returns_the_retriever_untouched() -> None:
     object: a rebuild that changed nothing would still drop anything a later
     wrapper had put on this one."""
     built = _graph(graph_weight=0.25, hops=3)
-    assert _rebind_graph(built, None, None) is built
+    assert _walking_as(built, None, None) is built
 
 
 def test_a_retriever_of_another_kind_is_left_alone() -> None:
@@ -85,13 +85,13 @@ def test_a_retriever_of_another_kind_is_left_alone() -> None:
     graph one is a mistake in the configuration, and rebuilding a hybrid as
     a graph would answer it by changing the architecture."""
     other = _Stub()
-    assert _rebind_graph(other, 0.9, 4) is other
+    assert _walking_as(other, 0.9, 4) is other
 
 
 def test_building_a_pipeline_applies_both_parameters() -> None:
     """The half a test of the rebind alone cannot cover.
 
-    Removing the call from the build left every test of `_rebind_graph`
+    Removing the call from the build left every test of `_walking_as`
     green, which is the shape of a field that is declared, applied by a
     function nobody calls, and silently decorative. Only building the
     pipeline catches it.

@@ -54,6 +54,69 @@ class HybridRetriever:
         self._alpha = alpha
         self._rrf_k = rrf_k
 
+    def for_corpus(
+        self,
+        corpus_id: str,
+        realm_id: str | None = None,
+        resources: dict[str, dict[str, Any] | None] | None = None,
+    ) -> Any:
+        """A copy of this whose halves read `corpus_id`.
+
+        See `core.interfaces.BoundToACorpus`. A wrapper carries no corpus of
+        its own, so it rebinds what it is made of and keeps how it fuses:
+        binding a corpus and choosing a fusion are two acts, and doing both
+        here would let one undo the other.
+
+        A half that cannot be rebound comes back as it was, which is how a
+        stub and a store behave alike under this.
+        """
+        halves = [
+            half.for_corpus(corpus_id, realm_id, resources)
+            if hasattr(half, "for_corpus") else half
+            for half in (self._dense, self._sparse)
+        ]
+        if halves == [self._dense, self._sparse]:
+            return self
+        return type(self)(
+            dense_retriever=halves[0], sparse_retriever=halves[1],
+            embedder=self._embedder, merge=self._merge,
+            alpha=self._alpha, rrf_k=self._rrf_k,
+        )
+
+    def with_fusion(
+        self, merge: str | None = None, alpha: float | None = None, rrf_k: int | None = None,
+    ) -> Any:
+        """A copy of this fusing as asked, around the same two halves.
+
+        See `core.interfaces.Fusing`. Built around the halves it already has
+        instead of new ones, so this composes with a corpus binding that has
+        already happened.
+
+        The fusion constant is carried and never defaulted. Rebuilding
+        without it reset it to sixty, so asking for a different weight
+        silently undid a different constant set anywhere upstream: measured,
+        a retriever built with rrf_k=10 came back with 60.
+
+        An unknown strategy raises in the constructor, and this returns the
+        retriever as built instead: a whole run should not be lost to one
+        mistyped field, and the run records what it used.
+        """
+        wanted = (
+            merge or self._merge,
+            self._alpha if alpha is None else alpha,
+            self._rrf_k if rrf_k is None else rrf_k,
+        )
+        if wanted == (self._merge, self._alpha, self._rrf_k):
+            return self
+        try:
+            return type(self)(
+                dense_retriever=self._dense, sparse_retriever=self._sparse,
+                embedder=self._embedder,
+                merge=wanted[0], alpha=wanted[1], rrf_k=wanted[2],
+            )
+        except Exception:
+            return self
+
     def retrieve(
         self,
         query: str,

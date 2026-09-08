@@ -120,7 +120,7 @@ def test_ragas_diagnostics_accepts_custom_dataset_pipeline_and_question_count(cl
 def test_ragas_diagnostics_passes_realm_id_through(client) -> None:
     """Without this, deep diagnostics for a non-default Realm hit
     the gateway's own env-var Qdrant/OpenSearch regardless of which Realm's
-    corpus was asked for (same leak _rebind_corpus_id closes for real runs)."""
+    corpus was asked for (same leak _for_the_corpus closes for real runs)."""
     fake_runner = MagicMock()
     fake_runner.run.return_value = _FakeRunnerResult({})
 

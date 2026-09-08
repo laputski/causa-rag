@@ -106,7 +106,7 @@ async def _resolve_chunks(
     try:
         from core.eval.ref_resolution import ref_source_from_chunk
         from core.eval.retrieval_metrics import extract_ref_id
-        from core.experiment.runner import _rebind_corpus_id
+        from core.experiment.runner import _for_the_corpus
         from core.registry import registry
 
         base = registry.resolve("pipeline", "naive")
@@ -114,7 +114,7 @@ async def _resolve_chunks(
         if realm_id:
             from services.api_gateway.routers.corpus import _get_realm_resource
             qdrant_cfg = await _get_realm_resource(realm_id, "qdrant")
-        retriever = _rebind_corpus_id(base._retriever, corpus_id, realm_id, qdrant_cfg, None)
+        retriever = _for_the_corpus(base._retriever, corpus_id, realm_id, qdrant_cfg, None)
         get_by_ids = getattr(retriever, "get_chunks_by_ids", None)
         if get_by_ids is None:
             raise RuntimeError("retriever cannot fetch chunks by id")

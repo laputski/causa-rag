@@ -1,181 +1,171 @@
-"""core/experiment/runner.py:_rebind_corpus_id.
+"""A retriever reading the corpus a run named, on that Realm's own instance.
 
-Locks in the fix for a real bug: ExperimentConfig.corpus_id was decorative
-— registry-resolved pipelines (naive/hybrid_rrf/hybrid_weighted/graph) are
-built exactly once at gateway startup with corpus_id="default", and
-_build_pipeline returned that frozen instance unchanged for any config
-without reranker/grounding/etc. Confirmed by direct probe before this fix: a
-config with a non-default corpus_id still resolved a retriever pointed at
-the default corpus's collection.
+Locks in the fix for a real bug: `ExperimentConfig.corpus_id` was decorative.
+Registry-resolved pipelines are built exactly once at gateway start-up on the
+default corpus, and the build returned that frozen instance unchanged, so a
+configuration naming another corpus still searched the default one's
+collection. Confirmed by direct probe before the fix.
+
+How a retriever makes such a copy is its own knowledge now, declared as
+`core.interfaces.BoundToACorpus` and answered by the retriever. It used to be
+a case analysis over the names of adapter classes, written in the experiment
+builder, so this file carried fakes whose `__name__` had to be rewritten to be
+recognised at all, and asserted on the arguments a constructor was called
+with. It builds the real adapters instead, with the two clients that open
+connections replaced, and reads what came back.
 """
 from __future__ import annotations
 
-from unittest.mock import patch
+from typing import Any
 
-from core.experiment.runner import _rebind_corpus_id
+import pytest
 
-
-class _NoCorpusIdRetriever:
-    """Stand-in for QdrantRetrieverStub/OpenSearchRetrieverStub — no
-    _corpus_id attribute at all."""
-
-
-class _FakeQdrantRetriever:
-    """Duck-types adapters.qdrant.QdrantRetriever's relevant attributes
-    without opening a real connection — class name matters, not identity,
-    since _rebind_corpus_id dispatches on type(retriever).__name__."""
-
-    def __init__(self, corpus_id: str) -> None:
-        self._host = "qhost"
-        self._port = 1111
-        self._strategy_id = "structure_aware"
-        self._embedder_id = "bge_m3"
-        self._corpus_id = corpus_id
+from adapters.opensearch import OpenSearchRetriever
+from adapters.qdrant import QdrantRetriever
+from core.experiment.runner import _for_the_corpus
 
 
-_FakeQdrantRetriever.__name__ = "QdrantRetriever"
+@pytest.fixture(autouse=True)
+def _without_their_connections(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The real adapters, minus the two clients and the two calls that reach
+    a server. What is left is exactly the part under test: which collection,
+    which index, and what a copy of one carries over."""
+    import opensearchpy
+    import qdrant_client
+
+    monkeypatch.setattr(qdrant_client, "QdrantClient", lambda **kw: object())
+    monkeypatch.setattr(opensearchpy, "OpenSearch", lambda **kw: object())
+    monkeypatch.setattr(QdrantRetriever, "_ensure_collection", lambda self, *a: None)
+    monkeypatch.setattr(OpenSearchRetriever, "_ensure_index", lambda self: None)
 
 
-class _FakeOpenSearchRetriever:
-    def __init__(self, corpus_id: str, language: str = "ru_be") -> None:
-        self._host = "ohost"
-        self._port = 2222
-        self._strategy_id = "structure_aware"
-        self._corpus_id = corpus_id
-        # The analyser the index carries for life. Real retrievers have
-        # always set it since it became selectable per corpus; the rebind
-        # reads it here the same way it reads host and port.
-        self._language = language
+def _dense(corpus_id: str = "default", realm_id: str | None = None) -> QdrantRetriever:
+    return QdrantRetriever(
+        host="qhost", port=1111, strategy_id="structure_aware",
+        embedder_id="bge_m3", corpus_id=corpus_id, realm_id=realm_id,
+    )
 
 
-_FakeOpenSearchRetriever.__name__ = "OpenSearchRetriever"
+def _sparse(corpus_id: str = "default", language: str = "ru_be") -> OpenSearchRetriever:
+    return OpenSearchRetriever(
+        host="ohost", port=2222, strategy_id="structure_aware",
+        corpus_id=corpus_id, language=language,
+    )
 
 
-def test_no_op_when_retriever_has_no_corpus_id() -> None:
-    """Stubs and any unrecognized retriever type pass through unchanged
-    rather than raising."""
-    stub = _NoCorpusIdRetriever()
-    assert _rebind_corpus_id(stub, "handbook") is stub
+class _CannotBeBound:
+    """A stub, or a store this platform has never met. It answers nothing
+    about binding a corpus, and comes back as it was instead of raising."""
 
 
-def test_no_op_when_corpus_id_already_matches() -> None:
-    retriever = _FakeQdrantRetriever(corpus_id="handbook")
-    assert _rebind_corpus_id(retriever, "handbook") is retriever
+def test_a_retriever_that_cannot_be_bound_comes_back_unchanged() -> None:
+    stub = _CannotBeBound()
+    assert _for_the_corpus(stub, "handbook") is stub
 
 
-def test_rebinds_qdrant_retriever_to_new_corpus_id() -> None:
-    default_retriever = _FakeQdrantRetriever(corpus_id="default")
-    with patch("adapters.qdrant.QdrantRetriever") as mock_cls:
-        sentinel = object()
-        mock_cls.return_value = sentinel
-        result = _rebind_corpus_id(default_retriever, "handbook")
-        assert result is sentinel
-        mock_cls.assert_called_once_with(
-            host="qhost", port=1111, strategy_id="structure_aware",
-            embedder_id="bge_m3", corpus_id="handbook", realm_id=None,
-        )
+def test_the_corpus_it_already_reads_costs_no_second_connection() -> None:
+    retriever = _dense(corpus_id="handbook")
+    assert _for_the_corpus(retriever, "handbook") is retriever
 
 
-def test_rebinds_opensearch_retriever_to_new_corpus_id() -> None:
-    default_retriever = _FakeOpenSearchRetriever(corpus_id="default")
-    with patch("adapters.opensearch.OpenSearchRetriever") as mock_cls:
-        sentinel = object()
-        mock_cls.return_value = sentinel
-        result = _rebind_corpus_id(default_retriever, "handbook")
-        assert result is sentinel
-        mock_cls.assert_called_once_with(
-            host="ohost", port=2222, strategy_id="structure_aware", corpus_id="handbook", realm_id=None,
-            # Carried over, or the rebound copy would query an Arabic index
-            # through the default Russian analyser.
-            language="ru_be",
-        )
+def test_a_dense_copy_searches_the_named_corpus_collection() -> None:
+    bound = _for_the_corpus(_dense(), "handbook")
+    assert bound._corpus_id == "handbook"
+    assert bound._collection == "handbook__structure_aware__bge_m3", (
+        "the collection is what decides which vectors are searched"
+    )
+    # Everything the copy has to carry, or it would search the right corpus
+    # through the wrong index, on the wrong host, in another model's vectors.
+    assert (bound._host, bound._port) == ("qhost", 1111)
+    assert (bound._strategy_id, bound._embedder_id) == ("structure_aware", "bge_m3")
 
 
-def test_rebinds_hybrid_retriever_by_recursing_into_both_leaves() -> None:
+def test_a_sparse_copy_keeps_the_analyser_the_index_was_built_with() -> None:
+    """`language` decides which stemmer BM25 applies for the life of the
+    index. Dropped, an Arabic corpus is queried through an index this copy
+    insists is Russian: the wrong stemmer or a refusal, either arriving long
+    after the choice was made."""
+    bound = _for_the_corpus(_sparse(language="ar"), "miracl-ar")
+    assert bound._corpus_id == "miracl-ar"
+    assert bound._language == "ar"
+    assert (bound._host, bound._port) == ("ohost", 2222)
+
+
+def test_a_hybrid_binds_both_halves_and_keeps_how_it_fuses() -> None:
     from core.retrieval.hybrid import HybridRetriever
 
-    dense = _FakeQdrantRetriever(corpus_id="default")
-    sparse = _FakeOpenSearchRetriever(corpus_id="default")
-    hybrid = HybridRetriever(dense_retriever=dense, sparse_retriever=sparse, embedder=object(), merge="rrf")
+    hybrid = HybridRetriever(dense_retriever=_dense(), sparse_retriever=_sparse(),
+                             embedder=object(), merge="weighted", alpha=0.3, rrf_k=17)
+    bound = _for_the_corpus(hybrid, "handbook")
 
-    with patch("adapters.qdrant.QdrantRetriever") as mock_qdrant, \
-         patch("adapters.opensearch.OpenSearchRetriever") as mock_os:
-        mock_qdrant.return_value = object()
-        mock_os.return_value = object()
-        result = _rebind_corpus_id(hybrid, "handbook")
-
-    assert isinstance(result, HybridRetriever)
-    mock_qdrant.assert_called_once()
-    mock_os.assert_called_once()
-    assert mock_qdrant.call_args.kwargs["corpus_id"] == "handbook"
-    assert mock_os.call_args.kwargs["corpus_id"] == "handbook"
+    assert isinstance(bound, HybridRetriever)
+    assert bound._dense._corpus_id == "handbook"
+    assert bound._sparse._corpus_id == "handbook"
+    assert (bound._merge, bound._alpha, bound._rrf_k) == ("weighted", 0.3, 17), (
+        "binding a corpus reset how the halves are fused"
+    )
 
 
-def test_rebinds_graph_hybrid_retriever_leaving_graph_component_untouched() -> None:
-    """The Neo4j graph has no corpus_id partitioning at all (one shared
-    graph) — only the dense/sparse base retriever should be rebuilt."""
+def test_a_graph_hybrid_binds_its_base_and_leaves_the_graph_alone() -> None:
+    """One graph regardless of corpus: it has no partitioning to bind, so
+    rebuilding it would cost a connection and change nothing."""
     from core.retrieval.graph_hybrid import GraphHybridRetriever
 
-    graph_component = object()  # never touched — identity must be preserved
-    base = _FakeQdrantRetriever(corpus_id="default")
-    graph_hybrid = GraphHybridRetriever(graph_retriever=graph_component, base_retriever=base)
+    graph = object()
+    walker = GraphHybridRetriever(graph_retriever=graph, base_retriever=_dense(),
+                                  graph_weight=0.7, hops=2)
+    bound = _for_the_corpus(walker, "handbook")
 
-    with patch("adapters.qdrant.QdrantRetriever") as mock_qdrant:
-        mock_qdrant.return_value = object()
-        result = _rebind_corpus_id(graph_hybrid, "handbook")
-
-    assert isinstance(result, GraphHybridRetriever)
-    assert result._graph is graph_component
-    mock_qdrant.assert_called_once()
-    assert mock_qdrant.call_args.kwargs["corpus_id"] == "handbook"
+    assert isinstance(bound, GraphHybridRetriever)
+    assert bound._graph is graph
+    assert bound._base._corpus_id == "handbook"
+    assert (bound._graph_weight, bound._hops) == (0.7, 2)
 
 
-# ── realm_id / Realm-owned host:port ──────────────────────────────
+# ── the Realm's own instance ─────────────────────────────────────────────────
 
-def test_no_op_when_corpus_id_and_realm_id_both_already_match() -> None:
-    retriever = _FakeQdrantRetriever(corpus_id="handbook")
-    retriever._realm_id = "demo"
-    assert _rebind_corpus_id(retriever, "handbook", realm_id="demo") is retriever
+def test_the_corpus_and_the_realm_it_already_reads_cost_nothing() -> None:
+    retriever = _dense(corpus_id="handbook", realm_id="demo")
+    assert _for_the_corpus(retriever, "handbook", realm_id="demo") is retriever
 
 
-def test_rebinds_when_only_realm_id_differs_even_if_corpus_id_already_matches() -> None:
-    """The actual bug: an in_process experiment run against a
-    non-default Realm used to keep querying the gateway's startup-time
-    env-var Qdrant even when config.corpus_id already matched, because only
-    corpus_id was ever compared — realm_id had no bearing on the decision."""
-    retriever = _FakeQdrantRetriever(corpus_id="handbook")
-    retriever._realm_id = None
-    with patch("adapters.qdrant.QdrantRetriever") as mock_cls:
-        mock_cls.return_value = object()
-        _rebind_corpus_id(retriever, "handbook", realm_id="demo")
-    mock_cls.assert_called_once_with(
-        host="qhost", port=1111, strategy_id="structure_aware",
-        embedder_id="bge_m3", corpus_id="handbook", realm_id="demo",
+def test_another_realm_is_a_copy_even_when_the_corpus_matches() -> None:
+    """The bug this half was for: an in-process run against another Realm kept
+    querying the gateway's own instance whenever the corpus already matched,
+    because only the corpus was ever compared."""
+    bound = _for_the_corpus(_dense(corpus_id="handbook"), "handbook", realm_id="demo")
+    assert bound._realm_id == "demo"
+    assert bound._collection.startswith("demo__")
+
+
+def test_a_realms_own_host_and_port_replace_the_gateways() -> None:
+    bound = _for_the_corpus(
+        _dense(), "handbook", realm_id="demo",
+        qdrant_cfg={"host": "realm-qdrant", "port": 9999},
     )
+    assert (bound._host, bound._port) == ("realm-qdrant", 9999)
+    assert (bound._corpus_id, bound._realm_id) == ("handbook", "demo")
 
 
-def test_qdrant_cfg_overrides_host_and_port() -> None:
-    default_retriever = _FakeQdrantRetriever(corpus_id="default")
-    with patch("adapters.qdrant.QdrantRetriever") as mock_cls:
-        mock_cls.return_value = object()
-        _rebind_corpus_id(
-            default_retriever, "handbook", realm_id="demo",
-            qdrant_cfg={"host": "realm-qdrant", "port": 9999},
-        )
-    mock_cls.assert_called_once_with(
-        host="realm-qdrant", port=9999, strategy_id="structure_aware",
-        embedder_id="bge_m3", corpus_id="handbook", realm_id="demo",
+def test_a_realm_that_registered_no_instance_keeps_the_retrievers_own() -> None:
+    """The older behaviour, unchanged, and never a failure."""
+    bound = _for_the_corpus(_dense(), "handbook")
+    assert (bound._host, bound._port) == ("qhost", 1111)
+    assert bound._realm_id is None
+
+
+def test_each_half_of_a_hybrid_reads_its_own_stores_resources() -> None:
+    """One map of resources goes down, and each half takes the key it knows.
+    A half reading the other's host would connect to a search engine speaking
+    another protocol."""
+    from core.retrieval.hybrid import HybridRetriever
+
+    hybrid = HybridRetriever(dense_retriever=_dense(), sparse_retriever=_sparse(),
+                             embedder=object(), merge="rrf")
+    bound: Any = _for_the_corpus(
+        hybrid, "handbook", realm_id="demo",
+        qdrant_cfg={"host": "realm-qdrant", "port": 9999},
+        opensearch_cfg={"host": "realm-opensearch", "port": 9201},
     )
-
-
-def test_missing_qdrant_cfg_falls_back_to_retrievers_own_host_and_port() -> None:
-    """No Realm resource registered (or realm_id="") ⇒ the older behaviour
-    unchanged, not a hard failure."""
-    default_retriever = _FakeQdrantRetriever(corpus_id="default")
-    with patch("adapters.qdrant.QdrantRetriever") as mock_cls:
-        mock_cls.return_value = object()
-        _rebind_corpus_id(default_retriever, "handbook")
-    mock_cls.assert_called_once_with(
-        host="qhost", port=1111, strategy_id="structure_aware",
-        embedder_id="bge_m3", corpus_id="handbook", realm_id=None,
-    )
+    assert (bound._dense._host, bound._dense._port) == ("realm-qdrant", 9999)
+    assert (bound._sparse._host, bound._sparse._port) == ("realm-opensearch", 9201)

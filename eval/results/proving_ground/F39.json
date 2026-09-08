@@ -1,6 +1,6 @@
 {
   "failure_id": "F39",
-  "recorded_at": "2026-09-08T10:48:43.062602+00:00",
+  "recorded_at": "2026-09-08T16:03:18.947813+00:00",
   "reproduced": true,
   "claim": "a clique of fifty units across forty documents, built by one meaningless word, comes back as communities with a plausible modularity and nothing that says why",
   "measured": {

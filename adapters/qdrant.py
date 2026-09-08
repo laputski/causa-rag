@@ -103,6 +103,32 @@ class QdrantRetriever:
         self._vector_size = vector_size
         self._ensure_collection(Distance, VectorParams)
 
+    def for_corpus(
+        self,
+        corpus_id: str,
+        realm_id: str | None = None,
+        resources: dict[str, dict[str, Any] | None] | None = None,
+    ) -> Any:
+        """A copy of this reading `corpus_id` in `realm_id`, on that Realm's
+        own instance where it keeps one.
+
+        See `core.interfaces.BoundToACorpus`. The collection name carries all
+        three, so a run that named another corpus and got this object was
+        searching the one the gateway happened to start against.
+        """
+        instance = (resources or {}).get("qdrant") or {}
+        if (corpus_id == self._corpus_id and realm_id == self._realm_id and not instance):
+            return self
+        return QdrantRetriever(
+            host=instance.get("host", self._host),
+            port=int(instance.get("port", self._port)),
+            strategy_id=self._strategy_id,
+            embedder_id=self._embedder_id,
+            vector_size=self._vector_size,
+            corpus_id=corpus_id,
+            realm_id=realm_id,
+        )
+
     def _ensure_collection(self, Distance: Any, VectorParams: Any) -> None:
         from qdrant_client.models import Distance as D
         from qdrant_client.models import VectorParams as VP

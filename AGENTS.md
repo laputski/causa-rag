@@ -116,7 +116,14 @@ parity check had not noticed, because the keys were all present.
 
 **A component** (chunker, embedder, retriever, reranker, grounder, route
 policy): implement the protocol in `core/`, write the adapter in `adapters/`,
-register it in `services/api_gateway/main.py`, add a contract test.
+register it in `services/api_gateway/main.py`, add a contract test. Whatever a
+run may vary about it (another corpus, another Realm's instance, another
+fusion, another model) is a second protocol it implements: `BoundToACorpus`,
+`Fusing`, `WalkingAGraph`, `ChoosingItsModel`. The build asks the component,
+so one that answers nothing is left as it was, and the field asking for the
+change quietly does nothing. This used to be a case analysis over adapter
+class names written in the builder, which is the same outcome by a longer
+route.
 
 **An architecture** is not a component and takes five parts, and the first two
 cost no code. *Find its point*: the coordinates come from the published schema
@@ -127,10 +134,12 @@ coordinates of the point no entry speaks about, and how many applicable
 entries still carry a scope caveat, so the gap is visible before the work
 starts. *Make the platform run it*: a protocol in `core/interfaces.py` if none
 fits, the adapter and its stub, the registration, and the parameters it varies
-by, which means fields in `core/experiment/config.py` **and** their
-application in `core/experiment/runner.py`. A field accepted and never applied
-is the failure this platform sells the detection of, and five of them lived
-here. *Make the platform speak about it*: entries for the coordinates nothing
+by, which means fields in `core/experiment/config.py`, the protocol on the
+component that applies them, **and** a line in `core/experiment/applied.py`
+saying what each field does. A field accepted and never applied is the failure
+this platform sells the detection of, and six of them lived here; those tables
+are checked against a built pipeline, so a field nobody describes fails the
+build and one described wrongly fails it too. *Make the platform speak about it*: entries for the coordinates nothing
 covers, each with its bait, and applicability on the signals that cannot say
 anything there. *Stage it*: a corpus, a golden set and a configuration in the
 proving ground, then the level-B pairs. Until those, an entry's state is "not

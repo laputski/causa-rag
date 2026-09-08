@@ -54,7 +54,7 @@ def test_empty_read_is_reported_as_unverified_not_as_empty_corpus() -> None:
     from services.api_gateway.routers import experiments as ex
 
     with patch.object(ex.registry, "resolve", return_value=_Pipeline()), \
-         patch("core.experiment.runner._rebind_corpus_id", lambda r, *a, **k: r):
+         patch("core.experiment.runner._for_the_corpus", lambda r, *a, **k: r):
         resolver = asyncio.run(ex._build_ref_resolver(realm_id="r", corpus_id="missing"))
 
     assert resolver.checked is False

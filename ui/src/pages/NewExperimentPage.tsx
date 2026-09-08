@@ -171,7 +171,7 @@ function buildConfig(form: Record<string, string>, pipelines: Record<string, Pip
   }
 
   // merge_strategy is not bookkeeping any more, and the comment that said so
-  // outlived the change: `_rebind_merge` applies it, rebuilding the hybrid
+  // outlived the change: `with_fusion` applies it, rebuilding the hybrid
   // wrapper around the same two retrievers. So the old expression, which
   // wrote 'rrf' for every pipeline but hybrid_weighted, applied rank fusion
   // to anything new that arrived. Taken from what the pipeline was actually

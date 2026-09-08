@@ -68,7 +68,7 @@ def test_in_process_default_still_resolves_from_registry():
     """In-process path still goes through the registry, not literally
     returning the registered instance unchanged — _build_pipeline now
     always rebinds corpus_id/top_k (see core/experiment/runner.py
-    _rebind_corpus_id), so a fresh same-type pipeline is built, reusing the
+    _for_the_corpus), so a fresh same-type pipeline is built, reusing the
     registered retriever as-is when corpus_id already matches "default"
     (a bare object() sentinel can't stand in for that anymore — it has no
     _retriever/_embedder/_generator/pipeline_id for the rebuild to read)."""
@@ -88,7 +88,7 @@ def test_in_process_default_still_resolves_from_registry():
 
     assert isinstance(pipeline, NaivePipeline)
     assert pipeline.pipeline_id == "naive"
-    # corpus_id="default" on both sides — _rebind_corpus_id is a no-op,
+    # corpus_id="default" on both sides — _for_the_corpus is a no-op,
     # same retriever instance carried through (QdrantRetrieverStub has no
     # _corpus_id attribute at all, so the no-op path is what's exercised).
     assert pipeline._retriever is registered_retriever

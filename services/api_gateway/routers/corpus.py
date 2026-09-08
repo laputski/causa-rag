@@ -1370,7 +1370,7 @@ async def _build_diagnostics_pipeline(
 
     `realm_id` — without it this diagnostics pipeline hit the
     gateway's startup-time env-var Qdrant/OpenSearch regardless of which
-    Realm's corpus_id was asked for, same leak as _rebind_corpus_id's
+    Realm's corpus_id was asked for, same leak as _for_the_corpus's
     docstring describes for real experiment runs.
     """
     from core.experiment.config import ComponentRef, ExperimentConfig

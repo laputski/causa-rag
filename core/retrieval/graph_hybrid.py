@@ -27,6 +27,50 @@ class GraphHybridRetriever:
         self._graph_weight = graph_weight
         self._hops = hops
 
+    def for_corpus(
+        self,
+        corpus_id: str,
+        realm_id: str | None = None,
+        resources: dict[str, dict[str, Any] | None] | None = None,
+    ) -> Any:
+        """A copy of this whose base half reads `corpus_id`.
+
+        See `core.interfaces.BoundToACorpus`. The graph is left alone: it has
+        no corpus partitioning at all, one graph regardless, so there is
+        nothing here to bind. How far it walks and how much say it gets are
+        carried, and chosen by `with_graph` below.
+        """
+        base = (self._base.for_corpus(corpus_id, realm_id, resources)
+                if hasattr(self._base, "for_corpus") else self._base)
+        if base is self._base:
+            return self
+        return type(self)(
+            graph_retriever=self._graph, base_retriever=base,
+            graph_weight=self._graph_weight, hops=self._hops,
+        )
+
+    def with_graph(
+        self, graph_weight: float | None = None, hops: int | None = None,
+    ) -> Any:
+        """A copy of this walking as asked. See `core.interfaces.WalkingAGraph`.
+
+        These two are the only parameters the graph point has, and neither
+        had a field on a configuration at all: the graph pipeline could be
+        chosen and could not be varied, so two graph runs could not differ in
+        anything a person had set. A pipeline nobody can vary is one on which
+        no failure can be staged by a setting.
+        """
+        wanted = (
+            self._graph_weight if graph_weight is None else graph_weight,
+            self._hops if hops is None else hops,
+        )
+        if wanted == (self._graph_weight, self._hops):
+            return self
+        return type(self)(
+            graph_retriever=self._graph, base_retriever=self._base,
+            graph_weight=wanted[0], hops=wanted[1],
+        )
+
     def retrieve(
         self,
         query: str,

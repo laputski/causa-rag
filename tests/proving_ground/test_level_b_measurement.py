@@ -58,7 +58,7 @@ def searched(embedder: Any) -> dict[str, Any]:
 
     from core.experiment.runner import ExperimentResult
     from services.api_gateway.routers.experiments import (
-        _get_results,
+        _get_summaries,
         _parse_result,
         _save,
         _tuning_provenance,
@@ -78,10 +78,14 @@ def searched(embedder: Any) -> dict[str, Any]:
             result.run_id = f"proving-ground-search-{i}"
             parsed.append(result)
             await _save(result)
-        stored = await _get_results()
+        # Summaries, because what counts the runs before this one reads the
+        # top of each stored run and none of its answers.
+        stored = await _get_summaries()
         return {
             "ids": [r.run_id for r in parsed],
-            "provenance": {r.run_id: _tuning_provenance(r.run_id, stored) for r in parsed},
+            "provenance": {
+                r.run_id: _tuning_provenance(stored[r.run_id], stored) for r in parsed
+            },
             "stored": stored,
         }
 

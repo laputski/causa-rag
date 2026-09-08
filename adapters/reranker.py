@@ -69,6 +69,23 @@ class CrossEncoderRerankerLocal:
         self._model_name = model_name
         self._model: Any | None = None
 
+    def with_model(self, model: str) -> Any:
+        """A copy of this reranking with another model. See
+        `core.interfaces.ChoosingItsModel`.
+
+        A run naming a model got the one the gateway started with, and which
+        model reranks decides which languages the step understands. The
+        default here is English only while the default embedder is
+        multilingual, so on a Russian corpus that mismatch was the platform's
+        own default and a run had no way to say otherwise.
+
+        The model itself is loaded on first use, so a copy costs nothing
+        until it reranks.
+        """
+        if not model or model == self._model_name:
+            return self
+        return CrossEncoderRerankerLocal(model_name=model)
+
     @staticmethod
     def is_available() -> bool:
         try:

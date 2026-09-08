@@ -25,33 +25,6 @@ if TYPE_CHECKING:
 log = structlog.get_logger()
 
 
-def _rebind_graph(retriever: Any, graph_weight: float | None, hops: int | None) -> Any:
-    """Apply the two parameters the graph point has, or leave it alone.
-
-    They had no fields on the configuration at all, so the graph pipeline
-    could be chosen and could not be varied: every run of it used whatever
-    the gateway constructed at start-up, and two graph runs could not differ
-    in anything a person had set. A pipeline nobody can vary is a pipeline on
-    which no failure can be staged by a setting.
-
-    None means "keep what was constructed", which is what leaves every
-    historical run's configuration hash where it was.
-    """
-    if graph_weight is None and hops is None:
-        return retriever
-    if type(retriever).__name__ != "GraphHybridRetriever":
-        return retriever
-
-    from core.retrieval.graph_hybrid import GraphHybridRetriever
-
-    return GraphHybridRetriever(
-        graph_retriever=retriever._graph,
-        base_retriever=retriever._base,
-        graph_weight=retriever._graph_weight if graph_weight is None else graph_weight,
-        hops=retriever._hops if hops is None else hops,
-    )
-
-
 def _what_actually_ran(pipeline: Any) -> dict[str, Any]:
     """The embedder that queries, and the one whose vectors are searched.
 
@@ -88,99 +61,71 @@ def _what_actually_ran(pipeline: Any) -> dict[str, Any]:
     return {k: v for k, v in applied.items() if v != ""}
 
 
-def _rebind_corpus_id(
-    retriever: Any, corpus_id: str,
-    realm_id: str | None = None, qdrant_cfg: dict[str, Any] | None = None,
+# ── asking a component for the variant a run asked for ───────────────────────
+#
+# These were five functions, and each of them decided by looking at the name
+# of a class: a retriever called "HybridRetriever" was rebuilt this way, one
+# called "QdrantRetriever" that way, and anything else came back untouched.
+# So a component the analysis did not name could be named by a configuration
+# and never varied, and there was no way to add one without editing here.
+# What each component can vary about itself is its own knowledge, and it is
+# declared in `core.interfaces` and answered by the component. What is left
+# here is asking.
+#
+# A component that cannot vary comes back as it was, which is what a stub
+# does and what a run against a store this platform has never met would do.
+# That is the same silence as before, and now it is the component's answer
+# and no longer a builder's ignorance of its name.
+
+
+def _for_the_corpus(
+    retriever: Any, corpus_id: str, realm_id: str | None = None,
+    qdrant_cfg: dict[str, Any] | None = None,
     opensearch_cfg: dict[str, Any] | None = None,
 ) -> Any:
-    """Rebuild `retriever` bound to `corpus_id`, `realm_id` and a Realm's own
-    host:port if it isn't already.
+    """The retriever, reading this run's corpus on this Realm's own instance.
 
-    Registry-resolved pipelines (naive/hybrid_rrf/hybrid_weighted/graph) are
-    constructed exactly ONCE at gateway startup, always with
-    corpus_id="default" and env-var host/port (services/api_gateway/main.py
-    never passes a corpus_id or Realm resource). Without this, both
-    ExperimentConfig.corpus_id AND which Realm's Qdrant/OpenSearch instance
-    an in_process run actually hit were decorative — every run silently
-    queried the startup-time default collection/index on the gateway's own
-    env-var instance, regardless of config.corpus_id or which Realm launched
-    it (the exact same class of leak already found and fixed for the
-    Content/Health/Graph tabs — see services/api_gateway/routers/
-    corpus.py#_resolve_qdrant — just on the experiment-run path instead).
-
-    `qdrant_cfg`/`opensearch_cfg` are the Realm's own resource dicts (same
-    shape as corpus.py#_get_realm_resource's return value: `{"host":...,
-    "port":...}`) — resolved async by the caller (core/ has no Mongo access
-    of its own, mirrors the `external_rag_resolver` injection pattern on
-    this same class) and passed in as plain data, not a callback. Absent
-    ⇒ falls back to the retriever's own existing host/port (the behaviour before Realm-scoped resources,
-    behavior, still exactly what registry-resolved pipelines without a
-    Realm context get).
-
-    Recurses through Hybrid/GraphHybrid wrappers, rebuilding only the
-    dense/sparse leaves. The graph component is left untouched — it has no
-    corpus_id (or realm_id) partitioning at all (one shared graph regardless
-    of corpus_id), so there is nothing to rebind there.
-
-    No-ops (returns the same instance) for anything without a `_corpus_id`
-    attribute — stubs (QdrantRetrieverStub/OpenSearchRetrieverStub used in
-    tests) and any retriever type this function doesn't know how to rebuild,
-    rather than raising on an unrecognized type.
+    Registry-resolved pipelines are constructed once at gateway start-up,
+    always on the default corpus and on the gateway's own host and port.
+    Without this, both the corpus a run names and the Realm whose instance it
+    reaches were decorative: every run queried the start-up collection on the
+    gateway's own instance, whichever Realm launched it.
     """
-    cls_name = type(retriever).__name__
-
-    # Wrapper types carry no _corpus_id of their own (only their dense/sparse
-    # leaves do) — must recurse unconditionally, BEFORE the leaf-only
-    # already-matches check below, or this would always look like a no-op.
-    if cls_name == "HybridRetriever":
-        from core.retrieval.hybrid import HybridRetriever
-        return HybridRetriever(
-            dense_retriever=_rebind_corpus_id(retriever._dense, corpus_id, realm_id, qdrant_cfg, opensearch_cfg),
-            sparse_retriever=_rebind_corpus_id(retriever._sparse, corpus_id, realm_id, qdrant_cfg, opensearch_cfg),
-            embedder=retriever._embedder, merge=retriever._merge,
-            alpha=retriever._alpha, rrf_k=retriever._rrf_k,
-        )
-    if cls_name == "GraphHybridRetriever":
-        from core.retrieval.graph_hybrid import GraphHybridRetriever
-        return GraphHybridRetriever(
-            graph_retriever=retriever._graph,  # shared graph — not rebindable
-            base_retriever=_rebind_corpus_id(retriever._base, corpus_id, realm_id, qdrant_cfg, opensearch_cfg),
-            # Carried over, never chosen here: this function binds a corpus and
-            # nothing else, and the two graph parameters are applied by
-            # _rebind_graph below, after this has run.
-            graph_weight=retriever._graph_weight, hops=retriever._hops,
-        )
-
-    current = getattr(retriever, "_corpus_id", None)
-    current_realm = getattr(retriever, "_realm_id", None)
-    if current is None:
+    if not hasattr(retriever, "for_corpus"):
         return retriever
-    if current == corpus_id and current_realm == realm_id and qdrant_cfg is None and opensearch_cfg is None:
+    return retriever.for_corpus(
+        corpus_id, realm_id, {"qdrant": qdrant_cfg, "opensearch": opensearch_cfg})
+
+
+def _fusing_as(retriever: Any, merge: str | None, alpha: float | None,
+               rrf_k: int | None = None) -> Any:
+    """The retriever, fusing the way this run asked.
+
+    Applied after the corpus binding, so the fusion is chosen around halves
+    already reading the right corpus instead of undoing the binding.
+    """
+    if not hasattr(retriever, "with_fusion"):
         return retriever
+    return retriever.with_fusion(merge, alpha, rrf_k)
 
-    if cls_name == "QdrantRetriever":
-        from adapters.qdrant import QdrantRetriever
-        return QdrantRetriever(
-            host=(qdrant_cfg or {}).get("host", retriever._host),
-            port=int((qdrant_cfg or {}).get("port", retriever._port)),
-            strategy_id=retriever._strategy_id, embedder_id=retriever._embedder_id,
-            corpus_id=corpus_id, realm_id=realm_id,
-        )
-    if cls_name == "OpenSearchRetriever":
-        from adapters.opensearch import OpenSearchRetriever
-        return OpenSearchRetriever(
-            host=(opensearch_cfg or {}).get("host", retriever._host),
-            port=int((opensearch_cfg or {}).get("port", retriever._port)),
-            strategy_id=retriever._strategy_id, corpus_id=corpus_id, realm_id=realm_id,
-            # Carried over like host/port/strategy_id above. Dropping it
-            # reverts the rebound copy to the default analyser, so an
-            # Arabic corpus ingested as Arabic would be queried through an
-            # index this copy insists is Russian: either the wrong stemmer
-            # or a refusal, and both arrive long after the choice was made.
-            language=retriever._language,
-        )
-    return retriever
 
+def _walking_as(retriever: Any, graph_weight: float | None, hops: int | None) -> Any:
+    """The retriever, walking the graph the way this run asked."""
+    if not hasattr(retriever, "with_graph"):
+        return retriever
+    return retriever.with_graph(graph_weight, hops)
+
+
+def _on_the_model(component: Any, model: str | None) -> Any:
+    """The component, running the model this run named.
+
+    One function for the generator and the reranker, which had one each. Both
+    answer the same question about themselves, and the answer decides which
+    model wrote an answer and which languages a rerank step understands.
+    """
+    if not model or not hasattr(component, "with_model"):
+        return component
+    return component.with_model(model)
 
 
 # Config fields that reach an external RAG through `params`, the contract
@@ -222,55 +167,6 @@ def _params_with_declared_fields(
     return merged if changed else params
 
 
-def _rebind_merge(retriever: Any, merge: str | None, alpha: float | None,
-                  rrf_k: int | None = None) -> Any:
-    """Apply a config's merge strategy and weight.
-
-    `merge_strategy`/`merge_alpha` were decorative for their whole existence:
-    `hybrid_rrf` and `hybrid_weighted` are two registry entries built at
-    gateway startup with their merge baked in, so a config could name any
-    strategy and any alpha and the run would use whatever the entry was
-    constructed with. A preset promising a different weighting produced a
-    byte-identical run, which is the same class of lie as the chunking preset
-    that ran identical retrieval to every other.
-
-    Applied by rebuilding the hybrid wrapper around the *same* dense and
-    sparse retrievers rather than constructing new ones, so this composes
-    with `_rebind_corpus_id` (which has already bound them to the right
-    corpus by the time this runs) instead of undoing it.
-
-    A no-op for anything that is not a hybrid retriever, and for values that
-    already match — a dense-only pipeline has nothing to merge, and saying so
-    by doing nothing is better than raising at a caller that merely passed
-    its config along.
-    """
-    dense = getattr(retriever, "_dense", None)
-    sparse = getattr(retriever, "_sparse", None)
-    if dense is None or sparse is None:
-        return retriever
-    target_merge = merge or getattr(retriever, "_merge", "rrf")
-    target_alpha = getattr(retriever, "_alpha", 0.5) if alpha is None else alpha
-    # Carried, not defaulted. Rebuilding without it reset the fusion constant
-    # to sixty, so asking for a different merge weight silently undid a
-    # different rank-fusion constant set anywhere upstream. Measured: a
-    # retriever built with rrf_k=10 came back with 60.
-    target_rrf_k = getattr(retriever, "_rrf_k", 60) if rrf_k is None else rrf_k
-    if (target_merge == getattr(retriever, "_merge", None)
-            and target_alpha == getattr(retriever, "_alpha", None)
-            and target_rrf_k == getattr(retriever, "_rrf_k", None)):
-        return retriever
-    try:
-        return type(retriever)(
-            dense_retriever=dense, sparse_retriever=sparse, embedder=retriever._embedder,
-            merge=target_merge, alpha=target_alpha, rrf_k=target_rrf_k,
-        )
-    except Exception:
-        # An unknown merge name raises in HybridRetriever's own constructor.
-        # Degrading to the retriever as built beats failing a whole run over
-        # one mistyped field, and the run records what it actually used.
-        return retriever
-
-
 def _component_for(
     registry: Any, kind: str, ref: Any, fallback: Any, unavailable: list[str] | None,
 ) -> Any:
@@ -299,73 +195,6 @@ def _component_for(
         if unavailable is not None:
             unavailable.append(f"{kind}:{ref.component_id}")
         return fallback
-
-
-def _rebind_generator(generator: Any, model: str | None) -> Any:
-    """Rebuild `generator` bound to `model` if a per-run override was
-    requested and it isn't already using it.
-
-    Registry-resolved pipelines are constructed exactly ONCE at gateway
-    startup with whatever OLLAMA_MODEL/settings.active_model was current at
-    that time (services/api_gateway/main.py) — config.params["model"] used
-    to be a complete no-op for an in_process run, the same way
-    config.corpus_id used to be before _rebind_corpus_id existed: every run
-    silently reused the startup-time model regardless of what was
-    requested, and the only way to change it was PUT /settings/model —
-    process-wide, affecting every Realm's chat too, not scoped to one run.
-    An external RAG's own generation model was already selectable this same
-    way (params["model"], read RAG-side by its own generation
-    step) — this closes the matching gap for
-    in_process runs, reusing the identical config key rather than a
-    second, differently-shaped field.
-
-    No-op (returns the same instance) when model is falsy, or for any
-    generator type other than OllamaGenerator (a stub/vllm generator has no
-    equivalent "just swap the model string" constructor shape) — same
-    "graceful no-op for an unrecognized type" convention as
-    _rebind_corpus_id above.
-    """
-    if not model or type(generator).__name__ != "OllamaGenerator":
-        return generator
-    if getattr(generator, "_model", None) == model:
-        return generator
-    from adapters.ollama_generator import OllamaGenerator
-    return OllamaGenerator(base_url=generator._base_url, model=model, timeout=generator._timeout)
-
-
-def _rebind_reranker(reranker: Any, params: dict[str, Any] | None) -> Any:
-    """Rebuild `reranker` on the model a run asked for.
-
-    `ComponentRef.params` reached nothing: the pipeline builder resolves a
-    reranker out of the registry by its `component_id` and drops the params
-    beside it, so a run could name any model and get the one the gateway
-    started with. Measured: a reference asking for "BAAI/bge-reranker-v2-m3"
-    produced a component that had never heard of the request.
-
-    That absence is not cosmetic. Which model reranks decides which languages
-    the rerank step understands, and a reranker that does not speak the
-    corpus's language reorders by noise. The local reranker defaults to
-    `cross-encoder/ms-marco-MiniLM-L-6-v2`, which is English only, while the
-    default embedder is multilingual, so on a Russian corpus that mismatch was
-    the platform's own default and a run had no way to say otherwise. The
-    MIRACL sweep names the multilingual model explicitly for exactly this
-    reason, and could do so only by building its own component.
-
-    No-op for a reranker type with no model to swap, on the same convention as
-    `_rebind_generator` above: a caller merely passing its config along should
-    not have a run fail over a field that cannot apply to what it resolved.
-    """
-    model = (params or {}).get("model_name")
-    if not model or not hasattr(reranker, "_model_name"):
-        return reranker
-    if reranker._model_name == model:
-        return reranker
-    try:
-        return type(reranker)(model_name=model)
-    except Exception:
-        # A reranker whose constructor does not take the keyword. Degrading
-        # beats failing a whole run, and the run records what it asked for.
-        return reranker
 
 
 @dataclass
@@ -610,13 +439,13 @@ class ExperimentRunner:
         used to look identical to one that reranked.
 
         `realm_id`/`qdrant_cfg`/`opensearch_cfg` — see
-        _rebind_corpus_id's docstring. Only affects the in_process branch
+        _for_the_corpus's docstring. Only affects the in_process branch
         below; the http branch already carries corpus_id through the HTTP
         contract itself and has no Realm-owned in-process infra
         to rebind.
 
         Always rebinds the retriever to config.corpus_id (see
-        _rebind_corpus_id — registry-resolved pipelines are frozen at
+        _for_the_corpus — registry-resolved pipelines are frozen at
         gateway startup on corpus_id="default") and applies config.top_k.
         A config without reranker/grounding/route_policy/etc. gets a fresh
         instance of the SAME pipeline class as the registered one (not the
@@ -681,16 +510,14 @@ class ExperimentRunner:
             )
 
         base = self._registry.resolve("pipeline", config.pipeline_id)
-        retriever = _rebind_corpus_id(
+        retriever = _for_the_corpus(
             base._retriever, config.corpus_id, realm_id or None, qdrant_cfg, opensearch_cfg,
         )
-        # After the corpus rebind, so the merge wrapper is rebuilt
-        # around retrievers already bound to the right corpus.
-        retriever = _rebind_merge(retriever, config.merge_strategy, config.merge_alpha, config.rrf_k)
-        # After the corpus rebind for the same reason the merge is: the graph
-        # wrapper is rebuilt around a base already bound to the right corpus.
-        retriever = _rebind_graph(retriever, config.graph_weight, config.hops)
-        generator = _rebind_generator(
+        # The corpus first, so fusion and graph are chosen around halves that
+        # already read the right one instead of undoing the binding.
+        retriever = _fusing_as(retriever, config.merge_strategy, config.merge_alpha, config.rrf_k)
+        retriever = _walking_as(retriever, config.graph_weight, config.hops)
+        generator = _on_the_model(
             _component_for(self._registry, "generator", config.generator,
                            base._generator, unavailable),
             (config.params or {}).get("model"),
@@ -730,8 +557,10 @@ class ExperimentRunner:
             generator=generator,
             top_k=config.top_k,
             fetch_k=config.fetch_k,
-            reranker=_rebind_reranker(_maybe("reranker", config.reranker),
-                                      config.reranker.params if config.reranker else None),
+            reranker=_on_the_model(
+                _maybe("reranker", config.reranker),
+                (config.reranker.params if config.reranker else {}).get("model_name"),
+            ),
             grounder=_maybe("grounder", config.grounding),
             route_policy=_maybe("route_policy", config.route_policy),
             scorer=_maybe("scorer", config.scorer),
@@ -770,7 +599,7 @@ class ExperimentRunner:
         # always hit the gateway's own startup-time env-var Qdrant/OpenSearch
         # instance regardless of which Realm launched it — config.corpus_id
         # alone wasn't enough once two Realms could register distinct
-        # physical resources (see _rebind_corpus_id's docstring).
+        # physical resources (see _for_the_corpus's docstring).
         realm_id: str = "",
         qdrant_cfg: dict[str, Any] | None = None,
         opensearch_cfg: dict[str, Any] | None = None,
