@@ -271,31 +271,33 @@ def _rebind_merge(retriever: Any, merge: str | None, alpha: float | None,
         return retriever
 
 
-def _embedder_for(registry: Any, ref: Any, fallback: Any, unavailable: list[str] | None) -> Any:
-    """The embedder the configuration names, or the pipeline's own.
+def _component_for(
+    registry: Any, kind: str, ref: Any, fallback: Any, unavailable: list[str] | None,
+) -> Any:
+    """The component the configuration names, or the pipeline's own.
 
-    This field was accepted and never applied: both branches of the build took
-    the pipeline's embedder, so a run naming another model queried with the
-    one the gateway happened to have registered and said nothing. What was
-    built instead of applying it was a way to see it, `applied` beside
+    Two fields were accepted and never applied this way. Both branches of the
+    build took the pipeline's own embedder and its own generator, so a run
+    naming another model queried, or answered, with whichever the gateway
+    happened to have registered at start-up, and said nothing. What was built
+    instead of applying them was a way to see them, `applied` beside
     `corpus_manifest`, and a finding that reads the two, so the lie was
     visible and still a lie. A field a form can set and nothing reads is the
     trap this whole proving ground exists to find.
 
-    Degraded and never raised when the registry has no such embedder, which is
-    what every other component here does: a run whose configuration named
-    something uninstalled should still run, and should say what it ran
-    without. What must not happen is the third thing, running without it and
-    saying nothing.
+    Degraded and never raised when the registry has not got it, which is what
+    every other component here does: a run whose configuration named something
+    uninstalled should still run, and should say what it ran without. What
+    must not happen is the third thing, running without it and saying nothing.
     """
     if ref is None:
         return fallback
     try:
-        return registry.resolve("embedder", ref.component_id)
+        return registry.resolve(kind, ref.component_id)
     except KeyError:
-        log.warning("experiment.component.unavailable", kind="embedder", id=ref.component_id)
+        log.warning("experiment.component.unavailable", kind=kind, id=ref.component_id)
         if unavailable is not None:
-            unavailable.append(f"embedder:{ref.component_id}")
+            unavailable.append(f"{kind}:{ref.component_id}")
         return fallback
 
 
@@ -688,8 +690,13 @@ class ExperimentRunner:
         # After the corpus rebind for the same reason the merge is: the graph
         # wrapper is rebuilt around a base already bound to the right corpus.
         retriever = _rebind_graph(retriever, config.graph_weight, config.hops)
-        generator = _rebind_generator(base._generator, (config.params or {}).get("model"))
-        embedder = _embedder_for(self._registry, config.embedder, base._embedder, unavailable)
+        generator = _rebind_generator(
+            _component_for(self._registry, "generator", config.generator,
+                           base._generator, unavailable),
+            (config.params or {}).get("model"),
+        )
+        embedder = _component_for(
+            self._registry, "embedder", config.embedder, base._embedder, unavailable)
 
         if (config.reranker is None and config.grounding is None and config.route_policy is None
                 and config.scorer is None and config.mask_engine is None and config.refusal_policy is None):

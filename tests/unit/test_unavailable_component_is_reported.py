@@ -50,6 +50,10 @@ def _registry() -> ComponentRegistry:
     # the embedder a run asked for, a registry without one is a run that could
     # not produce a component it named, which is what this file is about.
     registry.register("embedder", "bge", _Leaf())
+    # And the generator, for the same reason one field later: the build takes
+    # the generator a run asked for now, so a registry without one is a run
+    # that could not produce a component it named.
+    registry.register("generator", "ollama", _Leaf())
     return registry
 
 
@@ -122,8 +126,7 @@ def test_an_embedder_the_registry_has_not_got_is_named_like_any_other() -> None:
     every other component uses, and the run still happens: an uninstalled
     component should not lose a measurement, it should be named in it.
     """
-    registry = ComponentRegistry()
-    registry.register("pipeline", "naive", _Pipeline())
+    registry = _registry()
     collected: list[str] = []
     pipeline = ExperimentRunner(registry)._build_pipeline(
         _config(embedder=ComponentRef(kind="embedder", component_id="a_model_nobody_installed")),
@@ -145,3 +148,29 @@ def test_the_embedder_a_run_names_is_the_one_it_queries_with() -> None:
     # The stub keeps whatever it was constructed with, so this reads what the
     # build handed over and not what the stub set for itself.
     assert pipeline.embedder is asked_for
+
+
+def test_a_generator_the_registry_has_not_got_is_named_like_any_other() -> None:
+    """The second field the plan called decorative, and the last of the two
+    the build now resolves. It used to take whatever generator the gateway
+    started with, so a run naming another one was answered by a component
+    nobody chose while the stored configuration named the one they did."""
+    registry = _registry()
+    collected: list[str] = []
+    pipeline = ExperimentRunner(registry)._build_pipeline(
+        _config(generator=ComponentRef(kind="generator", component_id="nothing_installed")),
+        unavailable=collected,
+    )
+    assert collected == ["generator:nothing_installed"]
+    assert pipeline is not None, "the run was lost instead of being told what it ran without"
+
+
+def test_the_generator_a_run_names_is_the_one_that_answers() -> None:
+    """The half that makes the naming above worth anything."""
+    registry = _registry()
+    asked_for = _Leaf()
+    registry.register("generator", "another_model", asked_for)
+    pipeline = ExperimentRunner(registry)._build_pipeline(
+        _config(generator=ComponentRef(kind="generator", component_id="another_model")),
+    )
+    assert pipeline.generator is asked_for
