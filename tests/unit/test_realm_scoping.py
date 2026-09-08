@@ -207,8 +207,8 @@ def test_experiment_list_filters_by_realm_id():
         {"run_id": "run-legacy", "config_name": "run-legacy"},  # pre-Realm run
     ]
 
-    async def fake_find_many(collection, query=None, sort=None, limit=0):
-        return list(docs)  # _get_results() applies no server-side filter
+    async def fake_find_many(collection, query=None, sort=None, limit=0, projection=None):
+        return list(docs)  # the reader applies no server-side Realm filter
 
     app = FastAPI()
     app.include_router(experiments_module.router)

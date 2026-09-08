@@ -87,7 +87,7 @@ def test_background_run_failure_records_error_and_clears_running(monkeypatch):
 @pytest.mark.asyncio
 async def test_get_experiment_reports_running_status_before_completion(monkeypatch):
     run_id = "bgtest3"
-    monkeypatch.setattr(exp_module, "_get_results", lambda: _empty_results())
+    monkeypatch.setattr(exp_module, "_get_one_result", _no_such_run)
     exp_module._progress[run_id] = [{"type": "progress", "processed": 1, "total": 5}]
     exp_module._running.add(run_id)
     try:
@@ -104,7 +104,7 @@ async def test_get_experiment_raises_500_with_detail_on_error(monkeypatch):
     from fastapi import HTTPException
 
     run_id = "bgtest4"
-    monkeypatch.setattr(exp_module, "_get_results", lambda: _empty_results())
+    monkeypatch.setattr(exp_module, "_get_one_result", _no_such_run)
     exp_module._errors[run_id] = "pipeline exploded"
     try:
         with pytest.raises(HTTPException) as exc_info:
@@ -124,8 +124,8 @@ async def test_get_experiment_404_when_run_id_unknown_anywhere():
     assert exc_info.value.status_code == 404
 
 
-async def _empty_results():
-    return {}
+async def _no_such_run(run_id: str):
+    return None
 
 
 # ── Found live: a run picking a slow model (or hitting a stuck external RAG)
@@ -219,7 +219,37 @@ def test_stop_experiment_404s_once_loop_finished_even_during_save(monkeypatch):
 # run apart from a normally-completed one — it showed the dataset's full
 # planned n_questions and no `stopped` field at all, so a run stopped at
 # 6/30 questions looked identical to one that genuinely answered all 30.
-def test_list_experiments_reflects_stopped_run(monkeypatch):
+def _only_what_the_projection_asked_for(docs):
+    """A run store that hands back the fields it was asked for and no others.
+
+    The stand-in is strict about the projection because the projection is
+    what the list rests on. A reader that stopped naming one would be handed
+    every answer of every run here and would pass, and on the real store it
+    would go back to parsing a quarter of a gigabyte to draw rows that carry
+    no answer at all.
+    """
+    async def find_many(collection, query=None, sort=None, limit=0, projection=None):
+        assert collection == "experiment_runs"
+        assert projection, "a list of rows must not read whole runs"
+        if projection.get("question_results") == 0:
+            return [{k: v for k, v in d.items() if k != "question_results"} for d in docs]
+        # The other read this store answers: how far a stopped run got,
+        # asked as identifiers alone.
+        assert projection == {"run_id": 1, "question_results.question_id": 1}
+        wanted = set(((query or {}).get("run_id") or {}).get("$in") or [])
+        return [
+            {
+                "run_id": d["run_id"],
+                "question_results": [
+                    {"question_id": q["question_id"]} for q in d.get("question_results") or []
+                ],
+            }
+            for d in docs if d["run_id"] in wanted
+        ]
+    return find_many
+
+
+def test_list_experiments_reflects_stopped_run(monkeypatch, tmp_path):
     stopped_result = ExperimentResult(
         config=_cfg(), run_id="stoppedrun1", n_questions=30, dataset_name="ds",
         stopped=True,
@@ -237,15 +267,13 @@ def test_list_experiments_reflects_stopped_run(monkeypatch):
         ],
     )
 
-    async def _fake_get_results(with_windows: bool = True):
-        # The list asks for runs without their retrieval windows, which live
-        # in documents of their own; a stand-in that refused the argument
-        # would fail for a reason that has nothing to do with what this test
-        # is about.
-        assert with_windows is False, "the list should not be paying for every window"
-        return {r.run_id: r for r in (stopped_result, finished_result)}
-
-    monkeypatch.setattr(exp_module, "_get_results", _fake_get_results)
+    import adapters.mongodb as mdb
+    monkeypatch.setattr(exp_module, "_STORE_DIR", tmp_path)
+    monkeypatch.setattr(
+        mdb, "find_many",
+        _only_what_the_projection_asked_for(
+            [stopped_result.to_dict(), finished_result.to_dict()]),
+    )
 
     items = asyncio.run(exp_module.list_experiments())
     by_id = {item.run_id: item for item in items}

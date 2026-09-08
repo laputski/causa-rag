@@ -49,8 +49,12 @@ async def insert_one(collection: str, doc: dict[str, Any]) -> str:
     return str(result.inserted_id)
 
 
-async def find_one(collection: str, query: dict[str, Any]) -> dict[str, Any] | None:
-    doc = await get_collection(collection).find_one(_match_id(query))
+async def find_one(
+    collection: str,
+    query: dict[str, Any],
+    projection: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    doc = await get_collection(collection).find_one(_match_id(query), projection)
     if doc and "_id" in doc:
         doc["_id"] = str(doc["_id"])
     return doc
@@ -61,8 +65,17 @@ async def find_many(
     query: dict[str, Any] | None = None,
     sort: list[tuple[str, int]] | None = None,
     limit: int = 0,
+    projection: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    cursor = get_collection(collection).find(_match_id(query or {}))
+    """Documents matching the query.
+
+    `projection` names which fields come back, in the engine's own form: a
+    map of field to 1 to take only those, or to 0 to leave those behind. It is
+    what makes "every run without its question results" a cheap read rather
+    than the whole store parsed to reach five fields of each document. Absent,
+    and every field arrives, which is what every caller before it got.
+    """
+    cursor = get_collection(collection).find(_match_id(query or {}), projection)
     if sort:
         cursor = cursor.sort(sort)
     if limit:

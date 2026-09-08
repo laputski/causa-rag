@@ -407,6 +407,144 @@ async def _get_one_result(run_id: str) -> ExperimentResult | None:
     return None
 
 
+async def _run_exists(run_id: str) -> bool:
+    """Whether the store holds this run, without reading it.
+
+    Some callers want nothing else. Two of them are answering a 404, and the
+    third is the progress socket, which asks this every two hundred
+    milliseconds for as long as a run lasts. All three used to load and parse
+    every run in the store to learn one bit, and the socket did it five times
+    a second.
+    """
+    try:
+        import adapters.mongodb as mdb
+        if await mdb.count("experiment_runs", {"run_id": run_id}):
+            return True
+    except Exception:
+        pass
+    return (_STORE_DIR / f"{run_id}.json").is_file()
+
+
+# Every stored field but the questions. Written as an exclusion on purpose:
+# naming the fields to keep would mean a field added to a run arriving on the
+# page it was added for and silently missing from every list, which is the
+# read-path loss this catalogue has an entry for.
+_WITHOUT_THE_QUESTIONS = {"question_results": 0}
+
+
+class _Summary(dict[str, Any]):
+    """A stored run without its answers, which refuses to be asked for one.
+
+    The absence is the point of the read, and an absent key is silent: a
+    caller reaching into a summary for the answers would find none and report
+    a run that answered nothing, which is the read-path loss this platform
+    keeps a catalogue entry for. Asked anyway, it says where the answers are.
+    """
+
+    _WHERE = ("a summary carries no answers; read the run itself with "
+              "_get_one_result, or its count from n_answered")
+
+    def __getitem__(self, key: str) -> Any:
+        if key == "question_results":
+            raise KeyError(self._WHERE)
+        return super().__getitem__(key)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        if key == "question_results":
+            raise KeyError(self._WHERE)
+        return super().get(key, default)
+
+
+def _summarise(data: dict[str, Any]) -> _Summary:
+    """A stored run without its answers, carrying the identity of its
+    configuration as this version computes it.
+
+    Computed here from the configuration, because the stored one and this
+    one really do differ: of the runs stored here, forty-eight carry a hash
+    written by a version that computed it differently. Read as stored, one
+    configuration run in two eras counts as two configurations, and a run's
+    row and its own page would name its configuration two ways on one
+    screen.
+    """
+    summary = _Summary((k, v) for k, v in data.items() if k != "question_results")
+    try:
+        dict.__setitem__(
+            summary, "config_hash",
+            ExperimentConfig(**(data.get("config") or {})).config_hash)
+    except Exception:
+        pass
+    return summary
+
+
+async def _get_summaries() -> dict[str, _Summary]:
+    """Every run, with its question results left in the store.
+
+    What a list, a frontier and a count of earlier configurations read of a
+    run is a dozen fields at its top level, and what they paid for was every
+    question of every run: on the store here, a quarter of a gigabyte parsed
+    to reach a few kilobytes.
+
+    A summary is the stored document, so its values are what the run wrote,
+    where a parsed run carries what a reader recomputed. One of them is the
+    averaged stage trace, which a parsed run derives from its answers;
+    measured over every
+    run stored here, no run's average differs between the two, and a run old
+    enough to carry stage traces and no average of them does not exist. Should
+    one arrive, it reports no latency, which is the same answer it gives for a
+    run that traced nothing.
+    """
+    summaries: dict[str, _Summary] = {}
+    try:
+        import adapters.mongodb as mdb
+        docs = await mdb.find_many(
+            "experiment_runs", sort=[("started_at", -1)],
+            projection=_WITHOUT_THE_QUESTIONS,
+        )
+        for doc in docs:
+            run_id = doc.get("run_id", "")
+            if run_id:
+                summaries[run_id] = _summarise(doc)
+        await _fill_answered_counts(summaries)
+    except Exception:
+        pass
+
+    # Only the runs the database does not have, by the same rule and for the
+    # same reason as the reader above: a run it rejected lives here alone.
+    for path in _STORE_DIR.glob("*.json"):
+        if path.stem in summaries:
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        summary = _summarise(data)
+        summary["run_id"] = data.get("run_id", path.stem)
+        summary["n_answered"] = len(data.get("question_results") or [])
+        summaries[path.stem] = summary
+    return summaries
+
+
+async def _fill_answered_counts(summaries: dict[str, _Summary]) -> None:
+    """How many questions a stopped run reached.
+
+    A run stopped part-way answered fewer questions than it planned, and the
+    number it answered is the length of the list this read leaves behind. Read
+    back for those runs alone, and as identifiers alone: a question id is a
+    few bytes where a question result is kilobytes.
+    """
+    stopped = [run_id for run_id, s in summaries.items() if s.get("stopped")]
+    if not stopped:
+        return
+    import adapters.mongodb as mdb
+    for doc in await mdb.find_many(
+        "experiment_runs", {"run_id": {"$in": stopped}},
+        projection={"run_id": 1, "question_results.question_id": 1},
+    ):
+        run_id = doc.get("run_id", "")
+        if run_id in summaries:
+            summaries[run_id]["n_answered"] = len(doc.get("question_results") or [])
+
+
 # ── Dataset loader ────────────────────────────────────────────────────────────
 
 async def _load_dataset(dataset_name: str, external_rag_id: str | None = None) -> Any:
@@ -722,34 +860,35 @@ async def list_experiments(
     # back-compat for callers that don't pass a Realm context).
     realm_id: str | None = None,
 ) -> list[ExperimentListItem]:
-    # The one caller that reads no window: a row of the list carries a
-    # count and a metric and never a fragment, and this is the request
-    # that pays for every run in the store at once.
-    results = await _get_results(with_windows=False)
+    # A row of the list carries a count and a metric and never a fragment,
+    # and this is the request that pays for every run in the store at once.
+    # It reads summaries, so what it pays for is a dozen fields of each.
+    summaries = await _get_summaries()
     baseline_id = await _get_baseline_run_id()
     items = [
         ExperimentListItem(
-            run_id=r.run_id,
-            name=r.config.name,
-            config_hash=r.config.config_hash,
-            aggregate_metrics=r.aggregate_metrics,
-            started_at=r.started_at,
-            finished_at=r.finished_at,
-            # n_questions is the dataset's planned total; a stopped run's
-            # question_results is legitimately shorter — show the actual
-            # answered count, same distinction RunPage.tsx already makes.
-            n_questions=len(r.question_results) if r.stopped else r.n_questions,
-            dataset_name=r.dataset_name,
-            prompt_id=r.prompt_id,
-            prompt_version=r.prompt_version,
+            run_id=run_id,
+            name=s.get("config_name") or (s.get("config") or {}).get("name") or run_id,
+            config_hash=s.get("config_hash", ""),
+            aggregate_metrics=s.get("aggregate_metrics") or {},
+            started_at=s.get("started_at", ""),
+            finished_at=s.get("finished_at", ""),
+            # n_questions is the dataset's planned total; a stopped run
+            # legitimately answered fewer, and the count of what it answered
+            # is read for those runs alone, same distinction RunPage.tsx makes.
+            n_questions=(s.get("n_answered", s.get("n_questions", 0)) if s.get("stopped")
+                         else s.get("n_questions", 0)),
+            dataset_name=s.get("dataset_name", ""),
+            prompt_id=s.get("prompt_id", ""),
+            prompt_version=s.get("prompt_version", 0),
             status="done",
-            realm_id=r.realm_id,
-            stopped=r.stopped,
-            is_baseline=r.run_id == baseline_id,
+            realm_id=s.get("realm_id", ""),
+            stopped=bool(s.get("stopped")),
+            is_baseline=run_id == baseline_id,
         )
-        for r in results.values()
-        if (dataset is None or r.config.dataset_name == dataset)
-        and (realm_id is None or r.realm_id == realm_id)
+        for run_id, s in summaries.items()
+        if (dataset is None or (s.get("config") or {}).get("dataset_name") == dataset)
+        and (realm_id is None or s.get("realm_id", "") == realm_id)
     ]
     # Prepend in-flight runs so they appear at the top regardless of sort.
     for run_id in list(_running):
@@ -831,8 +970,7 @@ async def _get_baseline_run_id() -> str | None:
 @router.put("/{run_id}/baseline")
 async def set_baseline(run_id: str) -> dict[str, Any]:
     """Pin a run as the regression baseline."""
-    results = await _get_results()
-    if run_id not in results:
+    if not await _run_exists(run_id):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail=f"Run {run_id!r} not found")
     try:
@@ -874,13 +1012,15 @@ async def judge_acceptance_endpoint(body: AcceptanceRequest) -> dict[str, Any]:
 
     from core.eval.prescription import judge_acceptance
 
-    results = await _get_results()
-    missing = [r for r in (body.before_run_id, body.after_run_id) if r not in results]
+    runs = {}
+    for wanted in (body.before_run_id, body.after_run_id):
+        runs[wanted] = await _get_one_result(wanted)
+    missing = [run_id for run_id, run in runs.items() if run is None]
     if missing:
         raise HTTPException(status_code=404, detail=f"Run(s) not found: {', '.join(missing)}")
 
-    before = results[body.before_run_id].to_dict()["question_results"]
-    after = results[body.after_run_id].to_dict()["question_results"]
+    before = runs[body.before_run_id].to_dict()["question_results"]  # type: ignore[union-attr]
+    after = runs[body.after_run_id].to_dict()["question_results"]  # type: ignore[union-attr]
     _attach_funnel(before)
     _attach_funnel(after)
     return judge_acceptance(body.question_ids, before, after).to_dict()
@@ -897,14 +1037,12 @@ async def get_frontier(realm_id: str, quality_metric: str = "retrieval_recall_at
     """
     from core.eval.frontier import frontier_by_source, point_from_run, tokens_comparable
 
-    results = await _get_results()
+    summaries = await _get_summaries()
     points = []
-    for run_id, result in results.items():
-        if realm_id and result.realm_id != realm_id:
+    for run_id, summary in summaries.items():
+        if realm_id and summary.get("realm_id", "") != realm_id:
             continue
-        payload = result.to_dict()
-        payload["run_id"] = run_id
-        point = point_from_run(payload, quality_metric=quality_metric)
+        point = point_from_run({**summary, "run_id": run_id}, quality_metric=quality_metric)
         if point is not None:
             points.append(point)
 
@@ -994,8 +1132,8 @@ async def get_prescription(run_id: str) -> dict[str, Any]:
 async def get_experiment(run_id: str) -> dict[str, Any]:
     from fastapi import HTTPException
 
-    results = await _get_results()
-    if run_id not in results:
+    result = await _get_one_result(run_id)
+    if result is None:
         # A run_id that's mid-flight (or just failed) in
         # the background task isn't in the result store yet; report status
         # instead of a bare 404 so a polling client can tell "still running"
@@ -1010,14 +1148,19 @@ async def get_experiment(run_id: str) -> dict[str, Any]:
                 "progress": events[-1] if events else None,
             }
         raise HTTPException(status_code=404, detail=f"Run {run_id!r} not found")
-    payload = results[run_id].to_dict()
+    payload = result.to_dict()
     payload["status"] = "done"
 
     # How much searching this number is the best of. Computed here because it
     # is a property of the run store and not of the run, and attached to the
     # payload so the detectors stay pure: a check that went to the database
     # itself would be a check nobody could run on a saved run.
-    payload["tuning_provenance"] = _tuning_provenance(run_id, results)
+    #
+    # Summaries, because both of the things this page wants from the other
+    # runs are top-level fields: when each was started under which
+    # configuration, and what the baseline scored.
+    summaries = await _get_summaries()
+    payload["tuning_provenance"] = _tuning_provenance(payload, summaries)
 
     # silent-degradation detectors, each carrying the catalogue entries it is
     # evidence for so a reader can tell a known failure from a bare sentence.
@@ -1072,11 +1215,11 @@ async def get_experiment(run_id: str) -> dict[str, Any]:
     # auto-compare against the pinned baseline.
     baseline_id = await _get_baseline_run_id()
     payload["is_baseline"] = baseline_id == run_id
-    if baseline_id and baseline_id != run_id and baseline_id in results:
+    if baseline_id and baseline_id != run_id and baseline_id in summaries:
         from core.eval.regression import compare as regression_compare
         report = regression_compare(
             payload.get("aggregate_metrics", {}),
-            results[baseline_id].aggregate_metrics,
+            summaries[baseline_id].get("aggregate_metrics") or {},
         )
         payload["regression"] = {**report.to_dict(), "baseline_run_id": baseline_id}
 
@@ -1117,10 +1260,9 @@ async def diagnose_retrieval_miss_endpoint(
 
     widened_k = min(max(widened_k, 1), _MAX_MISS_DIAGNOSIS_WIDENED_K)
 
-    results = await _get_results()
-    if run_id not in results:
+    result = await _get_one_result(run_id)
+    if result is None:
         raise HTTPException(status_code=404, detail=f"Run {run_id!r} not found")
-    result = results[run_id]
 
     question = next((qr for qr in result.question_results if qr.question_id == question_id), None)
     if question is None:
@@ -1747,7 +1889,16 @@ def _diagnose_root_causes(
             continue  # one undiagnosable question must not cost the others
 
 
-def _tuning_provenance(run_id: str, results: dict[str, Any]) -> dict[str, Any]:
+def _dataset_of(run: dict[str, Any]) -> str:
+    """The question set a run was measured on.
+
+    Two places carry it and either can be the empty one: the run records the
+    set it was handed, and the configuration records the set it asked for.
+    """
+    return str(run.get("dataset_name") or (run.get("config") or {}).get("dataset_name") or "")
+
+
+def _tuning_provenance(this: dict[str, Any], summaries: dict[str, _Summary]) -> dict[str, Any]:
     """What else was tried on these same questions before this run.
 
     A number reported after a search over configurations is the best of that
@@ -1756,30 +1907,30 @@ def _tuning_provenance(run_id: str, results: dict[str, Any]) -> dict[str, Any]:
     way of knowing whether it was the first thing anybody ran or the best of
     forty.
 
-    Counted over the runs stored before this one on the same question set,
-    which is the same store the list endpoint already reads.
+    Counted over the runs stored before this one on the same question set.
+    Summaries carry every field this counts, and a summary is a stored run
+    without its answers, so counting forty of them costs what reading one used
+    to.
     """
-    this = results.get(run_id)
-    if this is None:
-        return {}
-    dataset = this.dataset_name or this.config.dataset_name
+    dataset = _dataset_of(this)
     if not dataset:
         return {}
+    started = str(this.get("started_at") or "")
     earlier = [
-        r for r in results.values()
-        if (r.dataset_name or r.config.dataset_name) == dataset
-        and r.started_at and this.started_at and r.started_at < this.started_at
+        run for run in summaries.values()
+        if _dataset_of(run) == dataset
+        and run.get("started_at") and started and str(run["started_at"]) < started
     ]
     fusion_constants = {
-        getattr(r.config, "rrf_k", None) for r in [*earlier, this]
-        if getattr(r.config, "merge_strategy", "") == "rrf"
+        (run.get("config") or {}).get("rrf_k") for run in [*earlier, this]
+        if (run.get("config") or {}).get("merge_strategy", "") == "rrf"
     }
     return {
         "dataset_name": dataset,
         "runs_before": len(earlier),
-        "configurations_before": len({r.config.config_hash for r in earlier}),
+        "configurations_before": len({run.get("config_hash", "") for run in earlier}),
         "fusion_constants_tried": sorted(c for c in fusion_constants if c is not None),
-        "merge_strategy": getattr(this.config, "merge_strategy", ""),
+        "merge_strategy": (this.get("config") or {}).get("merge_strategy", ""),
     }
 
 
@@ -2035,7 +2186,7 @@ async def experiment_progress(websocket: WebSocket, run_id: str) -> None:
             if run_id in _errors:
                 await websocket.send_text(json.dumps({"type": "error", "run_id": run_id, "detail": _errors[run_id]}))
                 break
-            if run_id not in _running and run_id in await _get_results() and sent >= len(events):
+            if run_id not in _running and await _run_exists(run_id) and sent >= len(events):
                 await websocket.send_text(json.dumps({"type": "done", "run_id": run_id}))
                 break
             await asyncio.sleep(0.2)
