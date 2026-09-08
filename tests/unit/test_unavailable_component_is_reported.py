@@ -45,6 +45,11 @@ class _Leaf:
 def _registry() -> ComponentRegistry:
     registry = ComponentRegistry()
     registry.register("pipeline", "naive", _Pipeline())
+    # The embedder the configuration below names. It was left out while the
+    # field was decorative and nothing resolved it; now that the build takes
+    # the embedder a run asked for, a registry without one is a run that could
+    # not produce a component it named, which is what this file is about.
+    registry.register("embedder", "bge", _Leaf())
     return registry
 
 
@@ -106,3 +111,37 @@ def test_a_run_stored_before_the_field_existed_says_nothing_rather_than_everythi
     """An absent list means the run predates the field, and never that every
     component was available. The same reading `coverage_check` already has."""
     assert ExperimentResult(config=_config()).to_dict()["unavailable_components"] == []
+
+
+def test_an_embedder_the_registry_has_not_got_is_named_like_any_other() -> None:
+    """The field the plan called decorative, now that it is not.
+
+    Both branches of the build used to take the pipeline's own embedder, so a
+    run naming another model queried with whatever the gateway had registered
+    and said nothing about the difference. It says it now, in the same list
+    every other component uses, and the run still happens: an uninstalled
+    component should not lose a measurement, it should be named in it.
+    """
+    registry = ComponentRegistry()
+    registry.register("pipeline", "naive", _Pipeline())
+    collected: list[str] = []
+    pipeline = ExperimentRunner(registry)._build_pipeline(
+        _config(embedder=ComponentRef(kind="embedder", component_id="a_model_nobody_installed")),
+        unavailable=collected,
+    )
+    assert collected == ["embedder:a_model_nobody_installed"]
+    assert pipeline is not None, "the run was lost instead of being told what it ran without"
+
+
+def test_the_embedder_a_run_names_is_the_one_it_queries_with() -> None:
+    """The half that makes the naming above worth anything: a registered
+    embedder is actually used, and not merely resolved and dropped."""
+    registry = _registry()
+    asked_for = _Leaf()
+    registry.register("embedder", "another_model", asked_for)
+    pipeline = ExperimentRunner(registry)._build_pipeline(
+        _config(embedder=ComponentRef(kind="embedder", component_id="another_model")),
+    )
+    # The stub keeps whatever it was constructed with, so this reads what the
+    # build handed over and not what the stub set for itself.
+    assert pipeline.embedder is asked_for

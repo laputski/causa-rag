@@ -113,13 +113,14 @@ function buildConfig(form: Record<string, string>, pipelines: Record<string, Pip
 
   const cfg: Record<string, unknown> = {
     name: form.name || 'experiment',
-    // Never varied from this form — see the design notes
-    // "Decorative": ExperimentRunner._build_pipeline reads none of
-    // chunking_strategy/embedder/retrievers/generator/seed for an in_process
-    // run (it resolves the whole pre-built pipeline object by pipeline_id
-    // alone); an external RAG doesn't read them either. They're still
-    // required by the ExperimentConfig schema, so fixed literals keep the
-    // config valid without pretending they're user choices.
+    // Never varied from this form, and the reason has narrowed. The build
+    // reads none of chunking_strategy/generator/seed for an in_process run,
+    // so those stay fixed literals that keep the config valid without
+    // pretending to be choices. `embedder` is no longer one of them: the
+    // build resolves it now and a run naming another model queries with it.
+    // Offering it here is a screen that has to be designed before it is
+    // written, so this sends the one the gateway registers and says why,
+    // instead of claiming nothing reads it.
     seed: 42,
     chunking_strategy: { kind: 'chunker', component_id: 'fixed' },
     embedder: { kind: 'embedder', component_id: 'bge_m3' },

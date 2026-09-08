@@ -179,8 +179,9 @@ class ExperimentConfig(BaseModel):
     # `capabilities.supported_params` (services/api_gateway/routers/
     # external_rags.py); the UI only lets a user vary knobs the RAG
     # declared, rather than silently sending a knob no RAG-side code reads
-    # (the exact decorative-field trap chunking_strategy/embedder/generator
-    # already fell into — see the design notes "Decorative").
+    # (the decorative-field trap chunking_strategy and generator are still in,
+    # and embedder was until the build started resolving it — see the design
+    # notes "Decorative").
     # No-op for in_process pipelines (nothing reads it there).
     params: dict[str, Any] = Field(default_factory=dict)
 

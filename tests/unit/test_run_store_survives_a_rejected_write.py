@@ -8,9 +8,12 @@ rejected existed on disk and appeared nowhere, for as long as any other run
 existed, which is always.
 
 The rejection is not hypothetical. A run document larger than the engine's
-limit is refused, and measured on this machine a run with a wide candidate
-window costs 215 KB per question, which puts the limit at roughly seventy-eight
-questions.
+limit is refused, and a run with a wide candidate window costs what
+`WORST_BYTES_PER_QUESTION` says per question, which puts the limit where
+`QUESTIONS_A_RUN_CAN_HOLD` does. Both are measured over the runs stored here
+by the test at the end of this file, because the prose that used to carry
+those numbers said 215 KB and seventy-eight questions long after the worst
+stored run had reached two and a half times that.
 """
 from __future__ import annotations
 
@@ -22,6 +25,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from services.api_gateway.routers import experiments as E
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def _stored_run(run_id: str, n_questions: int = 2) -> dict[str, Any]:
@@ -125,3 +130,46 @@ async def test_a_rejected_write_is_reported_and_the_file_copy_is_still_written(
     assert event == "experiment.save.database_rejected"
     assert fields["run_id"] == "big"
     assert "size_bytes" in fields, "the size is what tells a reader why it was rejected"
+
+
+def test_the_worst_rate_named_here_is_the_worst_rate_stored_here() -> None:
+    """The number in the prose above, tied to the runs it claims to describe.
+
+    A rate written into a docstring is a measurement with no way of going
+    stale loudly. This one had: it said 215 KB per question and a ceiling of
+    seventy-eight questions while the fattest stored run cost 522 KB, putting
+    the ceiling at thirty-one. Nothing pointed at the gap, and the decision
+    the plan hung on that number, whether to split a run's storage per
+    question, was being deferred on the old one.
+
+    A ratchet in the direction that matters: the stated worst case may exceed
+    the measured one and may never fall below it, so a fatter run reddens this
+    and whoever raises the number meets the ceiling it implies.
+    """
+    from services.api_gateway.routers.experiments import (
+        QUESTIONS_A_RUN_CAN_HOLD,
+        WORST_BYTES_PER_QUESTION,
+    )
+
+    stored = sorted((ROOT / "eval" / "results" / "runs").glob("*.json"))
+    if not stored:
+        pytest.skip("NOT RUN: no stored run to measure")
+
+    worst = 0
+    fattest = ""
+    for path in stored:
+        run = json.loads(path.read_text(encoding="utf-8"))
+        questions = len(run.get("question_results") or [])
+        if not questions:
+            continue
+        rate = len(json.dumps(run, separators=(",", ":"))) // questions
+        if rate > worst:
+            worst, fattest = rate, path.name
+
+    assert worst, "no stored run carries a question, so this measures nothing"
+    assert worst <= WORST_BYTES_PER_QUESTION, (
+        f"{fattest} costs {worst} bytes per question and the constant says "
+        f"{WORST_BYTES_PER_QUESTION}. Raise it, and read the ceiling it implies: a run of "
+        f"that shape then holds {16 * 1024 * 1024 // worst} questions."
+    )
+    assert QUESTIONS_A_RUN_CAN_HOLD == 16 * 1024 * 1024 // WORST_BYTES_PER_QUESTION

@@ -28,7 +28,9 @@ What this module deliberately does not do:
 
 - it does not add a dimension. A mechanism the twenty-eight do not express
   belongs to RAG World's own residual queue, under its own rule of three
-  mentions, and not to a private vocabulary here;
+  mentions, and not to a private vocabulary here. Three were found while
+  scoping the failure catalogue and are written up for submission in
+  `docs/rag-world-residual-submissions.md`, measured and ready to be lifted;
 - it does not carry constraints between values. Validating a configuration is
   the registry's work; this platform only asks whether a point satisfies a
   predicate;

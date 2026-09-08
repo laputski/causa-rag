@@ -724,8 +724,10 @@ def detect_index_and_query_models_differ(run: dict[str, Any]) -> DiagnosticItem 
     while the corpus stayed as it was.
 
     Read from what ran and from what loaded, never from the configuration:
-    `config.embedder` is accepted and never applied, so it states an
-    intention. Silent when either record is missing, which is a different
+    Read off what ran and never off the configuration. The configuration says
+    which model to query with and the load record says which one indexed the
+    corpus, and no setting can change the second: it was fixed when the corpus
+    was built. Silent when either record is missing, which is a different
     finding about a corpus loaded before manifests existed.
     """
     applied = run.get("applied") or {}

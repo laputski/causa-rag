@@ -271,6 +271,34 @@ def _rebind_merge(retriever: Any, merge: str | None, alpha: float | None,
         return retriever
 
 
+def _embedder_for(registry: Any, ref: Any, fallback: Any, unavailable: list[str] | None) -> Any:
+    """The embedder the configuration names, or the pipeline's own.
+
+    This field was accepted and never applied: both branches of the build took
+    the pipeline's embedder, so a run naming another model queried with the
+    one the gateway happened to have registered and said nothing. What was
+    built instead of applying it was a way to see it, `applied` beside
+    `corpus_manifest`, and a finding that reads the two, so the lie was
+    visible and still a lie. A field a form can set and nothing reads is the
+    trap this whole proving ground exists to find.
+
+    Degraded and never raised when the registry has no such embedder, which is
+    what every other component here does: a run whose configuration named
+    something uninstalled should still run, and should say what it ran
+    without. What must not happen is the third thing, running without it and
+    saying nothing.
+    """
+    if ref is None:
+        return fallback
+    try:
+        return registry.resolve("embedder", ref.component_id)
+    except KeyError:
+        log.warning("experiment.component.unavailable", kind="embedder", id=ref.component_id)
+        if unavailable is not None:
+            unavailable.append(f"embedder:{ref.component_id}")
+        return fallback
+
+
 def _rebind_generator(generator: Any, model: str | None) -> Any:
     """Rebuild `generator` bound to `model` if a per-run override was
     requested and it isn't already using it.
@@ -460,10 +488,13 @@ class ExperimentResult:
     # detector treats as "nothing to say" rather than as a problem.
     coverage_check: dict[str, Any] = field(default_factory=dict)
     # What actually ran, as opposed to what the configuration asked for. The
-    # two differ today: `config.embedder` is accepted and never applied, both
-    # branches of the build take the registry's own embedder, so a check
-    # reading the configuration would compare an intention with a record and
-    # neither would be what happened.
+    # two can still differ, and the reason is no longer that a field is
+    # ignored: `config.embedder` is applied now, and a run naming a model the
+    # registry has not got degrades to the pipeline's own and says so in
+    # `unavailable_components`. What no configuration can express is the model
+    # a corpus was *indexed* with, which is fixed at load time, so a check
+    # reading the configuration alone would still compare an intention with a
+    # record and neither would be what happened.
     applied: dict[str, Any] = field(default_factory=dict)
     # What the corpus this run queried was built from and built by. Filled by
     # the services layer, which can reach the registry; core may not.
@@ -658,12 +689,13 @@ class ExperimentRunner:
         # wrapper is rebuilt around a base already bound to the right corpus.
         retriever = _rebind_graph(retriever, config.graph_weight, config.hops)
         generator = _rebind_generator(base._generator, (config.params or {}).get("model"))
+        embedder = _embedder_for(self._registry, config.embedder, base._embedder, unavailable)
 
         if (config.reranker is None and config.grounding is None and config.route_policy is None
                 and config.scorer is None and config.mask_engine is None and config.refusal_policy is None):
             return type(base)(
                 retriever=retriever,
-                embedder=base._embedder,
+                embedder=embedder,
                 generator=generator,
                 top_k=config.top_k,
                 fetch_k=config.fetch_k,
@@ -687,7 +719,7 @@ class ExperimentRunner:
 
         return ConfigurablePipeline(
             retriever=retriever,
-            embedder=base._embedder,
+            embedder=embedder,
             generator=generator,
             top_k=config.top_k,
             fetch_k=config.fetch_k,

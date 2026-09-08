@@ -43,6 +43,21 @@ _errors: dict[str, str] = {}
 # thread, same GIL-atomic set-membership-check safety as _progress's
 # list.append) makes ExperimentRunner.run() notice it between questions.
 _stop_requested: set[str] = set()
+#: What a run costs in the database, per question, at its worst.
+#:
+#: Measured over every run stored in this repository and never estimated, and
+#: named here because two places state it in prose and both had gone stale: it
+#: stood at 215 KB, which was the worst rate when it was written and put the
+#: ceiling at seventy-eight questions. A guard now reads the stored runs and
+#: reddens when one of them costs more than this says, so the number moves
+#: when the measurement does and the ceiling below moves with it.
+#:
+#: The rate is driven by `candidate_source_refs`, which carries the whole text
+#: of every candidate: a wide fetch window with a reranker is what reaches it.
+WORST_BYTES_PER_QUESTION = 533_911
+#: How many questions a run of that shape can hold before the engine refuses
+#: the document. The engine's own limit is 16 MiB.
+QUESTIONS_A_RUN_CAN_HOLD = 16 * 1024 * 1024 // WORST_BYTES_PER_QUESTION
 # Minimal metadata stored at run start so list_experiments can show running
 # runs before they complete and land in _get_results().
 _running_meta: dict[str, dict[str, Any]] = {}
@@ -54,9 +69,10 @@ async def _save(result: ExperimentResult) -> None:
     """Write the run to the database and to a file beside it.
 
     The database write is allowed to fail: a run document larger than the
-    engine's own limit is rejected, and measured on this machine a run with a
-    wide candidate window reaches 215 KB per question, which puts that limit
-    around seventy-eight questions. The file copy is what survives it.
+    engine's own limit is rejected, and a run with a wide candidate window
+    costs `WORST_BYTES_PER_QUESTION` of document per question, which puts that
+    limit where `QUESTIONS_A_RUN_CAN_HOLD` says. The file copy is what
+    survives it.
 
     The failure is logged now. It used to be swallowed. With `_get_results` preferring the database whenever it returned anything
     at all, a rejected run existed on disk and appeared nowhere: not in the

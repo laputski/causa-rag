@@ -78,6 +78,12 @@ def test_openapi_snapshot_exists_and_has_routes():
 
     Prevents accidental silent removal of endpoints. Regenerate the snapshot
     with `make openapi` after intentional API changes.
+
+    Paths, and nothing under them. Several handlers return a bare object, so
+    the snapshot describes no field of any response and rebuilding it after
+    adding one produces no change at all. That was read twice as evidence that
+    a response shape had not moved; `tests/fitness/test_a_finding_keeps_its_shape.py`
+    is what actually holds one of those shapes.
     """
     snapshot = ROOT / "governance" / "openapi.json"
     if not snapshot.exists():
