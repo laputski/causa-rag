@@ -652,6 +652,49 @@ def detect_segmentation_did_not_do_what_it_says(run: dict[str, Any]) -> Diagnost
     )
 
 
+def detect_named_and_indexed_segmentation_differ(
+    run: dict[str, Any],
+) -> DiagnosticItem | None:
+    """The run named one segmentation and searched an index built by another.
+
+    A corpus is cut when it is loaded and a run reads what the cut produced,
+    so naming a strategy on a run selects nothing at all. The name is recorded
+    all the same, on the run and on every comparison built from it, and two
+    runs differing only in that name are two runs of one strategy while the
+    screen says they are two.
+
+    Read off the configuration on purpose, which is the opposite of what the
+    check above it does and for the opposite reason. The model a run names is
+    applied, so reading the configuration for it would state an intention;
+    the strategy a run names is applied by nothing, and this finding is
+    exactly that the record and the run disagree.
+
+    The index it searched is what the retriever says its collection is
+    namespaced by, and the load record answers for a run stored before that
+    was recorded. Silent when neither is there, which is a run from before
+    either existed and never a run that agrees.
+    """
+    named = ((run.get("config") or {}).get("chunking_strategy") or {}).get("component_id")
+    applied = run.get("applied") or {}
+    manifest = run.get("corpus_manifest") or {}
+    indexed = applied.get("index_chunking_strategy") or manifest.get("chunking_strategy")
+    if not named or not indexed or named == indexed:
+        return None
+    return DiagnosticItem(
+        id="named_and_indexed_segmentation_differ",
+        severity="error",
+        title="The segmentation this run names is not the one its index was built with",
+        detail=(
+            f"This run names {named!r} and the fragments it searched were cut by {indexed!r}. "
+            "Segmentation happens when a corpus is loaded, so the name on the run selected "
+            "nothing, and two runs differing only in it differ in nothing."
+        ),
+        action="Load the corpus with the strategy this run names and query that index, or "
+               "record on the run the strategy its index was really built with.",
+        params={"named": named, "indexed": indexed},
+    )
+
+
 def detect_tuned_on_the_measurement_set(run: dict[str, Any]) -> DiagnosticItem | None:
     """The number is the best of a search over the questions it is measured on.
 
@@ -1000,6 +1043,7 @@ def run_detectors(run: dict[str, Any]) -> list[DiagnosticItem]:
         detect_metric_without_grounds(run),
         detect_index_and_query_models_differ(run),
         detect_segmentation_did_not_do_what_it_says(run),
+        detect_named_and_indexed_segmentation_differ(run),
         detect_tuned_on_the_measurement_set(run),
         detect_fusion_constant_never_varied(run),
         detect_unmeasured_stage_cost(run),

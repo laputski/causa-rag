@@ -959,6 +959,32 @@ FAILURES: tuple[FailureMode, ...] = (
         bait="tests/unit/test_atlas_baits.py::test_bait[F43]",
     ),
     FailureMode(
+        id="F44",
+        atlas_rows=(),
+        title="The segmentation a run declares is not the one its index was built with",
+        stage_origin="chunking",
+        stage_visible="retrieval",
+        severity=Severity(3, 3, 2),
+        origin="mechanism",
+        detection="detector",
+        instrument="config",
+        applies_when=(("A2", ("fixed", "structure_aware", "late_chunking", "semantic")),),
+        # A corpus is cut when it is loaded, so a run naming a segmentation
+        # selects nothing: it reads whatever the cut produced. The name is
+        # recorded all the same, on the run and on every comparison built from
+        # it, so two runs differing only in that name are two runs of one
+        # strategy while the screen says they are two, and the answer to "what
+        # does this segmentation cost" comes back as "nothing".
+        #
+        # Distinct from the entry about a segmentation breaking its own
+        # promise, and by the rule that separates them: the fixes differ. That
+        # one is fixed in the strategy, which produced something other than
+        # what its name commits it to. This one is fixed by loading the corpus
+        # the run wants, or by recording what was really read.
+        signals=(Signal("detector", "named_and_indexed_segmentation_differ"),),
+        bait="tests/unit/test_atlas_baits.py::test_bait[F44]",
+    ),
+    FailureMode(
         id="F41",
         atlas_rows=(),
         title="The guard against a runaway link step leaves a graph with no edges at all",

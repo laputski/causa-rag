@@ -273,5 +273,7 @@ def test_the_two_instruments_together_cover_what_used_to_be_one() -> None:
     # to be what stages a missing lexical half, and twelve since a load was
     # measured to be what stages a unit longer than the model's window: the
     # documents alone provoke nothing there, because the segmentation caps a
-    # unit far below any window.
-    assert len(claimed_by_config | claimed_by_ingest) == 12
+    # unit far below any window. Thirteen since a run was found able to name a
+    # segmentation its index was not built with, which a setting stages and
+    # nothing applies.
+    assert len(claimed_by_config | claimed_by_ingest) == 13

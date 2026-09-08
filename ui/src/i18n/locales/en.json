@@ -74,7 +74,8 @@
       "F40": "One half of the retrieval is absent and every setting still says two",
       "F41": "The guard against a runaway link step leaves a graph with no edges at all",
       "F42": "Fragments carry a heading and no body",
-      "F43": "The index holds nothing and every metric reports a total failure"
+      "F43": "The index holds nothing and every metric reports a total failure",
+      "F44": "The segmentation a run declares is not the one its index was built with"
     },
     "gapDetail": "Nothing is known about failures peculiar to them. That is a gap in the catalogue, not a clean bill of health.",
     "gapTitle": "Some coordinates of this point are spoken about by no entry",
@@ -2090,7 +2091,8 @@
       "index_and_query_models_differ": "The index and the query do not use the same model",
       "tuned_on_the_measurement_set": "The reported number is the best of a search on these same questions",
       "fusion_constant_never_varied": "The rank-fusion constant has never been anything else",
-      "segmentation_broke_its_promise": "The segmentation did not do what its name says"
+      "segmentation_broke_its_promise": "The segmentation did not do what its name says",
+      "named_and_indexed_segmentation_differ": "The segmentation this run names is not the one its index was built with"
     },
     "findingAction": {
       "embedder_unverified": "Read the run's recall against its reference sources: a corpus indexed by a stub model retrieves at chance.",
@@ -2110,7 +2112,8 @@
       "index_and_query_models_differ": "Query with the model the corpus was indexed by, or load the corpus again with the model the run uses.",
       "tuned_on_the_measurement_set": "Report the number on a question set no configuration was chosen on, or say how many were tried beside it.",
       "fusion_constant_never_varied": "Run the same configuration once with a different fusion constant and compare, so the value in use is a measured choice.",
-      "segmentation_broke_its_promise": "Load the corpus again with a strategy whose promise its documents can keep, or fix what stopped this one keeping it."
+      "segmentation_broke_its_promise": "Load the corpus again with a strategy whose promise its documents can keep, or fix what stopped this one keeping it.",
+      "named_and_indexed_segmentation_differ": "Load the corpus with the strategy this run names and query that index, or record on the run the strategy its index was really built with."
     },
     "traceGap": {
       "sources": {
@@ -2153,6 +2156,7 @@
       "undeclared_metric": "{{undeclared}} of {{metrics}} metrics in this run declare nothing about what they compute or over which questions: {{names}}. Their names are all a reader has, so a name that stopped matching its definition would look exactly like this run does.",
       "aggregate_disagrees": "{{disagreeing}} of {{metrics}} metrics do not survive being recomputed from the questions of this same run: {{named}}. Whatever these numbers describe, it is not what the questions recorded.",
       "segmentation_broke_its_promise": "The corpus was loaded with '{{strategy}}' and its own check of the result did not pass: {{unmet}}.",
+      "named_and_indexed_segmentation_differ": "This run names '{{named}}' and the fragments it searched were cut by '{{indexed}}'. Segmentation happens when a corpus is loaded, so the name on the run selected nothing, and two runs differing only in it differ in nothing.",
       "tuned_on_the_measurement_set": "{{tried}} other configuration(s) were run on '{{dataset}}' before this one. A figure chosen after a search over a question set is partly the search, and how much of it cannot be recovered from the figure.",
       "fusion_constant_never_varied": "Every rank-fusion run on '{{dataset}}' used the same constant, {{constant}}. It is the value the method was published with, and on this corpus and these questions nobody has measured whether it is a good one.",
       "index_and_query_models_differ": {

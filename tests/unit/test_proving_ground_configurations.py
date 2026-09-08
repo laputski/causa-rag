@@ -102,7 +102,7 @@ def test_the_pairs_the_proving_ground_can_actually_stage() -> None:
         for distortion in DISTORTIONS
         if _applies(distortion, corpus)
     ]
-    assert len(staged) == 9, staged
+    assert len(staged) == 11, staged
     assert ("base-en", "rerank_in_another_language") not in staged
 
 

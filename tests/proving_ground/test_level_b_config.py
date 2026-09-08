@@ -275,6 +275,48 @@ def test_F25_a_window_equal_to_the_selection_leaves_nothing_to_rescue(
            signals=sorted(detector_signals(broken)))
 
 
+def test_F44_the_run_names_a_segmentation_its_index_was_not_built_with(
+    embedder: Any, control: dict[str, Any]
+) -> None:
+    """A run configured for one segmentation, reading fragments cut by another.
+
+    The pair is unusual in that the two halves retrieve identically, and that
+    is the finding itself: the field selects nothing, so the run it names is
+    the run it would have been. What differs is the record, and the record is
+    what a later comparison is keyed on.
+
+    The healthy half is the ordinary case and matters more than usual here.
+    Every run of this platform names a segmentation, and on a healthy one the
+    name and the index agree; a check that spoke on agreement would speak on
+    every run there is.
+    """
+    broken = _distorted(embedder, "name_another_segmentation")
+    signal = "detector:named_and_indexed_segmentation_differ"
+
+    assert signal not in detector_signals(control), (
+        "the signal speaks where the name and the index agree, so it says nothing about "
+        "the half that carries the defect"
+    )
+    assert signal in detector_signals(broken), (
+        f"the run names a segmentation its index was not built with and nothing says so: "
+        f"{sorted(detector_signals(broken))}"
+    )
+    # And the half of it that makes the entry worth having: the two runs are
+    # the same run. A reader told that one used another segmentation would be
+    # reading a difference that is not there.
+    assert recall(control) == recall(broken), (
+        "the two halves retrieved differently, so the field did something after all and "
+        "this entry is about something else"
+    )
+    record("F44", "a run named a segmentation its index was not built with, and retrieved "
+                  "exactly what the run naming the right one retrieved",
+           named_by_the_control=control["config"]["chunking_strategy"]["component_id"],
+           named_by_the_broken_half=broken["config"]["chunking_strategy"]["component_id"],
+           index_built_with=(broken.get("applied") or {}).get("index_chunking_strategy"),
+           recall_control=recall(control), recall_broken=recall(broken),
+           signals=sorted(detector_signals(broken)))
+
+
 def test_F24_a_reranker_that_does_not_know_the_language_drops_what_retrieval_found(
     embedder: Any, control: dict[str, Any]
 ) -> None:

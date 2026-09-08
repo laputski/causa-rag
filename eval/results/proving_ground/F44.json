@@ -1,0 +1,16 @@
+{
+  "failure_id": "F44",
+  "recorded_at": "2026-09-08T19:27:44.382240+00:00",
+  "reproduced": true,
+  "claim": "a run named a segmentation its index was not built with, and retrieved exactly what the run naming the right one retrieved",
+  "measured": {
+    "named_by_the_control": "structure_aware",
+    "named_by_the_broken_half": "fixed",
+    "index_built_with": "structure_aware",
+    "recall_control": 0.9411764705882353,
+    "recall_broken": 0.9411764705882353,
+    "signals": [
+      "detector:named_and_indexed_segmentation_differ"
+    ]
+  }
+}

@@ -155,6 +155,30 @@ def _rerank_in_another_language(config: ExperimentConfig) -> ExperimentConfig:
     ))
 
 
+# Every segmentation this platform can name on a configuration. A corpus is cut
+# by one of these when it is loaded, and the index carries the name of the one
+# that cut it, so naming a different one on a run is what the distortion below
+# does.
+SEGMENTATIONS = ("fixed", "structure_aware", "sentence", "paragraph")
+
+
+def _name_another_segmentation(config: ExperimentConfig) -> ExperimentConfig:
+    """Name a segmentation the index was not built with.
+
+    The field selects nothing: a corpus is cut at load time and a run reads
+    what the cut produced. That is the whole failure. The run records the name
+    all the same, so two runs differing only in it are two runs of one
+    strategy while every screen and every stored document says they are two.
+
+    Any other name will do, since none of them is the one the index carries
+    once this has run. The first that differs is taken, so the same
+    configuration always distorts the same way and a bait can be repeated.
+    """
+    named = config.chunking_strategy.component_id
+    other = next(s for s in SEGMENTATIONS if s != named)
+    return _replace(config, chunking_strategy=ComponentRef(kind="chunker", component_id=other))
+
+
 def _replace(config: ExperimentConfig, **fields: Any) -> ExperimentConfig:
     """A copy carrying the changes, with the fingerprint recomputed.
 
@@ -196,6 +220,11 @@ DISTORTIONS: tuple[Distortion, ...] = (
                ("F25",), ("fetch_k",), _close_the_candidate_window,
                requires="reranks, since a window matters only to a step that reorders",
                admits=lambda c, _: c.reranker is not None and c.fetch_k != c.top_k),
+    Distortion("name_another_segmentation",
+               "the run names a segmentation its index was not built with",
+               ("F44",), ("chunking_strategy",), _name_another_segmentation,
+               requires="names a segmentation at all, since the distortion is to name another",
+               admits=lambda c, _: bool(c.chunking_strategy.component_id)),
     Distortion("rerank_in_another_language",
                "the reranker is a model trained on English alone",
                ("F24",), ("reranker",), _rerank_in_another_language,

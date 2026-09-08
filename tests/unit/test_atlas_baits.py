@@ -498,6 +498,36 @@ def bait_F12_the_model_changed_and_the_corpus_did_not() -> set[str]:
         {**_HEALTHY_MANIFEST, "embedder_version": "0.9.0"}, _HEALTHY_APPLIED))
 
 
+def bait_F44_the_run_names_one_segmentation_and_searched_another() -> set[str]:
+    """A run configured for one segmentation, reading fragments cut by
+    another.
+
+    Both halves of the pair matter here more than usual, because the healthy
+    half is the ordinary case: every run of this platform names a strategy,
+    and on a healthy run the name and the index agree. A check that fired on
+    agreement would fire on every run there is.
+    """
+    run = _run_with(
+        {**_HEALTHY_MANIFEST, "chunking_strategy": "fixed"},
+        {**_HEALTHY_APPLIED, "index_chunking_strategy": "fixed"},
+    )
+    run["config"] = {**run["config"],
+                     "chunking_strategy": {"kind": "chunker", "component_id": "structure_aware"}}
+    fired = _detector_ids(run)
+
+    agreeing = _run_with(
+        {**_HEALTHY_MANIFEST, "chunking_strategy": "structure_aware"},
+        {**_HEALTHY_APPLIED, "index_chunking_strategy": "structure_aware"},
+    )
+    agreeing["config"] = {**agreeing["config"],
+                          "chunking_strategy": {"kind": "chunker",
+                                                "component_id": "structure_aware"}}
+    assert "detector:named_and_indexed_segmentation_differ" not in _detector_ids(agreeing), (
+        "the check fires where the name and the index agree, which is every healthy run"
+    )
+    return fired
+
+
 def bait_F09_the_corpus_changed_between_two_runs() -> set[str]:
     """One corpus name over two different sets of documents. A difference in
     the numbers is then a difference in the documents, and the platform said
@@ -654,6 +684,7 @@ BAITS = {
     "F10": bait_F10_stub_embedder,
     "F11": bait_F11_indexed_by_one_model_queried_by_another,
     "F12": bait_F12_the_model_changed_and_the_corpus_did_not,
+    "F44": bait_F44_the_run_names_one_segmentation_and_searched_another,
     "F14": bait_F14_model_does_not_cover_the_language,
     "F15": bait_F15_semantic_search_misses_an_identifier,
     "F16": bait_F16_keyword_search_misses_a_paraphrase,
