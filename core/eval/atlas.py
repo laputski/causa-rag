@@ -162,26 +162,34 @@ class FailureMode:
     def title_key(self) -> str:
         return f"atlasPage.entry.{self.id}"
 
-    @property
-    def state(self) -> str:
+    def state_given(self, staged: bool) -> str:
         """What the platform can do about this entry today, in one word.
 
         Four, and the difference between them is the reason the catalogue is
         worth reading. `caught`: a signal decides it and a bait proved both
         ends. `visible`: the data shows something and a person concludes.
-        `unproven`: a signal is named and its bait waits on a proving ground
-        that does not exist, so nobody has watched it fire. `none`: nothing
-        catches it, and the entry has to say what is missing.
+        `unproven`: a signal is named, its bait runs only on a proving ground,
+        and no run of it has filed what it saw, so nobody has watched it fire.
+        `none`: nothing catches it, and the entry has to say what is missing.
 
         Computed here because it was computed in two places for a while, once
         in a reporting tool and once in the interface, in two languages with
         nothing holding them to the same answer. That is the drift this whole
         catalogue exists to make impossible, and it had been built into the
         catalogue's own readers.
+
+        `staged` is the one part an entry cannot know about itself, and it is
+        asked for and never assumed. The rule used to read the bait's path
+        alone and call every proving-ground bait unproven, which was true when
+        there was no proving ground and became false the day one ran: two
+        entries were reproduced with their numbers on file and the interface
+        went on telling a reader that nobody had proved them. A caller with no
+        evidence has to say so by passing False, and gets the old answer for
+        the honest reason.
         """
         if self.detection == "none":
             return "none"
-        if self.bait.startswith("tests/proving_ground/"):
+        if self.bait.startswith("tests/proving_ground/") and not staged:
             return "unproven"
         return "caught" if self.detection == "detector" else "visible"
 

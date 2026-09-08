@@ -23,19 +23,12 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 from typing import Any
 
 from core.eval import rag_space
 from core.eval.atlas import FAILURES, FailureMode, applicable_to, uncovered_coordinates
+from core.eval.proving_ground import reproduced
 from core.eval.rag_space import POINTS
-
-#: Where a proving-ground bait files what it observed. One file per entry,
-#: written by the run itself, so this answer comes from the filesystem and not
-#: from a constant. It was a constant returning False, which was true on the
-#: day it was written and stayed in the file after the first entries were
-#: reproduced, reporting nothing staged while six were.
-EVIDENCE = Path(__file__).resolve().parent.parent / "eval" / "results" / "proving_ground"
 
 
 def _staged(f: FailureMode) -> bool:
@@ -43,18 +36,10 @@ def _staged(f: FailureMode) -> bool:
 
     Reported and not assumed, so `not staged` never reads as `not caught`: the
     first says nobody looked, the second says somebody looked and nothing
-    spoke.
+    spoke. Read by the catalogue's own reader, because the interface needs the
+    same answer and had been computing none at all.
     """
-    evidence = EVIDENCE / f"{f.id}.json"
-    if not evidence.is_file():
-        return False
-    # A file recording why an entry cannot be staged here is not a staging.
-    # Counting one would put an entry in the reproduced column for having
-    # proved that it could not be reproduced.
-    try:
-        return bool(json.loads(evidence.read_text(encoding="utf-8")).get("reproduced", True))
-    except (OSError, ValueError):
-        return True
+    return reproduced(f.id)
 
 
 def rows(point_name: str) -> list[dict[str, Any]]:
@@ -67,7 +52,8 @@ def rows(point_name: str) -> list[dict[str, Any]]:
             "stage": f.stage_visible,
             "title": f.title,
             "severity": f.severity.total,
-            "state": f.state if _staged(f) else f"{f.state} (unstaged)",
+            "state": (f.state_given(True) if _staged(f)
+                      else f"{f.state_given(False)} (unstaged)"),
             "signals": [s.id for s in f.signals],
             "instrument": f.instrument,
             "staged": _staged(f),

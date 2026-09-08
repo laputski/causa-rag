@@ -27,7 +27,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from core.eval import atlas as catalogue
-from core.eval import rag_space
+from core.eval import proving_ground, rag_space
 
 router = APIRouter(prefix="/atlas", tags=["atlas"])
 
@@ -72,7 +72,11 @@ def _entry(f: catalogue.FailureMode, point: rag_space.Point | None = None) -> di
         },
         "origin": f.origin,
         "detection": f.detection,
-        "state": f.state,
+        # The catalogue decides the word and this layer supplies the one fact
+        # it cannot know: whether a pair has run and filed what it saw. Without
+        # it, two entries whose runs are on file were shown to a reader as
+        # unproven.
+        "state": f.state_given(proving_ground.reproduced(f.id)),
         "instrument": f.instrument,
         "signals": [{"id": s.id, "kind": s.kind, "name": s.name, "side": s.side} for s in f.signals],
         "applies_when": [
