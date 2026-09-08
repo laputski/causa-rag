@@ -1,6 +1,6 @@
 {
   "failure_id": "F16",
-  "recorded_at": "2026-09-07T20:57:52.019058+00:00",
+  "recorded_at": "2026-09-08T10:50:04.932872+00:00",
   "reproduced": true,
   "claim": "an index built under another language's analyser loses the paraphrases",
   "measured": {
