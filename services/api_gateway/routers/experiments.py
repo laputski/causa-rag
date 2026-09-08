@@ -46,15 +46,19 @@ _stop_requested: set[str] = set()
 #: What a run costs in the database, per question, at its worst.
 #:
 #: Measured over every run stored in this repository and never estimated, and
-#: named here because two places state it in prose and both had gone stale: it
-#: stood at 215 KB, which was the worst rate when it was written and put the
-#: ceiling at seventy-eight questions. A guard now reads the stored runs and
-#: reddens when one of them costs more than this says, so the number moves
-#: when the measurement does and the ceiling below moves with it.
+#: named here because two places stated it in prose with nothing holding them
+#: to a measurement. The number they stated turned out to be right; what was
+#: missing was anything that would notice if it stopped being.
+#:
+#: Measured the way the engine stores it, which is UTF-8. Serialising with the
+#: default escaping puts every Cyrillic character in six bytes instead of two
+#: and reports two and a half times this, which is how the figure was briefly
+#: revised to 522 KB and the ceiling to thirty-one questions. Nothing was over
+#: the limit then either.
 #:
 #: The rate is driven by `candidate_source_refs`, which carries the whole text
 #: of every candidate: a wide fetch window with a reranker is what reaches it.
-WORST_BYTES_PER_QUESTION = 533_911
+WORST_BYTES_PER_QUESTION = 212_235
 #: How many questions a run of that shape can hold before the engine refuses
 #: the document. The engine's own limit is 16 MiB.
 QUESTIONS_A_RUN_CAN_HOLD = 16 * 1024 * 1024 // WORST_BYTES_PER_QUESTION

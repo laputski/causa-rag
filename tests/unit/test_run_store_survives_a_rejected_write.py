@@ -11,9 +11,10 @@ The rejection is not hypothetical. A run document larger than the engine's
 limit is refused, and a run with a wide candidate window costs what
 `WORST_BYTES_PER_QUESTION` says per question, which puts the limit where
 `QUESTIONS_A_RUN_CAN_HOLD` does. Both are measured over the runs stored here
-by the test at the end of this file, because the prose that used to carry
-those numbers said 215 KB and seventy-eight questions long after the worst
-stored run had reached two and a half times that.
+by the test at the end of this file, because the prose that carried those
+numbers had nothing holding it to a measurement: the figure it stated was
+right, and an audit that measured with the wrong encoding revised it to two
+and a half times the truth and met nothing that argued back.
 """
 from __future__ import annotations
 
@@ -136,11 +137,14 @@ def test_the_worst_rate_named_here_is_the_worst_rate_stored_here() -> None:
     """The number in the prose above, tied to the runs it claims to describe.
 
     A rate written into a docstring is a measurement with no way of going
-    stale loudly. This one had: it said 215 KB per question and a ceiling of
-    seventy-eight questions while the fattest stored run cost 522 KB, putting
-    the ceiling at thirty-one. Nothing pointed at the gap, and the decision
-    the plan hung on that number, whether to split a run's storage per
-    question, was being deferred on the old one.
+    stale loudly, and this one had no way of being wrong loudly either. An
+    audit measured the store with the serialiser's default escaping, reported
+    522 KB per question against the stated 215 KB, and moved the ceiling from
+    seventy-eight questions to thirty-one. The stated figure was right and the
+    audit was wrong, and neither the prose nor anything else could say which.
+    Now the number is measured the way the engine stores it, and the decision
+    the plan hangs on it, whether to split a run's storage per question, has
+    something under it.
 
     A ratchet in the direction that matters: the stated worst case may exceed
     the measured one and may never fall below it, so a fatter run reddens this
@@ -162,7 +166,11 @@ def test_the_worst_rate_named_here_is_the_worst_rate_stored_here() -> None:
         questions = len(run.get("question_results") or [])
         if not questions:
             continue
-        rate = len(json.dumps(run, separators=(",", ":"))) // questions
+        # As the engine stores it. The default escaping writes a Cyrillic
+        # character as six bytes where UTF-8 writes two, which on this corpus
+        # reports two and a half times the real size.
+        rate = len(json.dumps(run, separators=(",", ":"),
+                              ensure_ascii=False).encode("utf-8")) // questions
         if rate > worst:
             worst, fattest = rate, path.name
 
