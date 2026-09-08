@@ -1,6 +1,6 @@
 {
   "failure_id": "F18",
-  "recorded_at": "2026-09-08T15:54:25.707145+00:00",
+  "recorded_at": "2026-09-08T19:27:13.916579+00:00",
   "reproduced": true,
   "claim": "narrowing the selection to one fragment loses what ranked below it",
   "measured": {

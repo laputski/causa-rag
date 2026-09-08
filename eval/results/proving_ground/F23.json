@@ -1,6 +1,6 @@
 {
   "failure_id": "F23",
-  "recorded_at": "2026-09-08T15:56:58.769654+00:00",
+  "recorded_at": "2026-09-08T19:30:10.251771+00:00",
   "reproduced": true,
   "claim": "a merge wired to one source returns what that source returns alone, on every question, and its trace reports two halves both doing work",
   "measured": {
@@ -8,8 +8,8 @@
     "merge_returned_one_source_unchanged": 19,
     "differed_from_the_honest_hybrid": 19,
     "trace_of_the_last_question": {
-      "dense_ms": 1.2,
-      "sparse_ms": 1.1,
+      "dense_ms": 1.6,
+      "sparse_ms": 1.4,
       "merge_ms": 0.0,
       "n_dense": 20,
       "n_sparse": 20

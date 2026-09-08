@@ -174,9 +174,9 @@ def _question_seeing_one_fragment_three_times() -> dict[str, Any]:
 
 def test_a_fragment_carries_its_text_once_in_its_question() -> None:
     """The three lists are three views of one retrieval, so a fragment that
-    reached the answer is in all of them. Measured over every run stored here,
-    each distinct fragment is written 1.8 times inside its own question and
-    the repeats are 71 MiB of a 206 MiB store."""
+    reached the answer is in all of them. Measured over every run stored here
+    before this was written, each distinct fragment was written 1.8 times
+    inside its own question and the repeats were 71 MiB of a 206 MiB store."""
     compressed = E._dedupe_texts(_question_seeing_one_fragment_three_times())
     question = compressed["question_results"][0]
     carrying = [ref for field in E._REF_FIELDS for ref in question[field]
@@ -239,3 +239,70 @@ def test_a_reference_that_carries_no_text_anywhere_is_left_alone() -> None:
     }]}
     assert E._restore_texts(data) == data
     assert E._restore_texts(E._dedupe_texts(data)) == data
+
+
+# ── What the store itself said when it was asked ─────────────────────────────
+#
+# Both of these were found by putting every stored run through the split and
+# the reassembly and comparing the result with what went in, before writing a
+# single document back. Seventy-two of a hundred and twenty-nine came back
+# changed.
+
+
+def test_a_fragment_identifier_that_does_not_determine_the_text_keeps_both() -> None:
+    """Two references, one identifier, two different sets of words.
+
+    A chunk identifier that identifies two texts is a failure this platform
+    keeps a catalogue entry for, so the store holding one is not a surprise:
+    one stored run has fifteen such references. Keyed on the identifier alone,
+    the deduplication read the first text over the second and the second was
+    gone for good. That run predates the split, so nothing has been lost; a
+    rewrite of the store would have lost it.
+    """
+    data = {"run_id": "r1", "question_results": [{
+        "question_id": "q0",
+        "source_refs": [_shared("c1", "motor unit"),
+                        _shared("c1", "indicates impeller blockage")],
+    }]}
+    compressed = E._dedupe_texts(data)
+    kept = [ref.get("chunk_text") for ref in compressed["question_results"][0]["source_refs"]]
+    assert kept == ["motor unit", "indicates impeller blockage"], (
+        "one fragment identifier carrying two texts lost one of them"
+    )
+    assert E._restore_texts(compressed) == data
+
+
+def test_a_repeat_of_the_same_text_under_that_identifier_is_still_dropped() -> None:
+    """The half that keeps the fix above from turning the saving off."""
+    data = {"run_id": "r1", "question_results": [{
+        "question_id": "q0",
+        "source_refs": [_shared("c1", "motor unit"),
+                        _shared("c1", "indicates impeller blockage"),
+                        _shared("c1", "motor unit")],
+    }]}
+    compressed = E._dedupe_texts(data)
+    refs = compressed["question_results"][0]["source_refs"]
+    assert "chunk_text" not in refs[2], "a repeat of a text already stored was stored again"
+    assert E._restore_texts(compressed) == data
+
+
+def test_a_window_written_as_an_empty_list_is_still_there_afterwards() -> None:
+    """The split takes out what it moved and leaves what it did not.
+
+    It used to take out both fields whichever of them had moved, so a list
+    written as empty on purpose came back absent. Nothing reads the difference
+    today, and a reader that told an absent list from an empty one would have
+    been told the wrong thing. Four thousand one hundred and forty-six
+    questions across the store carry such a list.
+    """
+    data = {"run_id": "r1", "question_results": [{
+        "question_id": "q0",
+        "source_refs": [_shared("c1", "a fragment")],
+        "pre_rerank_source_refs": [],
+        "candidate_source_refs": [_shared("c2", "a candidate")],
+    }]}
+    light, windows = E._split_windows(data)
+    question = light["question_results"][0]
+    assert question["pre_rerank_source_refs"] == [], "an empty list was taken out with the full one"
+    assert "candidate_source_refs" not in question, "the list that moved is still in the run"
+    assert E._merge_windows(light, windows) == data

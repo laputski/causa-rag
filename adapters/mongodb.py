@@ -80,7 +80,13 @@ async def find_many(
         cursor = cursor.sort(sort)
     if limit:
         cursor = cursor.limit(limit)
-    docs = await cursor.to_list(length=limit or 1000)
+    # No limit means no limit. It used to mean a thousand, which is a policy
+    # nobody chose and nobody could see: a collection with more in it came back
+    # short and correct-looking. Found by counting. The retrieval windows split
+    # off the runs are 3795 documents, so one query for every run's windows
+    # answered for 24 of 129 runs and the rest were served as runs that
+    # recorded no window, which is what a run genuinely missing one looks like.
+    docs = await cursor.to_list(length=limit or None)
     for doc in docs:
         if "_id" in doc:
             doc["_id"] = str(doc["_id"])

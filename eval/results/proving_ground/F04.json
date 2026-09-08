@@ -1,6 +1,6 @@
 {
   "failure_id": "F04",
-  "recorded_at": "2026-09-08T15:56:20.432032+00:00",
+  "recorded_at": "2026-09-08T19:29:28.944404+00:00",
   "reproduced": true,
   "claim": "repeat_a_structural_number in the documents is read off the index by health:duplicate_structural_numbers",
   "measured": {

@@ -56,7 +56,11 @@ _stop_requested: set[str] = set()
 #: and reports two and a half times this, which is how the figure was briefly
 #: revised to 522 KB and the ceiling to thirty-one. Nothing was over the limit
 #: then either.
-WORST_BYTES_PER_QUESTION = 35_795
+#:
+#: It rose by 28 bytes when the split stopped taking out an empty list of
+#: windows along with the full ones. That is the price of a run coming back
+#: shaped the way it was stored, and the ceiling below does not move for it.
+WORST_BYTES_PER_QUESTION = 35_823
 #: How many questions a run of that shape can hold before the engine refuses
 #: the document. The engine's own limit is 16 MiB.
 QUESTIONS_A_RUN_CAN_HOLD = 16 * 1024 * 1024 // WORST_BYTES_PER_QUESTION
@@ -98,8 +102,10 @@ def _dedupe_texts(data: dict[str, Any]) -> dict[str, Any]:
     A question's candidate window, its pre-rerank list and its final context
     are three views of one retrieval, so a fragment that reached the answer
     appears in all three and used to carry its own text in each. Measured over
-    every run stored here: each distinct fragment is written 1.8 times inside
-    its own question, and the repeats are 71 MiB of a 206 MiB store.
+    every run stored here before this was written: each distinct fragment was
+    written 1.8 times inside its own question, and the repeats were 71 MiB of
+    a 206 MiB store. The store has since been rewritten in this shape and is
+    211 MiB where it was 296.
 
     Only inside one question, which is what keeps this cheap to undo. A table
     shared by a whole run would save more and would grow with the corpus the
@@ -108,10 +114,20 @@ def _dedupe_texts(data: dict[str, Any]) -> dict[str, Any]:
 
     The text is dropped and never emptied: a reader restoring it fills the key
     where it is absent, so a fragment whose text really is empty stays empty.
+
+    Dropped only where it repeats the text already seen for that fragment, and
+    never merely because the identifier repeats. An identifier that does not
+    determine the text is a failure this platform keeps a catalogue entry for,
+    and one stored run exhibits it: fifteen of its references share an
+    identifier with another and carry different words. Keyed on the identifier
+    alone, this read the first text over the second and the second was gone.
+    Found by putting every stored run through the split and the reassembly and
+    comparing, which is the check `tools/compact_run_storage.py` makes before
+    it writes anything. Nothing was lost: the rewrite ran afterwards.
     """
     questions = []
     for question in data.get("question_results") or []:
-        seen: set[str] = set()
+        seen: dict[str, Any] = {}
         rewritten = dict(question)
         for field in _REF_FIELDS:
             refs = question.get(field)
@@ -120,12 +136,16 @@ def _dedupe_texts(data: dict[str, Any]) -> dict[str, Any]:
             out = []
             for ref in refs:
                 chunk_id = ref.get("chunk_id")
-                if chunk_id and chunk_id in seen:
-                    out.append({k: v for k, v in ref.items() if k != "chunk_text"})
-                else:
-                    if chunk_id:
-                        seen.add(chunk_id)
-                    out.append(ref)
+                carries_text = "chunk_text" in ref
+                if chunk_id and carries_text and chunk_id in seen:
+                    if seen[chunk_id] == ref["chunk_text"]:
+                        out.append({k: v for k, v in ref.items() if k != "chunk_text"})
+                    else:
+                        out.append(ref)
+                    continue
+                if chunk_id and carries_text:
+                    seen[chunk_id] = ref["chunk_text"]
+                out.append(ref)
             rewritten[field] = out
         questions.append(rewritten)
     return {**data, "question_results": questions}
@@ -171,7 +191,12 @@ def _split_windows(data: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str,
     for position, question in enumerate(data.get("question_results") or []):
         held = {field: question.get(field) for field in _HEAVY_FIELDS
                 if question.get(field)}
-        questions.append({k: v for k, v in question.items() if k not in _HEAVY_FIELDS})
+        # Only what moved is taken out. Stripping both fields whichever moved
+        # dropped an empty list that had been written on purpose, so a run put
+        # back together carried one key fewer than the run that was stored.
+        # Nothing reads the difference today, and a reader that told an absent
+        # list from an empty one would have been told the wrong thing.
+        questions.append({k: v for k, v in question.items() if k not in held})
         if held:
             windows.append({
                 "run_id": data.get("run_id", ""),
