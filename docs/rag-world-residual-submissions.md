@@ -35,7 +35,7 @@ dictionary uses.
 
 ---
 
-## Finding 1 — source fusion does not say which sources are fused
+## Finding 1. Source fusion does not say which sources are fused
 
 **Measured.** Ten records carry `C3 ≠ none`. Not one of them carries
 `A5=lexical` or `C1=lexical`, although `standard_hybridrag` and `opensearch`
@@ -76,7 +76,7 @@ dense-plus-dense one.
 definition: `standard_hybridrag` and `opensearch`. The remaining eight carrying
 `C3 ≠ none` are `edge`, `hyde`, `kag`, `magma`, `multi_query`, `rag_anything`,
 `rag_fusion`, `replug`; three of them are finding 2 below, and the rest should
-be decided against their own sources rather than from their coordinates, which
+be decided against their own sources and never from their coordinates, which
 is precisely what this finding says the coordinates cannot settle.
 
 Two mentions is under the rule of three. That is the honest state, and the
@@ -84,7 +84,7 @@ third will come from the next dense-plus-lexical record anybody describes.
 
 ---
 
-## Finding 2 — source fusion and query fusion are one value
+## Finding 2. Source fusion and query fusion are one value
 
 **Measured.** Five records carry `C3=rrf` while `A5=dense_single`, `C1=ann` and
 `C4=single_store`, that is, while the record describes a single source:
@@ -115,7 +115,7 @@ know that a lexical half may be missing from the record.
   "id": "fusion_of_reformulations_of_one_query",
   "ru": "слияние выдач по нескольким переформулировкам одного запроса",
   "en": "merging the results of several reformulations of one query",
-  "note": "Ранговое слияние выдач одного указателя, опрошенного несколькими переформулировками запроса, есть иной механизм, нежели ранговое слияние выдач нескольких источников, и оба несут одно значение C3. Первое принадлежит слою формулировки запроса и зависит от B1, второе — слою поиска.",
+  "note": "Ранговое слияние выдач одного указателя, опрошенного несколькими переформулировками запроса, есть иной механизм, нежели ранговое слияние выдач нескольких источников, и оба несут одно значение C3. Первое принадлежит слою формулировки запроса и зависит от B1, второе относится к слою поиска.",
   "note_en": "Rank fusion over one index queried by several reformulations is a different mechanism from rank fusion over several sources, and the two carry the same value of C3. The first belongs to the query stratum and depends on B1; the second belongs to the retrieval stratum."
 }
 ```
@@ -134,7 +134,7 @@ decision is the schema owner's.
 
 ---
 
-## Finding 3 — Distribution disagrees between two records of one form
+## Finding 3. Distribution disagrees between two records of one form
 
 **Measured.** `standard_hybridrag` carries `C4=single_store`; `opensearch`
 carries `C4=multiple_local`. Both describe dense search together with lexical
