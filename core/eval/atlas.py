@@ -467,7 +467,19 @@ FAILURES: tuple[FailureMode, ...] = (
         origin="industry",
         detection="visible",
         instrument="ingest",
-        applies_when=(("C3", ("rrf", "score_normalization", "learned_fusion")),),
+        applies_when=(("C3", ("rrf", "score_normalization", "learned_fusion")),
+                      # Two of the six query transformations leave one query
+                      # standing; the other four make several out of one, and a
+                      # fusion over those joins reformulations of one
+                      # query where a fusion of sources joins two.                      #
+                      # The trade this makes, since a scope is only ever the
+                      # nearest expressible thing: a system that fuses two
+                      # sources *and* asks several queries is now ruled out
+                      # where it used to be included. No record of the
+                      # seventy-six exhibits that, and two exhibit the error it
+                      # replaces.
+                      ("B1", ("identity", "key_extraction")),
+                      ),
         signals=(Signal("funnel", "retrieval"), Signal("cause", "not_retrievable"),),
         bait="tests/unit/test_atlas_baits.py::test_bait[F16]",
         scope_caveat=(
@@ -497,7 +509,13 @@ FAILURES: tuple[FailureMode, ...] = (
         # fixture had been proving a different failure under this name.
         detection="none",
         instrument="corpus",
-        applies_when=(("C3", ("rrf", "score_normalization", "learned_fusion")),),
+        applies_when=(("C3", ("rrf", "score_normalization", "learned_fusion")),
+                      # Two of the six query transformations leave one query
+                      # standing; the other four make several out of one, and a
+                      # fusion over those joins reformulations of one
+                      # query where a fusion of sources joins two.
+                      ("B1", ("identity", "key_extraction")),
+                      ),
         not_detected_reason=(
             "nothing reads which half raised one fragment; the only judgement about the "
             "halves counts the share of a whole context that came from one of them, and one "

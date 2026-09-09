@@ -193,8 +193,12 @@ NOT_APPLIED: dict[str, str] = {
     ),
     "retrievers": (
         "the pipeline decides which retriever it holds, and this list sits "
-        "beside that decision without changing it. Recorded and shown, so what "
-        "it says has to match what the pipeline holds, which is what the new-run "
-        "form was corrected to read from the registry"
+        "beside that decision without changing it. What it records has never "
+        "been the list its name promises: 62 of the 129 stored runs name one "
+        "half of a hybrid's two, written by a form that guessed the retriever "
+        "from the pipeline's name, and a run written since that guess was "
+        "removed names the wrapper the pipeline holds, which is one retriever "
+        "where the field is plural. Nothing applies it either way, so the "
+        "reader of a stored run is the only one it can mislead"
     ),
 }

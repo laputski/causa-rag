@@ -859,14 +859,19 @@ def test_every_entry_has_a_title_in_both_languages() -> None:
 
 # ── what a fusion joins ───────────────────────────────────────────────────────
 
-#: The entries that are about two sources being merged, and what a system has
-#: to be doing for them to occur in it. They carried a caveat instead until the
-#: neighbouring registry's reply pointed out that the distinction is already in
-#: a coordinate: of the six query transformations, `identity` and
-#: `key_extraction` leave one query standing and the other four make several
-#: out of one, so a fusion over those joins reformulations of one query where
-#: a fusion of sources joins two.
-ABOUT_MERGING_TWO_SOURCES = ("F21", "F22", "F23")
+#: The entries that need two sources merged, and what a system has to be doing
+#: for them to occur in it. Their scope said "there is a fusion" and a caveat
+#: said that was wider than the truth, until the neighbouring registry's reply
+#: pointed out that the distinction is already in a coordinate: of the six
+#: query transformations, `identity` and `key_extraction` leave one query
+#: standing and the other four make several out of one, so a fusion over those
+#: joins reformulations of one query where a fusion of sources joins two.
+#:
+#: Three were narrowed first and two were left behind, which a re-reading
+#: caught: the two left behind are the ones whose titles say `keyword search`,
+#: so they were the entries the caveat was most about. All five are listed
+#: because the shape of their scope is one claim, not five.
+ABOUT_MERGING_TWO_SOURCES = ("F16", "F17", "F21", "F22", "F23")
 
 
 def test_an_entry_about_two_sources_does_not_reach_a_fusion_of_one() -> None:
@@ -893,10 +898,29 @@ def test_an_entry_about_two_sources_does_not_reach_a_fusion_of_one() -> None:
             )
 
 
+def test_the_caveat_that_stays_is_the_one_the_narrowing_does_not_answer() -> None:
+    """Two of the five keep a caveat and three do not, and the split is not
+    arbitrary. `B1` says whether a fusion joins several queries; it says
+    nothing about whether the sources joined include a lexical one, and the
+    two that name a keyword search need exactly that.
+    """
+    keeps = {f.id for f in FAILURES
+             if f.id in ABOUT_MERGING_TWO_SOURCES and f.scope_caveat}
+    assert keeps == {"F16", "F17"}, (
+        f"the entries carrying a caveat about the lexical half are {sorted(keeps)}"
+    )
+    for failure in FAILURES:
+        if failure.id in keeps:
+            assert "representation model" in failure.scope_caveat, (
+                f"{failure.id} keeps a caveat about something else now"
+            )
+
+
 def test_no_entry_about_two_sources_still_says_it_cannot_be_scoped() -> None:
     """The caveats those three carried are gone, and gone for a reason that
     has to stay true: a caveat is a named inexactness, and naming one the
     coordinates can express is a caveat nobody will ever come back to."""
+    narrowed_and_answered = ("F21", "F22", "F23")
     still = sorted(f.id for f in FAILURES
-                   if f.id in ABOUT_MERGING_TWO_SOURCES and f.scope_caveat)
+                   if f.id in narrowed_and_answered and f.scope_caveat)
     assert still == [], f"{still} narrowed its scope and kept the caveat about not being able to"

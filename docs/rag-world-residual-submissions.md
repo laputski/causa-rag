@@ -185,17 +185,25 @@ to `none`. Two mentions are left, below the threshold.
 The reply added a second objection worth more than the count: the two cases are
 told apart by reading `B1`, and information another coordinate already carries
 is a difficulty of reading and not a gap in the schema. That is true, and
-it applies to the entries here that carried the caveat. Three of them are
-narrowed instead of waiting: two of the six query transformations leave one
-query standing, the other four make several out of one, and a fusion over those
-joins reformulations. `F21`, `F22` and `F23` now carry
-`("B1", ("identity", "key_extraction"))` beside their fusion predicate, and
-their caveats are gone. The two registry records that fuse reformulations,
-`multi_query` and `rag_fusion`, are ruled out of all three; the platform's own
-three points record `B1` now, so nothing about them moved.
+it applies to every entry here that carried the caveat. All five are narrowed
+instead of waiting: two of the six query transformations leave one query
+standing, the other four make several out of one, and a fusion over those joins
+reformulations. Each now carries `("B1", ("identity", "key_extraction"))`
+beside its fusion predicate, and the two registry records that fuse
+reformulations, `multi_query` and `rag_fusion`, are ruled out of all five. That
+is what this brief's own opening asked for: a reader who selects one of those
+systems is no longer shown failures about a keyword half they do not have. The
+platform's three points record `B1` now, so nothing about them moved.
 
-Five entries carried a caveat before this. Two do, and both are finding 1: a
-lexical half is derivable from no coordinate, so nothing here can narrow them.
+The scope is only ever the nearest expressible thing, so the narrowing trades
+one error for another: a system that fuses two sources **and** asks several
+queries is now ruled out where it used to be included. No record of the
+seventy-six exhibits that, and two exhibit the error it replaces.
+
+Five entries carried a caveat before this. Two still do, `F16` and `F17`, and
+theirs is finding 1: `B1` says whether a fusion joins several queries and says
+nothing about whether the sources joined include a lexical one. Their scope is
+narrower and their caveat stands.
 
 **Finding 3 falls as a claim and stands as a question.** The two records were
 judged by different criteria, and `opensearch` says so in its own
