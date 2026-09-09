@@ -345,3 +345,94 @@ whatever they recorded.
 **How to detect:** compare the identifier sets the two halves return for one
 query. Any overlap at all is the healthy state on a corpus small enough for the
 halves to compete.
+
+## 14. One fragment identifier carried two texts, and one of them was about to be lost
+
+**Symptom:** none, and none was coming. The defect had not fired yet.
+
+**Found by:** the check `tools/compact_run_storage.py` makes before it writes
+anything: every stored run taken apart into a run document and its retrieval
+windows, put back together, and compared with what went in. Seventy-two of a
+hundred and twenty-nine came back changed, and fifteen references in one run
+came back carrying words they had not carried.
+
+**Root cause:** the deduplication of a fragment's text inside a question keyed
+on the fragment identifier alone. Three lists of one question are three views
+of one retrieval, so the same fragment appears in all three and used to carry
+its own text in each; dropping the repeats saves 71 MiB of a 206 MiB store. The
+rule assumed an identifier determines a text. One stored run holds fifteen
+references where one identifier carries two different sets of words, which is
+the failure the catalogue names in F02, so the assumption was already false on
+data this repository held.
+
+**What would have happened:** the first text read over the second, and the
+second gone for good. Only on a rewrite, because the run predates the split and
+had never been through the deduplication at all.
+
+**Fix:** a text is dropped where it repeats the one already seen for that
+fragment, and kept where it differs. Compression is given up on the colliding
+case, which is the case worth keeping.
+
+**Guard:** a pair in `tests/unit/test_run_windows_live_beside_the_run.py`: two
+references, one identifier, two texts, and both survive the round trip.
+
+---
+
+## 15. An empty list of retrieval windows came back absent
+
+**Symptom:** none that anything downstream could read. A parsed run defaults an
+absent list to empty, and the trace completeness check reads whether a list has
+anything in it.
+
+**Found by:** the same comparison, before the same write. Three thousand nine
+hundred and sixty-six questions across the store carry an empty pre-rerank
+list, and a hundred and eighty an empty candidate list.
+
+**Root cause:** the split takes a question's two heavy lists out of the run
+document and writes them beside it. It took out both fields whichever of them
+had actually moved, so a list written as empty on purpose was removed and never
+written anywhere to come back from.
+
+**Why it matters anyway:** a run put back together carried one key fewer than
+the run that was stored. Nothing reads the difference today, and a reader that
+told an absent list from an empty one would have been told the wrong thing.
+
+**Fix:** the split takes out what it moved. The empty lists that stay cost 28
+bytes a question in the worst case, which raised the recorded worst rate and
+left the ceiling it implies where it was, at 468 questions in one run.
+
+---
+
+## 16. A read that named no limit returned a thousand documents
+
+**Symptom:** none visible, and the shape of the wrong answer was the shape of a
+right one. Runs were served as runs that had recorded no retrieval window,
+which is exactly what a run that genuinely has none looks like.
+
+**Found by:** counting, after a verification of the store rewrite reported
+fifty-six runs changed. They were not changed. The script reading the store
+back was itself reading a thousand of the 3795 window documents, and the runs
+whose windows sat past that point looked as though they had lost them. The
+defect was in the reading, and then it was in the adapter under it.
+
+**Root cause:** `adapters/mongodb.py` asked the driver for `limit or 1000`
+documents. A ceiling nobody chose, nobody documented and nobody could see: a
+collection with more in it came back short, correctly shaped, and complete
+looking.
+
+**Consequences:** one query for every run's windows answered for 24 runs of
+129, so the comparison path served the other 105 without theirs. The run page
+was unaffected, since it asks for one run at a time and no run holds a thousand
+questions. The ceiling had been harmless for as long as no collection here
+outgrew it, and the retrieval windows moving into documents of their own is
+what outgrew it.
+
+**Fix:** `length=limit or None`. A limit a caller names is still a limit; the
+absence of one now means what it says.
+
+**Guard:** `tests/unit/test_a_read_with_no_limit_has_no_limit.py`, with a
+collection of 2500 documents and a stand-in driver that honours the length it
+is given.
+
+**How to detect:** compare `count` against the length of what `find_many`
+returns on any collection expected to hold more than a thousand rows.
