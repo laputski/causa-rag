@@ -8,6 +8,10 @@ queue and its rule of three mentions.
 Everything below was measured against `data/technologies/*.json` on 2026-09-08,
 over 76 records, and every count is reproducible with the snippet beside it.
 
+**It was executed, and it came back with two of its three findings overturned.
+The last section records what returned and what this repository did about it.
+Read that before acting on anything above it.**
+
 ---
 
 ## Why this is needed
@@ -158,3 +162,63 @@ No edit to the dimension count, no new value slipped into `C3`, and no change
 to any record's configuration beyond finding 3. The residual queue exists so a
 schema grows by a count and not by a hunch, and two of the three items above
 are exactly that: a count, offered.
+
+
+---
+
+## What came back, and what it changed here
+
+The brief was executed in `rag-world` and answered in full. Its method beat
+this one: it read the three primary sources, where this document inferred from
+coordinates. Two of the three findings did not survive that reading.
+
+**Finding 1 undercounted.** Two more records qualify, `magma` and `edge`, so
+four fuse a source no coordinate of theirs records, and the mechanism reaches
+the rule of three. It is now the only live candidate in that queue.
+
+**Finding 2 is withdrawn, and this repository stopped waiting for it.** One of
+its three mentions rested on a value the record's own source contradicts: HyDE
+averages the embeddings of its generated documents into one vector and runs a
+single search, so no lists arise and nothing is merged. Its `C3` is corrected
+to `none`. Two mentions are left, below the threshold.
+
+The reply added a second objection worth more than the count: the two cases are
+told apart by reading `B1`, and information another coordinate already carries
+is a difficulty of reading and not a gap in the schema. That is true, and
+it applies to the entries here that carried the caveat. Three of them are
+narrowed instead of waiting: two of the six query transformations leave one
+query standing, the other four make several out of one, and a fusion over those
+joins reformulations. `F21`, `F22` and `F23` now carry
+`("B1", ("identity", "key_extraction"))` beside their fusion predicate, and
+their caveats are gone. The two registry records that fuse reformulations,
+`multi_query` and `rag_fusion`, are ruled out of all three; the platform's own
+three points record `B1` now, so nothing about them moved.
+
+Five entries carried a caveat before this. Two do, and both are finding 1: a
+lexical half is derivable from no coordinate, so nothing here can narrow them.
+
+**Finding 3 falls as a claim and stands as a question.** The two records were
+judged by different criteria, and `opensearch` says so in its own
+justification, where `standard_hybridrag` justifies nothing. There is no
+contradiction in the data. Whether one engine holding a vector index and an
+inverted index is one store or two is still unsettled, and belongs in the
+guard on `C4`.
+
+### The question the reply asks back: narrow or broad
+
+The reply asks which reading of finding 1 is meant. A source that no
+coordinate records, or `C3` never naming its sources at all. **Narrow**, and by
+the queue's own criterion, not by preference.
+
+Under the broad reading `kag` and `rag_anything` carry the code, and their
+second source is a graph, which `A4=graph` already records. Coding what another
+coordinate already carries is the objection that declined the one mechanism
+which reached three mentions before this, and it would apply here in the same
+words.
+
+What the entries in this repository cannot derive is specifically a lexical
+half, because `A5` records only the primary representation model. Under the
+narrow reading the exhibited instances are that lexical half, in
+`standard_hybridrag`, `opensearch` and `edge`, and MAGMA's filter by time,
+which the reply is right to say the sketched value set does not cover. A
+mechanism named for what a fusion joins that nothing records has room for both.

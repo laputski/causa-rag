@@ -855,3 +855,48 @@ def test_every_entry_has_a_title_in_both_languages() -> None:
         assert missing == [], f"{lang} has no title for {missing}"
         orphaned = sorted(set(titles) - {f.id for f in FAILURES})
         assert orphaned == [], f"{lang} keeps a title for an entry nobody wrote: {orphaned}"
+
+
+# ── what a fusion joins ───────────────────────────────────────────────────────
+
+#: The entries that are about two sources being merged, and what a system has
+#: to be doing for them to occur in it. They carried a caveat instead until the
+#: neighbouring registry's reply pointed out that the distinction is already in
+#: a coordinate: of the six query transformations, `identity` and
+#: `key_extraction` leave one query standing and the other four make several
+#: out of one, so a fusion over those joins reformulations of one query where
+#: a fusion of sources joins two.
+ABOUT_MERGING_TWO_SOURCES = ("F21", "F22", "F23")
+
+
+def test_an_entry_about_two_sources_does_not_reach_a_fusion_of_one() -> None:
+    """A system that fuses the results of several reformulations against one
+    index has one source, so the failures of having two cannot occur in it.
+    The scope said otherwise until this was written, and said so out loud in a
+    caveat, which is the honest version of being wrong and still wrong."""
+    from core.eval.rag_space import satisfies
+
+    fusing = {"C3": "rrf", "A5": "dense_single", "C1": "ann"}
+    entries = {f.id: f for f in FAILURES if f.id in ABOUT_MERGING_TWO_SOURCES}
+    assert len(entries) == len(ABOUT_MERGING_TWO_SOURCES), "an entry named here is gone"
+
+    for failure_id, failure in entries.items():
+        one_query = satisfies(failure.applies_when, {**fusing, "B1": "identity"})
+        several = satisfies(failure.applies_when, {**fusing, "B1": "multi_reformulation"})
+        assert several is False, (
+            f"{failure_id} occurs in a system whose fusion joins reformulations of one "
+            "query, where there is only one source to have two of"
+        )
+        if failure_id != "F21":  # F21 is scoped to a weighted merge, not to rank fusion
+            assert one_query is True, (
+                f"{failure_id} no longer occurs in a system that fuses two sources"
+            )
+
+
+def test_no_entry_about_two_sources_still_says_it_cannot_be_scoped() -> None:
+    """The caveats those three carried are gone, and gone for a reason that
+    has to stay true: a caveat is a named inexactness, and naming one the
+    coordinates can express is a caveat nobody will ever come back to."""
+    still = sorted(f.id for f in FAILURES
+                   if f.id in ABOUT_MERGING_TWO_SOURCES and f.scope_caveat)
+    assert still == [], f"{still} narrowed its scope and kept the caveat about not being able to"

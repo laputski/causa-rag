@@ -212,16 +212,28 @@ def satisfies(predicate: Predicate, point: Point) -> bool | None:
 # failure that these coordinates said could not occur.
 POINTS: dict[str, Point] = {
     "dense": {
+        # Nothing here transforms a query: it reaches the embedder and the
+        # retriever as it was written. The one rewrite in the tree belongs to
+        # the retrieval-pin overlay, which is off unless a run asks for it as
+        # a what-if. Recorded because it was absent, and an absent coordinate
+        # is not an answer: an entry scoped on it was neither applicable nor
+        # ruled out here, which is what the space says when nobody filled it
+        # in.
+        "B1": "identity",
         "A1": "passage", "A2": "fixed", "A4": "flat", "A5": "dense_single",
         "C1": "ann", "C3": "none", "D1": "none", "D2": "top_k",
         "E1": "single_pass", "E3": "fragment_level", "E4": "domain_policy",
     },
     "hybrid": {
+        # As above: the query reaches retrieval as it was written.
+        "B1": "identity",
         "A1": "passage", "A2": "fixed", "A4": "flat", "A5": "dense_single",
         "C1": "ann", "C3": "rrf", "D1": "cross_encoder", "D2": "top_k",
         "E1": "single_pass", "E3": "fragment_level", "E4": "domain_policy",
     },
     "graph": {
+        # As above: the query reaches retrieval as it was written.
+        "B1": "identity",
         "A1": "passage", "A2": "fixed", "A3": "extracted_triples", "A4": "graph",
         "A5": "dense_single", "A8": "extracted", "C1": "graph_traversal",
         "C3": "score_normalization", "D1": "none", "D2": "top_k",

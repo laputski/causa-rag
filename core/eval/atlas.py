@@ -561,12 +561,19 @@ FAILURES: tuple[FailureMode, ...] = (
         origin="mechanism",
         detection="visible",
         instrument="config",
-        applies_when=(("C3", ("score_normalization", "learned_fusion")),),
+        applies_when=(("C3", ("score_normalization", "learned_fusion")),
+                      # Two of the six query transformations leave one query
+                      # standing; the other four make several out of one, and a
+                      # fusion over those joins reformulations of one
+                      # query where a fusion of sources joins two. That distinction used to be a caveat here,
+                      # saying the schema could not express it. It can: the
+                      # information is in the coordinate beside this one, and
+                      # the two registry records that fuse reformulations are
+                      # exactly the two carrying `multi_reformulation`.
+                      ("B1", ("identity", "key_extraction")),
+                      ),
         signals=(Signal("detector", "bm25_dominance"),),
         bait="tests/unit/test_atlas_baits.py::test_bait[F21]",
-        scope_caveat=(
-            "the schema does not tell fusion of sources from fusion of reformulations of one query, so applicability to a system with a single source is unverified"
-        ),
     ),
     FailureMode(
         # Found by the proving ground rather than by reading: staging a
@@ -599,15 +606,22 @@ FAILURES: tuple[FailureMode, ...] = (
         origin="mechanism",
         detection="detector",
         instrument="config",
-        applies_when=(("C3", ("rrf",)),),
+        applies_when=(("C3", ("rrf",)),
+                      # Two of the six query transformations leave one query
+                      # standing; the other four make several out of one, and a
+                      # fusion over those joins reformulations of one
+                      # query where a fusion of sources joins two. That distinction used to be a caveat here,
+                      # saying the schema could not express it. It can: the
+                      # information is in the coordinate beside this one, and
+                      # the two registry records that fuse reformulations are
+                      # exactly the two carrying `multi_reformulation`.
+                      ("B1", ("identity", "key_extraction")),
+                      ),
         # A check reads the run history now: every rank-fusion run on one
         # question set carrying the same constant is a constant nobody has
         # measured here, whatever the paper it came from says.
         signals=(Signal("detector", "fusion_constant_never_varied"),),
         bait="tests/unit/test_atlas_baits.py::test_bait[F22]",
-        scope_caveat=(
-            "the schema does not tell fusion of sources from fusion of reformulations of one query, so applicability to a system with a single source is unverified"
-        ),
     ),
     FailureMode(
         id="F23",
@@ -619,12 +633,19 @@ FAILURES: tuple[FailureMode, ...] = (
         origin="miracl",
         detection="none",
         instrument="corpus",
-        applies_when=(("C3", ("rrf", "score_normalization", "learned_fusion")),),
+        applies_when=(("C3", ("rrf", "score_normalization", "learned_fusion")),
+                      # Two of the six query transformations leave one query
+                      # standing; the other four make several out of one, and a
+                      # fusion over those joins reformulations of one
+                      # query where a fusion of sources joins two. That distinction used to be a caveat here,
+                      # saying the schema could not express it. It can: the
+                      # information is in the coordinate beside this one, and
+                      # the two registry records that fuse reformulations are
+                      # exactly the two carrying `multi_reformulation`.
+                      ("B1", ("identity", "key_extraction")),
+                      ),
         not_detected_reason=(
             "nothing compares the two halves' result sets against each other"
-        ),
-        scope_caveat=(
-            "the schema does not tell fusion of sources from fusion of reformulations of one query, so applicability to a system with a single source is unverified"
         ),
     ),
     FailureMode(
