@@ -1,6 +1,6 @@
 {
   "failure_id": "F28",
-  "recorded_at": "2026-09-08T19:31:33.949896+00:00",
+  "recorded_at": "2026-09-09T04:03:46.930013+00:00",
   "reproduced": true,
   "claim": "an external system that returns no answer while retrieval succeeded",
   "measured": {

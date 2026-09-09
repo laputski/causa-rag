@@ -1,6 +1,6 @@
 {
   "failure_id": "F01",
-  "recorded_at": "2026-09-08T19:36:09.710520+00:00",
+  "recorded_at": "2026-09-09T04:09:54.490695+00:00",
   "reproduced": true,
   "claim": "a second load under another chunk size left the first chunking in the index",
   "measured": {

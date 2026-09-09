@@ -2231,7 +2231,7 @@
       "reranker": "Reranker",
       "rerankerHint": "The cross-encoder that re-ranked the top-k after the initial retrieval (cross_encoder_local/cross_encoder) — \"not used\" if reranking wasn't enabled in the config.",
       "rerankerNotUsed": "not used",
-      "seedHint": "The random-number-generator seed used for reproducibility — the same config plus the same seed should produce identical answers on a repeat run.",
+      "seedHint": "Fixes the generator's sampling, so the same configuration repeated gives the same answers. It reaches the generator this platform runs; a system answering over HTTP samples on its own side, where this does not reach.",
       "showText": "show text",
       "time": "Time",
       "timeHint": "When the run was started.",

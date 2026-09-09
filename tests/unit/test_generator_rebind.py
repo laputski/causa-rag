@@ -102,12 +102,24 @@ def test_build_pipeline_uses_override_model_when_params_model_set() -> None:
     assert built._generator is not startup_generator
 
 
-def test_build_pipeline_reuses_shared_generator_when_no_model_override() -> None:
-    """Additive only: absent params["model"] must not change existing
-    behavior (the shared startup-time generator instance, unchanged)."""
+def test_no_model_override_keeps_the_model_the_gateway_started_with() -> None:
+    """Absent params["model"], the model does not move.
+
+    The instance does. A run carries a seed, the seed is applied now, and a
+    seeded generator is a copy: there is no configuration without a seed,
+    because the field has always defaulted to one, and treating that default
+    as "unset" would put the field back where it was, recorded and read by
+    nobody.
+    """
     runner, startup_generator = _make_runner_with_ollama_pipeline()
     config = _make_config(params={})
 
     built = runner._build_pipeline(config)
 
-    assert built._generator is startup_generator
+    assert built._generator._model == startup_generator._model
+    assert (built._generator._base_url, built._generator._timeout) == (
+        startup_generator._base_url, startup_generator._timeout)
+    assert built._generator._seed == config.seed
+    assert startup_generator._seed is None, (
+        "the generator every other caller shares was seeded under them"
+    )

@@ -59,7 +59,7 @@ def _describe_thing(thing: Any) -> dict[str, Any]:
     if thing is None:
         return {}
     out: dict[str, Any] = {"is": type(thing).__name__}
-    for name in ("_model_name", "_model", "embedder_id", "generator_id", "version"):
+    for name in ("_model_name", "_model", "_seed", "embedder_id", "generator_id", "version"):
         value = getattr(thing, name, None)
         if value not in (None, ""):
             out[name.lstrip("_")] = value
@@ -134,6 +134,8 @@ APPLIED_WHILE_BUILDING: dict[str, str] = {
     "graph_weight": "how much of the ranking a graph gets",
     "hops": "how far from a matched unit a graph may walk",
     "params": "the generation model here, and the declared knobs of a system over HTTP",
+    "seed": "fixes the sampling of the generator, which is the only part of a run here "
+            "that samples at all",
 }
 
 # A field applied somewhere other than while building the pipeline, and the
@@ -194,11 +196,5 @@ NOT_APPLIED: dict[str, str] = {
         "beside that decision without changing it. Recorded and shown, so what "
         "it says has to match what the pipeline holds, which is what the new-run "
         "form was corrected to read from the registry"
-    ),
-    "seed": (
-        "nothing anywhere reads it. It says a run is reproducible by repetition, "
-        "and no part of the platform fixes any source of randomness: a generator "
-        "samples as its own settings say, and running the same configuration "
-        "twice can give two answers"
     ),
 }

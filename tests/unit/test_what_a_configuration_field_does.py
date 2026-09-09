@@ -186,6 +186,7 @@ TWO_CONFIGURATIONS: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {
         {"reranker": ComponentRef(kind="reranker", component_id="two")},
     ),
     "params": ({"params": {"model": "one_model"}}, {"params": {"model": "another_model"}}),
+    "seed": ({"seed": 42}, {"seed": 7}),
     "pipeline_source": (
         {"pipeline_source": "in_process", "http_endpoint": "http://a.test"},
         {"pipeline_source": "http", "http_endpoint": "http://a.test"},
@@ -219,7 +220,6 @@ TWO_VALUES_THAT_CHANGE_NOTHING: dict[str, tuple[Any, Any]] = {
     "dataset_version": ("", "v2"),
     "config_schema_version": ("1.0", "1.1"),
     "external_rag_name": (None, "a name for a reader"),
-    "seed": (42, 999),
     "chunking_strategy": (
         ComponentRef(kind="chunker", component_id="fixed"),
         ComponentRef(kind="chunker", component_id="sentence"),

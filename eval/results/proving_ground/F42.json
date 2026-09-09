@@ -1,6 +1,6 @@
 {
   "failure_id": "F42",
-  "recorded_at": "2026-09-08T19:29:29.612904+00:00",
+  "recorded_at": "2026-09-09T04:01:51.869817+00:00",
   "reproduced": true,
   "claim": "leave_every_other_section_a_heading in the documents is read off the index by health:header_only",
   "measured": {

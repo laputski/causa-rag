@@ -1,7 +1,7 @@
-"""Contract tests: the four ways a component can make a variant of itself.
+"""Contract tests: the five ways a component can make a variant of itself.
 
 A run varies what the platform built once: another corpus, another Realm's
-instance, another fusion weight, another model. Which components could do
+instance, another fusion weight, another model, the same sampling every time. Which components could do
 which was a case analysis over the names of adapter classes, written in the
 experiment builder, so a component the analysis did not name was named by a
 configuration and never varied, and a component added later arrived in that
@@ -25,7 +25,13 @@ import pytest
 from adapters.ollama_generator import OllamaGenerator
 from adapters.opensearch import OpenSearchRetriever
 from adapters.qdrant import QdrantRetriever
-from core.interfaces import BoundToACorpus, ChoosingItsModel, Fusing, WalkingAGraph
+from core.interfaces import (
+    BoundToACorpus,
+    ChoosingItsModel,
+    FixingItsSampling,
+    Fusing,
+    WalkingAGraph,
+)
 from core.retrieval.graph_hybrid import GraphHybridRetriever
 from core.retrieval.hybrid import HybridRetriever
 
@@ -177,3 +183,28 @@ def test_a_reranker_declares_it_chooses_its_model_when_it_has_one() -> None:
     # The stub reranks by a rule and has no model, so it makes no such promise
     # and is left alone by anything asking for one.
     assert not isinstance(CrossEncoderRerankerStub(), ChoosingItsModel)
+
+
+# ── a component whose sampling can be fixed ──────────────────────────────────
+
+def test_a_generator_declares_it_can_fix_its_sampling() -> None:
+    assert isinstance(OllamaGenerator(model="a"), FixingItsSampling)
+
+
+def test_the_seed_it_already_uses_returns_the_same_object() -> None:
+    generator = OllamaGenerator(model="a", seed=42)
+    assert generator.with_seed(42) is generator
+
+
+def test_a_seeded_copy_keeps_the_model_and_where_it_runs() -> None:
+    generator = OllamaGenerator(base_url="http://elsewhere:1", model="a", timeout=7.0)
+    changed = generator.with_seed(42)
+    assert changed._seed == 42
+    assert (changed._model, changed._base_url, changed._timeout) == (
+        "a", "http://elsewhere:1", 7.0)
+
+
+def test_a_generator_with_no_seed_samples_as_the_server_would() -> None:
+    """Absent and never zero: zero is a seed, and a caller that never asked
+    for one must be left where it was."""
+    assert OllamaGenerator(model="a")._seed is None

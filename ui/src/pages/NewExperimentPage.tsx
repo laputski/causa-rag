@@ -21,12 +21,12 @@ interface Preset {
 }
 
 // Presets vary only fields that actually change pipeline behavior
-// (retrievalType/top_k/reranker/grounding) — chunker/embedder/generator/seed
-// used to appear here too, but ExperimentRunner._build_pipeline never reads
-// them for an in_process run (see the design notes), so a preset
-// like the old "Structure-Aware" was a lie: it looked like it changed
-// chunking, but every preset silently ran identical retrieval. Dropped
-// rather than kept as a no-op choice.
+// (retrievalType/top_k/reranker/grounding). Chunker/embedder/generator/seed
+// used to appear here too, and the build read none of them for an in_process
+// run, so a preset like the old "Structure-Aware" was a lie: it looked like
+// it changed chunking, and every preset silently ran identical retrieval.
+// Three of the four are applied now; they stay out of the presets because a
+// preset is a claim about what varies, and what varies here is retrieval.
 const PRESETS: Preset[] = [
   {
     label: 'Baseline Dense',
@@ -113,14 +113,14 @@ function buildConfig(form: Record<string, string>, pipelines: Record<string, Pip
 
   const cfg: Record<string, unknown> = {
     name: form.name || 'experiment',
-    // Never varied from this form, and the reason has narrowed. The build
-    // reads none of chunking_strategy/generator/seed for an in_process run,
-    // so those stay fixed literals that keep the config valid without
-    // pretending to be choices. `embedder` is no longer one of them: the
-    // build resolves it now and a run naming another model queries with it.
-    // Offering it here is a screen that has to be designed before it is
-    // written, so this sends the one the gateway registers and says why,
-    // instead of claiming nothing reads it.
+    // Never varied from this form, and the reason has narrowed twice. Of the
+    // four fields sent as fixed literals here, only `chunking_strategy` is
+    // still read by nothing: a corpus is cut at load time and a run reads
+    // what the cut produced. `embedder`, `generator` and `seed` are applied
+    // now, so each of them is a control this form could honestly offer, and
+    // each is a screen that has to be designed before it is written. Until
+    // then this sends what the gateway registers, and says so, rather than
+    // claiming nothing reads them.
     seed: 42,
     chunking_strategy: { kind: 'chunker', component_id: 'fixed' },
     embedder: { kind: 'embedder', component_id: 'bge_m3' },

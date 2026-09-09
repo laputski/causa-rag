@@ -1,6 +1,6 @@
 {
   "failure_id": "F03",
-  "recorded_at": "2026-09-08T19:37:23.315478+00:00",
+  "recorded_at": "2026-09-09T04:11:15.224863+00:00",
   "reproduced": true,
   "claim": "the structural strategy on documents with no structure, and it says so",
   "measured": {

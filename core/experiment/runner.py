@@ -116,6 +116,26 @@ def _walking_as(retriever: Any, graph_weight: float | None, hops: int | None) ->
     return retriever.with_graph(graph_weight, hops)
 
 
+def _sampling_fixed_by(component: Any, seed: int | None) -> Any:
+    """The component, sampling the same way every time this run repeats.
+
+    The seed was carried on a configuration from the first version of it, and
+    read by nothing, while the run page said in two languages that the same
+    configuration and the same seed give identical answers on a repeat run.
+    Measured on the model this platform runs: identical requests can give
+    different answers and a seed removes it, occasionally and depending on
+    the question. The numbers are in
+    `tests/unit/test_a_run_repeats_itself.py`.
+
+    A component that cannot fix its sampling comes back as it was, which is
+    the honest answer for a system answering over HTTP: it samples on its own
+    side, where a seed of ours does not reach.
+    """
+    if seed is None or not hasattr(component, "with_seed"):
+        return component
+    return component.with_seed(seed)
+
+
 def _on_the_model(component: Any, model: str | None) -> Any:
     """The component, running the model this run named.
 
@@ -517,10 +537,13 @@ class ExperimentRunner:
         # already read the right one instead of undoing the binding.
         retriever = _fusing_as(retriever, config.merge_strategy, config.merge_alpha, config.rrf_k)
         retriever = _walking_as(retriever, config.graph_weight, config.hops)
-        generator = _on_the_model(
-            _component_for(self._registry, "generator", config.generator,
-                           base._generator, unavailable),
-            (config.params or {}).get("model"),
+        generator = _sampling_fixed_by(
+            _on_the_model(
+                _component_for(self._registry, "generator", config.generator,
+                               base._generator, unavailable),
+                (config.params or {}).get("model"),
+            ),
+            config.seed,
         )
         embedder = _component_for(
             self._registry, "embedder", config.embedder, base._embedder, unavailable)

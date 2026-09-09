@@ -56,11 +56,13 @@ describe('NewExperimentPage', () => {
     expect(select.value).toBe('hybrid_rrf')
   })
 
-  it('does not show decorative fields that never affect the run', () => {
-    // chunker/embedder/generator/seed are never read by
-    // ExperimentRunner._build_pipeline for an in_process run (see
-    // the design notes) — they were removed from this form
-    // rather than kept as fake levers.
+  it('offers no field this form cannot honestly vary', () => {
+    // The reason has narrowed twice and the list has not moved. Of the four,
+    // only the chunking strategy is still read by nothing: a corpus is cut at
+    // load time and a run reads what the cut produced. The embedder, the
+    // generator and the seed are all applied now, and each is a control that
+    // has to be designed before it is written, so this form sends what the
+    // gateway registers instead of drawing a lever nobody agreed on.
     render(wrap(<NewExperimentPage />))
     expect(screen.queryByLabelText(/seed/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/chunking strategy/i)).not.toBeInTheDocument()

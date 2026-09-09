@@ -104,6 +104,28 @@ class ChoosingItsModel(Protocol):
 
 
 @runtime_checkable
+class FixingItsSampling(Protocol):
+    """A component that samples, and can make a copy sampling the same way
+    every time.
+
+    A configuration has carried a seed since it was first written, with a
+    sentence on the run page in two languages saying that the same
+    configuration and the same seed give identical answers on a repeat run.
+    Measured on the model this platform runs: identical requests can give
+    different answers and a seed removes it, occasionally and depending on
+    the question. The numbers are in
+    `tests/unit/test_a_run_repeats_itself.py`.
+
+    The generator is the only part of an in-process run that samples at all,
+    so this is the whole of what a seed can fix here. A system answering over
+    HTTP samples on its own side, where a seed of ours does not reach.
+    """
+
+    def with_seed(self, seed: int) -> Any:
+        ...
+
+
+@runtime_checkable
 class Reranker(Protocol):
     reranker_id: str
 

@@ -1,6 +1,6 @@
 {
   "failure_id": "F22",
-  "recorded_at": "2026-09-08T19:27:29.115303+00:00",
+  "recorded_at": "2026-09-09T03:59:56.936849+00:00",
   "reproduced": true,
   "claim": "the rank-fusion constant reorders the merge, and no signal speaks",
   "measured": {

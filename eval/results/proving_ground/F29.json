@@ -1,6 +1,6 @@
 {
   "failure_id": "F29",
-  "recorded_at": "2026-09-08T19:35:20.004937+00:00",
+  "recorded_at": "2026-09-09T04:09:02.061967+00:00",
   "reproduced": true,
   "claim": "with every subsection numbered, a server printing another fragment's number drops the coverage the honest half records",
   "measured": {
