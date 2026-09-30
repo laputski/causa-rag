@@ -274,6 +274,11 @@
     "pickPair": "Pick two runs",
     "loadingResample": "Re-asking questions in doubt: {{processed}} of {{total}}…",
     "compat": {
+      "different_judge": {
+        "title": "The answers were checked by different judges",
+        "detail": "A was judged by {{judge_before}}, B by {{judge_after}}. A difference in the share of assertions answered may be a difference in how strictly each judge reads.",
+        "action": "Judge both runs with one model before reading the difference in assertions answered."
+      },
       "head": {
         "error": "These runs are not comparable",
         "warn": "Read this comparison with care",
@@ -2074,6 +2079,7 @@
     "more": "More actions",
     "baselineHint": "The run others in this realm are compared against",
     "finding": {
+      "assertions_not_judged": "Some answers were not checked against their assertions",
       "stub_embedder": "Looks like a stub embedder",
       "embedder_unverified": "The embedder could not be checked",
       "duplicates": "Duplicates in the context",
@@ -2095,6 +2101,7 @@
       "named_and_indexed_segmentation_differ": "The segmentation this run names is not the one its index was built with"
     },
     "findingAction": {
+      "assertions_not_judged": "Make the judge reachable and re-run, or read the share as covering only the questions that have it.",
       "embedder_unverified": "Read the run's recall against its reference sources: a corpus indexed by a stub model retrieves at chance.",
       "stub_embedder": "Re-index the corpus with the real embedding model switched on.",
       "duplicates": "Check that chunk_id is deterministic, then drop the collection and re-index.",
@@ -2141,6 +2148,7 @@
     "noTraceGaps": "The run recorded everything every check needs.",
     "diagnosisDepth": "Diagnosis depth",
     "findingDetail": {
+      "assertions_not_judged": "{{unjudged}} of {{carrying}} questions carrying assertions have no verdict on all of them ({{reason}}{{note}}), so the share of assertions answered is averaged over the questions the judge happened to reach.",
       "stub_embedder": {
         "by_the_load_record": "The load record for this corpus says its vectors were produced by the stub, which hashes text into a vector of the right width and no meaning (loaded {{loaded_at}}). Every similarity in this run is between a real query vector and a hash.",
         "by_the_scores": "{{at_the_floor}}/{{chunks}} chunks have a dense score at the floor while the sparse side reports real values, so the corpus was probably indexed with random vectors."
@@ -2168,6 +2176,11 @@
       "unmeasured_stage_cost": "{{stages}} stage(s) of this run left no duration behind: {{named}}. What the stage costs cannot be weighed against what it buys, so keeping it is a decision nobody can check."
     },
     "findingWord": {
+      "unreachable": "the judge's server could not be reached",
+      "model_not_pulled": "the judge's model is not on its server",
+      "transport_failed": "the judge stopped answering during the run",
+      "prompts_cut": "the server cut the judge's prompt",
+      "unparsed": "the judge's reply could not be read",
       "retrieval": "retrieval",
       "rerank": "rerank",
       "generation": "generation",

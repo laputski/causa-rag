@@ -535,3 +535,33 @@ installation that had started before.
 only into an empty collection. **Fix:** every declared type is written on every
 start; nothing else writes the catalogue. **Guard:**
 `tests/unit/test_the_connector_catalogue_reaches_an_existing_install.py`.
+
+---
+
+## 22. The installation check called a model pulled when a sibling was
+
+**Symptom:** with `qwen3:8b` on the server, `make doctor` reported `qwen3:32b`
+present. A run needing the larger model would have found nothing where the
+report said it was.
+
+**Found by:** adding a row for the assertion judge's model, whose family was
+already on the machine. **Root cause:** the row matched on the part of the
+name before the colon. **Fix:** the name as asked for, or with the `:latest`
+tag Ollama adds. **Guard:** `tests/unit/test_doctor_names_a_model_by_its_own_name.py`,
+baited by restoring the family match.
+
+---
+
+## 23. A finding's title could be missing, or in the wrong page's section, and nothing noticed
+
+**Symptom:** none in English. In Russian, a run finding whose title is absent
+renders the server's English heading over a translated sentence.
+
+**Found by:** a script inserting the title of a new finding into the first
+section of the locale named `finding`, which belongs to the corpus page. The
+detail went where it belonged, every gate passed, and only reading the bundle
+back showed the title elsewhere. **Root cause:** the translatability guard
+checked each finding's detail and never its title. **Fix and guard:**
+`test_every_finding_has_a_title` in
+`tests/fitness/test_finding_details_are_translatable.py`, reading every finding
+id from the detectors, baited by removing one Russian title.

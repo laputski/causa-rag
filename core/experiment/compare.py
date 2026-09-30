@@ -225,6 +225,22 @@ def check_comparability(
                    "run both configurations again.",
         ))
 
+    judged_by = ((before.judge or {}).get("model"), (after.judge or {}).get("model"))
+    if ("assertion_coverage" in (before.aggregate_metrics or {})
+            and "assertion_coverage" in (after.aggregate_metrics or {})
+            and all(judged_by) and judged_by[0] != judged_by[1]):
+        warns.append(CompatWarning(
+            id="different_judge", severity="warn",
+            title="The answers were checked by different judges",
+            detail=(
+                f"A was judged by {judged_by[0]}, B by {judged_by[1]}. A difference in the share "
+                "of assertions answered may be a difference in how strictly each judge reads."
+            ),
+            params={"judge_before": judged_by[0], "judge_after": judged_by[1]},
+            action="Judge both runs with one model before reading the difference in assertions "
+                   "answered.",
+        ))
+
     unresolvable = _differences_the_set_cannot_see(before, after)
     if unresolvable:
         worst = unresolvable[0]

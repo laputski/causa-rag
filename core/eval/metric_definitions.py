@@ -172,6 +172,14 @@ DEFINITIONS: tuple[MetricDefinition, ...] = (
         says="how close the answer is to the reference answer, in meaning",
     ),
     MetricDefinition(
+        name="assertion_coverage",
+        requires=(REACHED_THE_GENERATOR, ANSWERABLE),
+        over="answerable questions carrying assertions, every one of which the judge gave a "
+             "verdict on",
+        aggregated_by="mean",
+        says="the share of a question's assertions that the judge found stated in the answer",
+    ),
+    MetricDefinition(
         name="answer_relevance",
         requires=(REACHED_THE_GENERATOR, ANSWERABLE),
         over="answerable questions",

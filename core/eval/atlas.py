@@ -1124,6 +1124,10 @@ REPORTS_A_CHECK_THAT_COULD_NOT_BE_MADE: dict[str, str] = {
         "says the run recorded no per-half split, so whether the corpus was embedded by a "
         "working model could not be established. The absence of a verdict, and not a verdict."
     ),
+    "detector:assertions_not_judged": (
+        "says some answers carrying assertions got no verdict on them, so the share of "
+        "assertions answered covers a subset. The absence of a check, and not a failure."
+    ),
     "detector:unverified_coverage": (
         "says the index was not consulted after the run, so what retrieval could have found "
         "was never checked against what it did find."

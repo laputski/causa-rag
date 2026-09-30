@@ -463,6 +463,41 @@ def detect_layer_bottleneck(run: dict[str, Any]) -> DiagnosticItem | None:
 
 # ── orchestrator ───────────────────────────────────────────────────────────────
 
+def detect_assertions_not_judged(run: dict[str, Any]) -> DiagnosticItem | None:
+    """Some answers carrying assertions got no verdict on them.
+
+    The share of assertions an answer makes is averaged over the questions
+    that carry it, so a run where the judge answered for some questions and
+    not others reports an average over a subset nobody chose: the questions
+    the judge happened to reach. A run with no assertions says nothing, and so
+    does a run stored before assertions existed.
+    """
+    carrying = [q for q in run.get("question_results") or [] if q.get("assertion_verdicts")]
+    unjudged = [q for q in carrying if "assertion_coverage" not in (q.get("metrics") or {})]
+    if not unjudged:
+        return None
+    judge = run.get("judge") or {}
+    # An identifier from core/eval/assertions.py#JUDGE_GAPS, so the reader
+    # gets a word; a library's message travels beside it as it arrived.
+    reason = judge.get("gap") or ("prompts_cut" if judge.get("prompts_cut") else "unparsed")
+    note = judge.get("note") or ""
+    return DiagnosticItem(
+        id="assertions_not_judged",
+        severity="warn",
+        title="Some answers were not checked against their assertions",
+        detail=(
+            f"{len(unjudged)} of {len(carrying)} questions carrying assertions have no verdict "
+            f"on all of them ({reason}{' ' + note if note else ''}), so the share of assertions "
+            "answered is averaged over "
+            "the questions the judge happened to reach."
+        ),
+        action="Make the judge reachable and re-run, or read the share as covering only the "
+               "questions that have it.",
+        params={"unjudged": len(unjudged), "carrying": len(carrying), "reason": reason,
+                "note": f": {note}" if note else ""},
+    )
+
+
 def detect_unverified_coverage(run: dict[str, Any]) -> DiagnosticItem | None:
     """Coverage was not verified against the index, so answerability classes
     (and therefore which questions count toward retrieval metrics) rest on the
@@ -1038,6 +1073,7 @@ def run_detectors(run: dict[str, Any]) -> list[DiagnosticItem]:
         detect_incorrect_refusals(run),
         detect_layer_bottleneck(run),
         detect_unverified_coverage(run),
+        detect_assertions_not_judged(run),
         detect_undeclared_metric(run),
         detect_aggregate_disagrees_with_questions(run),
         detect_chunk_id_collision(run),

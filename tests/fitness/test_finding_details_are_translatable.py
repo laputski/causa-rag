@@ -36,6 +36,10 @@ pytestmark = pytest.mark.fitness
 #: sentences under one identifier and needed to say which. What is left here is
 #: one value that nobody can translate, because nobody here wrote it.
 NOT_OURS_TO_TRANSLATE: dict[str, str] = {
+    "assertions_not_judged.note": (
+        "the judge's server or client library explaining why it could not be reached, shown "
+        "as it arrived after a word for the reason that the reader does get in their language"
+    ),
     "unverified_coverage.note": (
         "a library's own exception message, shown as it arrived; parenthesised on the way "
         "out because only this side knows whether there is one"
@@ -174,6 +178,35 @@ def test_every_finding_has_a_sentence(lang: str) -> None:
     assert missing == [], f"{lang} has no sentence for {missing}, so they render the server's English"
 
 
+def _finding_ids() -> set[str]:
+    """The id of every finding a detector can send, which is what its title
+    is looked up by, whatever key its detail uses."""
+    tree = ast.parse((ROOT / "core" / "eval" / "detectors.py").read_text(encoding="utf-8"))
+    return {
+        k.value.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "DiagnosticItem"
+        for k in node.keywords
+        if k.arg == "id" and isinstance(k.value, ast.Constant)
+    }
+
+
+@pytest.mark.parametrize("lang", ["en", "ru"])
+def test_every_finding_has_a_title(lang: str) -> None:
+    """Checked for the detail and not for the title, so a title written into
+    the wrong section of a locale passed every gate here: found when the
+    title of a new finding landed in the corpus page's findings, beside a
+    detail in the right place. The run page falls back to the server's
+    English, which in the Russian interface is an English heading over a
+    Russian sentence."""
+    bundle = json.loads(
+        (ROOT / "ui" / "src" / "i18n" / "locales" / f"{lang}.json").read_text(encoding="utf-8"))
+    ids = _finding_ids()
+    assert ids, "no finding id could be read, so this checks nothing"
+    missing = sorted(ids - set(bundle["runDiagnostics"]["finding"]))
+    assert missing == [], f"{lang} has no title for {missing}, so they render the server's English"
+
+
 @pytest.mark.parametrize("lang", ["en", "ru"])
 def test_no_sentence_is_written_for_a_finding_nobody_sends(lang: str) -> None:
     orphaned = sorted(set(_sentences(lang)) - set(_emitted()))
@@ -273,10 +306,12 @@ def _the_codes_a_finding_can_carry() -> dict[str, set[str]]:
     forget, and forgetting it looks exactly like having nothing to add.
     """
     from core.chunking.post_conditions import PROMISES
+    from core.eval.assertions import JUDGE_GAPS
 
     return {
         "precondition": _constructed_with("core/eval/metric_definitions.py", "Precondition"),
         "promise": set(PROMISES),
+        "reason an answer went unjudged": set(JUDGE_GAPS),
         "reason coverage was not checked": _named_argument(
             "services/api_gateway/routers/experiments.py", "UnknownRefResolver", "reason_id")
         | _default_of("core/eval/ref_resolution.py", "reason_id"),

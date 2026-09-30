@@ -692,6 +692,115 @@ def _attach_funnel(question_results: list[dict[str, Any]]) -> None:
                                          scope=qr.get("scope") or "local").to_dict()
 
 
+class _AssertionJudge:
+    """Asks a model whether an answer states each assertion, one per call.
+
+    One statement a call, because four in one call were judged worse, in
+    English too (core/eval/assertions.py). After the first failure to reach
+    the model it asks nothing more for the rest of the run and records why
+    once: an unreachable server would otherwise cost one timeout per
+    statement per question.
+    """
+
+    def __init__(self, generator: Any, provider: str, model: str, base_url: str) -> None:
+        self._generator = generator
+        self._described = {"provider": provider, "model": model, "base_url": base_url}
+        self.gap = ""
+        self.note = ""
+        self.calls = 0
+        self.seconds = 0.0
+        self.cut = 0
+
+    def verdicts(self, answer_text: str, assertions: list[str]) -> list[dict[str, Any]]:
+        import time
+
+        from core.eval.assertions import build_prompt, parse_verdict
+
+        out: list[dict[str, Any]] = []
+        for statement in assertions:
+            if self.gap:
+                out.append({"statement": statement, "stated": None})
+                continue
+            started = time.perf_counter()
+            try:
+                reply = self._generator.generate(
+                    build_prompt(answer_text, statement),
+                    temperature=0.0, max_tokens=64, response_format="json")
+            except Exception as exc:  # noqa: BLE001 - recorded once, then the judge is silent
+                self.gap, self.note = "transport_failed", f"{type(exc).__name__}: {exc}"
+                out.append({"statement": statement, "stated": None})
+                continue
+            finally:
+                self.calls += 1
+                self.seconds += time.perf_counter() - started
+            # A prompt the server cut was not read whole, so what it said
+            # about the statement is not a verdict on this answer.
+            if getattr(self._generator, "prompt_was_cut", lambda: False)():
+                self.cut += 1
+                out.append({"statement": statement, "stated": None})
+                continue
+            out.append({"statement": statement, "stated": parse_verdict(reply)})
+        return out
+
+    def record(self) -> dict[str, Any]:
+        return {**self._described, "calls": self.calls, "seconds": round(self.seconds, 1),
+                "prompts_cut": self.cut, "gap": self.gap, "note": self.note}
+
+
+class _UnavailableJudge:
+    """Stands where a judge was wanted and could not be had, so every
+    statement is recorded as unjudged and the run says why."""
+
+    def __init__(self, provider: str, model: str, base_url: str, gap: str, note: str = "") -> None:
+        self._record = {"provider": provider, "model": model, "base_url": base_url,
+                        "calls": 0, "seconds": 0.0, "prompts_cut": 0, "gap": gap, "note": note}
+
+    def verdicts(self, answer_text: str, assertions: list[str]) -> list[dict[str, Any]]:
+        return [{"statement": a, "stated": None} for a in assertions]
+
+    def record(self) -> dict[str, Any]:
+        return dict(self._record)
+
+
+#: The judge's window. Its prompt is a statement and one answer, which a
+#: fraction of this holds; naming it is what makes a cut prompt detectable.
+_JUDGE_NUM_CTX = 8192
+
+
+async def _resolve_judge(realm_id: str | None) -> Any:
+    """The judge a realm asks for, or a stand-in saying why there is none.
+
+    The model is the realm's setting `judge.model`, else the platform's
+    default. The server is the realm's own Ollama when it declares one, else
+    the gateway's, the same order the chat path follows.
+    """
+    import os
+
+    import httpx
+
+    from adapters.ollama_generator import OllamaGenerator
+    from eval.judge_model import ASSERTION_JUDGE_MODEL
+    from services.api_gateway.routers.corpus import _get_realm_resource
+    from services.api_gateway.routers.settings import _get_settings_doc
+
+    settings = await _get_settings_doc(realm_id or None)
+    model = ((settings.get("judge") or {}).get("model")) or ASSERTION_JUDGE_MODEL
+    resource = await _get_realm_resource(realm_id, "ollama") if realm_id else None
+    base_url = (f"http://{resource.get('host', 'localhost')}:{resource.get('port', 11434)}"
+                if resource else os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")).rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            tags = (await client.get(f"{base_url}/api/tags")).json()
+    except Exception as exc:  # noqa: BLE001 - the reason is what the run records
+        return _UnavailableJudge("ollama", model, base_url, "unreachable", f"{type(exc).__name__}: {exc}")
+    names = {m.get("name") for m in tags.get("models", [])}
+    if model not in names:
+        return _UnavailableJudge("ollama", model, base_url, "model_not_pulled")
+    return _AssertionJudge(
+        OllamaGenerator(base_url=base_url, model=model, seed=42, num_ctx=_JUDGE_NUM_CTX),
+        "ollama", model, base_url)
+
+
 class _CompositeEvaluator:
     """Per-question metrics, gated by answerability class so retrieval/answer
     quality is only scored where there is a real ground truth to score it
@@ -703,9 +812,15 @@ class _CompositeEvaluator:
     them over answerable questions only).
     """
 
-    def __init__(self, embedder: Any, top_k: int, ref_resolver: Any = None) -> None:
+    def __init__(self, embedder: Any, top_k: int, ref_resolver: Any = None,
+                 judge: Any = None) -> None:
         self._embedder = embedder
         self._top_k = top_k
+        # Checks answers against the assertions their questions carry. None
+        # for a run whose questions carry none, for a run whose judge could
+        # not be reached, and on purpose for the resampling of flipped
+        # questions, which reads only the funnel verdict.
+        self._judge = judge
         # Coverage is resolved against what is INDEXED, via a
         # core/eval/ref_resolution.py RefResolver, not against a hardcoded
         # corpus path on the platform's own disk (see that module's
@@ -715,6 +830,37 @@ class _CompositeEvaluator:
         # unreachable degrades to "unknown" rather than to a false
         # "uncovered".
         self._ref_resolver = ref_resolver
+
+    def evaluate_in_full(self, question: dict[str, Any], answer: Any) -> tuple[dict[str, float], dict[str, Any]]:
+        """The metrics, and what the judge said about each assertion.
+
+        `evaluate()` stays the metrics alone, because the resampling path and
+        several tests stand in for exactly it. The verdicts travel beside the
+        metrics and never inside them: a verdict is not a number to average.
+        """
+        from core.eval.assertions import coverage
+
+        metrics = self.evaluate(question, answer)
+        assertions = [a for a in (question.get("assertions") or []) if isinstance(a, str) and a.strip()]
+        retrieval_only = bool((getattr(answer, "metadata", None) or {}).get("retrieval_only"))
+        if not assertions or retrieval_only or self.resolve_answerability(question) != "answerable":
+            return metrics, {"assertion_verdicts": []}
+        if self._judge is None:
+            # Recorded as statements nobody judged, so the run can say how
+            # many went unchecked instead of looking like a run without any.
+            verdicts = [{"statement": a, "stated": None} for a in assertions]
+        else:
+            verdicts = self._judge.verdicts(answer.text or "", assertions)
+        value = coverage(verdicts)
+        if value is not None:
+            metrics["assertion_coverage"] = value
+        return metrics, {"assertion_verdicts": verdicts}
+
+    def judge_record(self) -> dict[str, Any]:
+        """What the run records about who judged, read after it finished."""
+        if self._judge is None:
+            return {}
+        return self._judge.record()
 
     def resolve_answerability(self, question: dict[str, Any]) -> str:
         """Exposed so the runner can persist the actual answerability class
@@ -2049,6 +2195,10 @@ async def _run_experiment_background(
         # went to the database at read time would answer differently every
         # time the corpus was reloaded, about a run that had already happened.
         result.corpus_manifest = await _corpus_manifest(realm_id, cfg.corpus_id)
+        # Who checked the answers against their assertions, and at what cost.
+        record_judge = getattr(evaluator, "judge_record", None)
+        if record_judge is not None:
+            result.judge = record_judge()
         # Record whether answerability was verified against the
         # index or merely trusted from the dataset's refs, so
         # core/eval/detectors.py#detect_unverified_coverage can say so
@@ -2178,7 +2328,13 @@ async def create_experiment(body: NewExperimentRequest) -> dict[str, Any]:
         ref_resolver = await _build_ref_resolver(
             realm_id=body.realm_id, corpus_id=cfg.corpus_id, qdrant_cfg=_qdrant_cfg,
         )
-    evaluator = _CompositeEvaluator(embedder=embedder, top_k=cfg.top_k, ref_resolver=ref_resolver)
+    # Resolved only when a question carries assertions: a run with none has
+    # nobody to judge and no reason to wake a model that size.
+    judge = None
+    if any(q.get("assertions") for q in (getattr(dataset, "questions", None) or [])):
+        judge = await _resolve_judge(body.realm_id)
+    evaluator = _CompositeEvaluator(embedder=embedder, top_k=cfg.top_k, ref_resolver=ref_resolver,
+                                    judge=judge)
 
     import datetime
     _running.add(run_id)

@@ -170,7 +170,11 @@ def check_ollama() -> Check:
     root = Check("ollama :11434", OK, f"host install, {len(models)} models")
 
     def _model_row(name: str, label: str, required: bool) -> Check:
-        present = name in models or any(m.split(":")[0] == name.split(":")[0] for m in models)
+        # The name as asked for, or the same name with the tag Ollama adds when
+        # none is given. Matching on the family alone reported a model pulled
+        # whenever a sibling was: with qwen3:8b on the server, qwen3:32b read as
+        # present, and the judge that needs it found nothing.
+        present = name in models or f"{name}:latest" in models
         if present:
             return Check(name, OK, label, indent=1)
         return Check(name, FAIL if required else WARN, f"{label}, not pulled",
@@ -178,8 +182,12 @@ def check_ollama() -> Check:
 
     root.children.append(_model_row(OLLAMA_MODEL, "generator", required=True))
     try:
-        from eval.judge_model import JUDGE_MODEL
+        from eval.judge_model import ASSERTION_JUDGE_MODEL, JUDGE_MODEL
         root.children.append(_model_row(JUDGE_MODEL, "judge, only for `make test-eval`", required=False))
+        # Needed by any run whose questions carry assertions; a run without
+        # it records each of them as unjudged and says why.
+        root.children.append(_model_row(ASSERTION_JUDGE_MODEL, "judge of answers against their "
+                                        "assertions, during runs", required=False))
     except Exception:
         pass
     if any(c.status == FAIL for c in root.children):

@@ -22,6 +22,7 @@ class OllamaGenerator:
         model: str | None = None,
         timeout: float = 120.0,
         seed: int | None = None,
+        num_ctx: int | None = None,
     ) -> None:
         self._base_url = (base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")).rstrip("/")
         self._model = model or os.getenv("OLLAMA_MODEL", "qwen3:8b")
@@ -31,6 +32,22 @@ class OllamaGenerator:
         # gets: a conversation is not a measurement and nobody repeats one
         # expecting the same words.
         self._seed = seed
+        # The context window, sent only when a caller names one. Unnamed, the
+        # server uses its own default, which the client cannot see, so a prompt
+        # the server cut could not be told from one it read whole. Measured on
+        # Ollama 0.34.4: a prompt longer than the window is cut, silently, to
+        # exactly half of it plus two tokens (2050 of a 4096 window, 16386 of
+        # 32768), which `prompt_was_cut` reads.
+        self._num_ctx = num_ctx
+
+    def prompt_was_cut(self) -> bool:
+        """Whether the last prompt was cut by the server. Answerable only when
+        this generator named its window; False otherwise, which is the
+        absence of a verdict and not a verdict."""
+        if not self._num_ctx:
+            return False
+        counts = getattr(self, "_last_token_counts", None) or {}
+        return counts.get("prompt_eval_count") == self._num_ctx // 2 + 2
 
     def with_model(self, model: str) -> Any:
         """A copy of this running another model. See
@@ -44,7 +61,7 @@ class OllamaGenerator:
         if not model or model == self._model:
             return self
         return OllamaGenerator(base_url=self._base_url, model=model,
-                               timeout=self._timeout, seed=self._seed)
+                               timeout=self._timeout, seed=self._seed, num_ctx=self._num_ctx)
 
     def with_seed(self, seed: int) -> Any:
         """A copy of this sampling the same way every time. See
@@ -58,7 +75,7 @@ class OllamaGenerator:
         if seed is None or seed == self._seed:
             return self
         return OllamaGenerator(base_url=self._base_url, model=self._model,
-                               timeout=self._timeout, seed=seed)
+                               timeout=self._timeout, seed=seed, num_ctx=self._num_ctx)
 
     def generate(self, prompt: str, **params: Any) -> str:
         temperature: float = params.get("temperature", 0.1)
@@ -85,6 +102,8 @@ class OllamaGenerator:
         # where it was.
         if self._seed is not None:
             payload["options"]["seed"] = self._seed
+        if self._num_ctx is not None:
+            payload["options"]["num_ctx"] = self._num_ctx
         # Constrained decoding for callers that need a parseable structure
         # (e.g. the question generator, services/api_gateway/routers/
         # generation.py) rather than free-form prose — Ollama's own

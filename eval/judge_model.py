@@ -39,3 +39,15 @@ import os
 
 DEFAULT_JUDGE_MODEL = "qwen2.5:7b-instruct-q4_K_M"
 JUDGE_MODEL = os.getenv("DEEPEVAL_JUDGE_MODEL", DEFAULT_JUDGE_MODEL)
+
+#: The model that checks an answer against its assertions, which is a
+#: different job from the three frameworks above and was measured separately.
+#: On hand-written pairs in Russian and English (a statement, an answer that
+#: makes it, one that does not), the model above rejected correct Russian
+#: answers that expressed a quantity in other units, and with a rule telling it
+#: they count it began accepting wrong conversions too. This one judged 29 of 29
+#: correct and 29 of 30 wrong Russian answers right, and every English one, at
+#: about a second and a half a statement. Around thirty cases a direction is a
+#: small sample, and the figure is only as good as that.
+DEFAULT_ASSERTION_JUDGE_MODEL = "qwen3:32b"
+ASSERTION_JUDGE_MODEL = os.getenv("ASSERTION_JUDGE_MODEL", DEFAULT_ASSERTION_JUDGE_MODEL)

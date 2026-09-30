@@ -732,7 +732,16 @@ class ExperimentRunner:
             )
 
             if evaluator is not None:
-                qr.metrics = evaluator.evaluate(q, answer)
+                # The verdicts on a question's assertions travel beside its
+                # metrics. An evaluator without them (eval/gate.py's) keeps
+                # the plain contract, the way resolve_answerability below is
+                # optional too.
+                evaluate_in_full = getattr(evaluator, "evaluate_in_full", None)
+                if evaluate_in_full is not None:
+                    qr.metrics, extras = evaluate_in_full(q, answer)
+                    qr.assertion_verdicts = list(extras.get("assertion_verdicts") or [])
+                else:
+                    qr.metrics = evaluator.evaluate(q, answer)
                 # Optional — a generic `evaluator: Any` (e.g. eval/gate.py's
                 # CI usage) isn't required to expose this; evaluate()'s own
                 # return contract (dict[str, float]) stays unchanged so
