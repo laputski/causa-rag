@@ -679,6 +679,16 @@ def _attach_refusal_verdict(question_results: list[dict[str, Any]]) -> None:
         qr["is_refusal"] = not answer.strip() or bool(_NOT_FOUND.search(answer))
 
 
+def _attach_stages(question_results: list[dict[str, Any]]) -> None:
+    """Each question's retrieval stages, and where the source it needed was
+    at each (`core/eval/stages.py`). Computed at read time from what the run
+    stored, like the funnel below, so a run stored before the halves were
+    recorded gets the stages from the window onwards."""
+    from core.eval.stages import stages_of
+    for qr in question_results:
+        qr["stages"] = stages_of(qr)
+
+
 def _attach_funnel(question_results: list[dict[str, Any]]) -> None:
     """Mutates each ``question_results`` dict in place, adding a ``funnel``
     verdict (``core/eval/funnel.py``). Shared by ``GET /experiments/{run_id}``
@@ -1365,6 +1375,7 @@ async def get_experiment(run_id: str) -> dict[str, Any]:
     attach_failure_ids(payload["diagnostics"], "detector")
 
     _attach_funnel(payload["question_results"])
+    _attach_stages(payload["question_results"])
     _attach_refusal_verdict(payload["question_results"])
 
     # What this run made impossible to check, beside what it did check. The two
