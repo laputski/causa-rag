@@ -97,3 +97,36 @@ def test_a_run_stored_before_these_fields_existed_still_parses() -> None:
     assert read.corpus_manifest == {}
     assert read.applied == {}
     assert read.unavailable_components == []
+
+
+def _every_question_field_set() -> QuestionResult:
+    """A question with each of its fields set to something recognisable."""
+    ref = {"chunk_id": "c1", "doc_id": "d1", "chunk_text": "t", "score": 0.5}
+    return QuestionResult(
+        question_id="q1", question="?", reference_answer="r", generated_answer="a",
+        source_refs=[ref], metrics={"retrieval_recall_at_k": 1.0},
+        pre_rerank_source_refs=[ref], candidate_source_refs=[ref],
+        dense_source_refs=[ref], sparse_source_refs=[ref], graph_source_refs=[ref],
+        expected_refs=["d1"], computed_citations=["1"],
+        stage_trace={"total_ms": 1.0}, error="e", answerability="answerable",
+        root_cause={"cause": "retrieval"},
+    )
+
+
+def test_every_field_a_question_carries_comes_back() -> None:
+    """The question's fields used to be typed out twice, once to write and
+    once to read, and a field added to the class was written by every run and
+    read by none until somebody typed it into both lists."""
+    from dataclasses import fields
+
+    written = _every_question_field_set()
+    unset = [f.name for f in fields(QuestionResult) if getattr(written, f.name) in (None, "", [], {})]
+    assert unset == [], f"the fixture leaves {unset} unset, so the check below cannot see them"
+
+    run = _written()
+    run.question_results = [written]
+    read = _parse_result(run.to_dict())
+    assert read is not None
+    lost = [f.name for f in fields(QuestionResult)
+            if getattr(read.question_results[0], f.name) != getattr(written, f.name)]
+    assert lost == [], f"written with the question and changed or dropped by the read: {lost}"

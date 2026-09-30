@@ -6,7 +6,7 @@ runs each question, collects per-question results.
 from __future__ import annotations
 
 import datetime
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -234,6 +234,10 @@ class QuestionResult:
     # answer "what would a different context size have shown" without running
     # the experiment again.
     candidate_source_refs: list[dict[str, Any]] = field(default_factory=list)
+    # Each half's own ranked list before a merge (core/models.py#Answer).
+    dense_source_refs: list[dict[str, Any]] = field(default_factory=list)
+    sparse_source_refs: list[dict[str, Any]] = field(default_factory=list)
+    graph_source_refs: list[dict[str, Any]] = field(default_factory=list)
     # The golden refs this question was measured against. Stored
     # on the result because a counterfactual read later needs to know what
     # counted as correct, and the dataset may have changed since. Without it
@@ -383,24 +387,12 @@ class ExperimentResult:
             "corpus_manifest": self.corpus_manifest,
             "unavailable_components": self.unavailable_components,
             "aggregate_metrics": self.aggregate_metrics,
+            # Every field of a question, derived from the class and never
+            # listed by hand: a list typed here drops the next field added,
+            # which is the failure the catalogue calls a read path that loses
+            # data, committed on the way out instead of on the way in.
             "question_results": [
-                {
-                    "question_id": qr.question_id,
-                    "question": qr.question,
-                    "reference_answer": qr.reference_answer,
-                    "generated_answer": qr.generated_answer,
-                    "metrics": qr.metrics,
-                    # Needed by the detectors and retrieval diagnostics.
-                    "source_refs": qr.source_refs,
-                    "pre_rerank_source_refs": qr.pre_rerank_source_refs,
-                    "candidate_source_refs": qr.candidate_source_refs,
-                    "expected_refs": qr.expected_refs,
-                    "computed_citations": qr.computed_citations,
-                    "stage_trace": qr.stage_trace,
-                    "error": qr.error,
-                    "answerability": qr.answerability,
-                    "root_cause": qr.root_cause,
-                }
+                {f.name: getattr(qr, f.name) for f in fields(QuestionResult)}
                 for qr in self.question_results
             ],
             # Dataset-averaged per-stage latency, so RunPage can show one
@@ -715,6 +707,9 @@ class ExperimentRunner:
                 source_refs=[sr.model_dump() for sr in answer.source_refs],
                 pre_rerank_source_refs=[sr.model_dump() for sr in answer.pre_rerank_source_refs],
                 candidate_source_refs=[sr.model_dump() for sr in getattr(answer, 'candidate_source_refs', []) or []],
+                dense_source_refs=[sr.model_dump() for sr in getattr(answer, 'dense_source_refs', []) or []],
+                sparse_source_refs=[sr.model_dump() for sr in getattr(answer, 'sparse_source_refs', []) or []],
+                graph_source_refs=[sr.model_dump() for sr in getattr(answer, 'graph_source_refs', []) or []],
                 expected_refs=list(q.get('article_refs') or []),
                 computed_citations=answer.computed_citations,
                 stage_trace=answer.stage_trace.model_dump() if answer.stage_trace else None,

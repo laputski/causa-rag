@@ -5,6 +5,7 @@ import asyncio
 import json
 import uuid
 from collections.abc import Callable
+from dataclasses import fields as dataclass_fields
 from pathlib import Path
 from typing import Any
 
@@ -86,14 +87,21 @@ _running_meta: dict[str, dict[str, Any]] = {}
 #: a retrieval.
 _WINDOWS_COLLECTION = "experiment_run_windows"
 
-#: The two lists that move. Everything else a question carries is small.
-_HEAVY_FIELDS = ("pre_rerank_source_refs", "candidate_source_refs")
+#: The lists that move: the windows and each half's list before a merge.
+#: Everything else a question carries is small.
+_HEAVY_FIELDS = ("pre_rerank_source_refs", "candidate_source_refs",
+                 "dense_source_refs", "sparse_source_refs", "graph_source_refs")
 
 
-#: The three lists of retrieved fragments a question carries. A fragment that
-#: reaches the answer is in all three, and it used to carry its own text in
+#: The lists of retrieved fragments a question carries. A fragment that
+#: reaches the answer is in most of them, and it used to carry its own text in
 #: each of them.
-_REF_FIELDS = ("source_refs", "pre_rerank_source_refs", "candidate_source_refs")
+_REF_FIELDS = ("source_refs", "pre_rerank_source_refs", "candidate_source_refs",
+               "dense_source_refs", "sparse_source_refs", "graph_source_refs")
+
+#: Read by position of meaning rather than copied: a stored run may lack any of
+#: them, and each has a default that says so.
+_REQUIRED_QUESTION_FIELDS = ("question_id", "question", "reference_answer", "generated_answer")
 
 
 def _dedupe_texts(data: dict[str, Any]) -> dict[str, Any]:
@@ -331,21 +339,17 @@ def _parse_result(data: dict[str, Any], stem: str = "") -> ExperimentResult | No
         r.corpus_manifest = data.get("corpus_manifest") or {}
         r.unavailable_components = data.get("unavailable_components") or []
         for qd in data.get("question_results", []):
+            # Every field the class declares, read back by name. The list used
+            # to be typed out here, and a field added to the class was written
+            # by every run and dropped by every read until somebody added it
+            # to this list as well.
+            known = {f.name for f in dataclass_fields(QuestionResult)}
             r.question_results.append(QuestionResult(
                 question_id=qd.get("question_id", ""),
                 question=qd.get("question", ""),
                 reference_answer=qd.get("reference_answer", ""),
                 generated_answer=qd.get("generated_answer", ""),
-                source_refs=qd.get("source_refs", []),
-                pre_rerank_source_refs=qd.get("pre_rerank_source_refs", []),
-                candidate_source_refs=qd.get("candidate_source_refs", []),
-                expected_refs=qd.get("expected_refs", []),
-                metrics=qd.get("metrics", {}),
-                computed_citations=qd.get("computed_citations", []),
-                stage_trace=qd.get("stage_trace"),
-                error=qd.get("error"),
-                answerability=qd.get("answerability"),
-                root_cause=qd.get("root_cause"),
+                **{k: v for k, v in qd.items() if k in known and k not in _REQUIRED_QUESTION_FIELDS},
             ))
         return r
     except Exception:

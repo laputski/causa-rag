@@ -1045,7 +1045,7 @@
           "datasets"
         ],
         "summary": "Update Question",
-        "description": "Replace one question's content by its own `id` (not array index —\nindex shifts under concurrent add/delete). Identity (`id`) can't be\nchanged through the body. `provenance` in the request body is ignored —\nprovenance is derived from the question's own stored history, not from\nwhatever the client happens to echo back (see below).",
+        "description": "Edit one question's content by its own `id` (not array index,\nwhich shifts under concurrent add/delete). Fields the body does not name\nkeep their stored values. Identity (`id`) can't be\nchanged through the body. `provenance` in the request body is ignored —\nprovenance is derived from the question's own stored history, not from\nwhatever the client happens to echo back (see below).",
         "operationId": "update_question_datasets__dataset_id__questions__question_id__put",
         "parameters": [
           {
@@ -6038,6 +6038,27 @@
             },
             "type": "array",
             "title": "Candidate Source Refs"
+          },
+          "dense_source_refs": {
+            "items": {
+              "$ref": "#/components/schemas/SourceRef"
+            },
+            "type": "array",
+            "title": "Dense Source Refs"
+          },
+          "sparse_source_refs": {
+            "items": {
+              "$ref": "#/components/schemas/SourceRef"
+            },
+            "type": "array",
+            "title": "Sparse Source Refs"
+          },
+          "graph_source_refs": {
+            "items": {
+              "$ref": "#/components/schemas/SourceRef"
+            },
+            "type": "array",
+            "title": "Graph Source Refs"
           },
           "computed_citations": {
             "items": {

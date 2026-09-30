@@ -198,9 +198,15 @@ class NaivePipeline:
                 # measured. A number nobody measured is worse than a number
                 # nobody has.
                 timings: dict[str, float] = {}
+                halves: dict[str, list[ScoredChunk]] = {}
                 extra: dict[str, Any] = {"query_vector": query_vec}
                 if getattr(self._retriever, "reports_stage_timings", False):
                     extra["timings"] = timings
+                # Passed only to a retriever that says it fills it, like the
+                # timings above: a single-source retriever takes no such
+                # keyword and would reject it.
+                if getattr(self._retriever, "reports_its_halves", False):
+                    extra["halves"] = halves
                 t0 = time.perf_counter()
                 scored = self._retriever.retrieve(
                     query=request.text,
@@ -220,6 +226,8 @@ class NaivePipeline:
                 trace.n_merged = len(scored)
                 sp.set_output({"n_chunks": len(scored), "paths": [s.chunk.structural_path for s in scored]})
             bound.info("pipeline.retrieve.done", n_results=len(scored))
+
+            half_refs = {name: _to_source_refs(chunks) for name, chunks in halves.items()}
 
             seen_texts: set[str] = set()
             deduped = []
@@ -330,6 +338,9 @@ class NaivePipeline:
                     source_refs=source_refs,
                     pre_rerank_source_refs=pre_rerank_source_refs,
                     candidate_source_refs=candidate_source_refs,
+                    dense_source_refs=half_refs.get("dense", []),
+                    sparse_source_refs=half_refs.get("sparse", []),
+                    graph_source_refs=half_refs.get("graph", []),
                     stage_trace=trace,
                     metadata={
                         "pipeline": self.pipeline_id,
@@ -421,6 +432,9 @@ class NaivePipeline:
             source_refs=source_refs,
             pre_rerank_source_refs=pre_rerank_source_refs,
             candidate_source_refs=candidate_source_refs,
+            dense_source_refs=half_refs.get("dense", []),
+            sparse_source_refs=half_refs.get("sparse", []),
+            graph_source_refs=half_refs.get("graph", []),
             computed_citations=computed_citations,
             refused=refused,
             refusal_reason=refusal_reason,

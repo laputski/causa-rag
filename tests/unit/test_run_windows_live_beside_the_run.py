@@ -168,6 +168,10 @@ def _question_seeing_one_fragment_three_times() -> dict[str, Any]:
             "pre_rerank_source_refs": [dict(ref), _shared("c2", "another one")],
             "candidate_source_refs": [dict(ref), _shared("c2", "another one"),
                                       _shared("c3", "a third")],
+            # Each half's own list: c1 again, and c4, which one half found
+            # and the merge dropped. c4's text lives only here and must stay.
+            "dense_source_refs": [dict(ref), _shared("c4", "found by one half only")],
+            "sparse_source_refs": [_shared("c3", "a third"), dict(ref)],
         }],
     }
 
@@ -179,9 +183,10 @@ def test_a_fragment_carries_its_text_once_in_its_question() -> None:
     inside its own question and the repeats were 71 MiB of a 206 MiB store."""
     compressed = E._dedupe_texts(_question_seeing_one_fragment_three_times())
     question = compressed["question_results"][0]
-    carrying = [ref for field in E._REF_FIELDS for ref in question[field]
+    # A single-source run carries no halves, so a field may be absent.
+    carrying = [ref for field in E._REF_FIELDS for ref in question.get(field) or []
                 if "chunk_text" in ref]
-    assert sorted(ref["chunk_id"] for ref in carrying) == ["c1", "c2", "c3"], (
+    assert sorted(ref["chunk_id"] for ref in carrying) == ["c1", "c2", "c3", "c4"], (
         "a fragment's text is stored more than once inside one question"
     )
 

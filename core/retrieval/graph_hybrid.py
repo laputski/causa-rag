@@ -15,6 +15,10 @@ class GraphHybridRetriever:
 
     retriever_id = "graph_hybrid"
 
+    #: Fills a `halves` mapping with the graph half's list and the base
+    #: half's, each before the merge. See HybridRetriever.reports_its_halves.
+    reports_its_halves = True
+
     def __init__(
         self,
         graph_retriever: Any,
@@ -76,14 +80,26 @@ class GraphHybridRetriever:
         query: str,
         k: int = 5,
         filters: dict[str, Any] | None = None,
-        **kwargs: Any,  # e.g. query_vector — forwarded to the base retriever
+        **kwargs: Any,  # e.g. query_vector, forwarded to the base retriever
     ) -> list[ScoredChunk]:
+        # Taken out before forwarding: a base retriever that does not record
+        # halves would reject the keyword (QdrantRetriever takes no **kwargs).
+        halves = kwargs.pop("halves", None)
         graph_result = self._graph.retrieve_graph(
             query, k=k, hops=self._hops, filters=filters
         )
         # Forward retriever-specific kwargs (query_vector) to the base retriever,
         # which (e.g. QdrantRetriever) may require them.
-        base_results = self._base.retrieve(query, k=k, filters=filters, **kwargs)
+        if halves is not None and getattr(self._base, "reports_its_halves", False):
+            base_results = self._base.retrieve(query, k=k, filters=filters, halves=halves, **kwargs)
+        else:
+            base_results = self._base.retrieve(query, k=k, filters=filters, **kwargs)
+            if halves is not None:
+                # The base half is the dense one here, the same reading the
+                # merge below makes when it files its score as dense_score.
+                halves["dense"] = list(base_results)
+        if halves is not None:
+            halves["graph"] = list(graph_result.scored_chunks)
 
         merged: dict[str, ScoredChunk] = {}
 

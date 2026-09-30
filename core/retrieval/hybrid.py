@@ -36,6 +36,13 @@ class HybridRetriever:
     #: for a stage that ran and reported no time found it.
     reports_stage_timings = True
 
+    #: Fills a `halves` mapping when the caller passes one, with each half's
+    #: own ranked list before the merge. Without it a fragment one half found
+    #: and the merge dropped left no trace at all, and a fragment's rank inside
+    #: its half was recorded nowhere; the merged list carries each half's score
+    #: and nothing about what the merge threw away.
+    reports_its_halves = True
+
     def __init__(
         self,
         dense_retriever: Any,
@@ -128,6 +135,7 @@ class HybridRetriever:
         # object: one retriever answers many queries at once, and a field
         # on it would report whichever query finished last.
         timings = kwargs.get("timings")
+        halves = kwargs.get("halves")
         query_vec = self._embedder.embed([query])[0]
         fetch_k = max(k * 2, 20)
 
@@ -140,6 +148,10 @@ class HybridRetriever:
         started = time.perf_counter()
         sparse_results = self._sparse.retrieve(query=query, k=fetch_k, filters=filters)
         sparse_ms = (time.perf_counter() - started) * 1000
+
+        if halves is not None:
+            halves["dense"] = list(dense_results)
+            halves["sparse"] = list(sparse_results)
 
         # tag pre-merge scores into metadata for tracing
         dense_score_map = {sc.chunk.chunk_id: sc.score for sc in dense_results}

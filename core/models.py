@@ -184,6 +184,13 @@ class Answer(BaseModel):
     # answer "what would a different context size have shown" without
     # re-running anything (core/eval/counterfactual.py).
     candidate_source_refs: list[SourceRef] = Field(default_factory=list)
+    # Each half's own ranked list before a merge, filled only by a retriever
+    # that merges two sources and says it records them. They are the only
+    # place where a fragment one half found and the merge dropped leaves a
+    # trace, and the only place a fragment's rank inside its half is kept.
+    dense_source_refs: list[SourceRef] = Field(default_factory=list)
+    sparse_source_refs: list[SourceRef] = Field(default_factory=list)
+    graph_source_refs: list[SourceRef] = Field(default_factory=list)
     # Computed from source_refs metadata (core/citation.py), not generated
     # by the model — the model's own in-text citation numbers are
     # unreliable (transcription confusion, hallucinated numbers absent from
