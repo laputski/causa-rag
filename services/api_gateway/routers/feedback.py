@@ -324,8 +324,11 @@ async def _source_article_refs(run_doc: dict[str, Any], question_id: str) -> lis
     dataset_name = run_doc.get("dataset_name") or run_doc.get("config", {}).get("dataset_name", "")
     if not dataset_name:
         return []
-    from services.api_gateway.routers.experiments import _load_dataset
-    dataset = await _load_dataset(dataset_name)
+    from services.api_gateway.routers.experiments import DatasetNotFound, _load_dataset
+    try:
+        dataset = await _load_dataset(dataset_name)
+    except DatasetNotFound:
+        return []
     source_question = next(
         (q for q in dataset.questions if q.get("id") == question_id), None,
     )

@@ -122,3 +122,27 @@ async def test_skips_a_port_pair_already_bound_by_an_unrelated_process(tmp_path,
     new_resources = mock_update.call_args[0][2]["$set"]["resources"]
     neo4j_res = next(r for r in new_resources if r["type"] == "neo4j")
     assert neo4j_res["uri"] == f"bolt://localhost:{mod._BASE_BOLT_PORT + 2}"
+
+
+@pytest.mark.asyncio
+async def test_a_realm_whose_graph_is_in_the_default_store_is_not_repointed(tmp_path, monkeypatch) -> None:
+    """Found live: a realm with its whole graph in the default container had
+    been pointed at a new one that was never given a volume. The pointer moved
+    and the graph did not."""
+    import tools.generate_realm_neo4j_compose as mod
+    monkeypatch.setattr(mod, "_OUTPUT_PATH", tmp_path / "out.yml")
+    monkeypatch.setattr(mod, "_port_is_free", lambda port: True)
+
+    realms = [_realm("demo", "2026-01-01"), _realm("acme", "2026-01-02"), _realm("acme-2", "2026-01-03")]
+    corpora = [{"realm_id": "acme", "corpus_id": "c", "backends": {"neo4j": None, "qdrant": None}},
+               {"realm_id": "acme-2", "corpus_id": "c", "backends": {"qdrant": None}}]
+
+    async def find_many(collection, query=None, sort=None):
+        return corpora if collection == "corpora" else realms
+
+    with patch("adapters.mongodb.find_many", AsyncMock(side_effect=find_many)), \
+         patch("adapters.mongodb.update_one", AsyncMock(return_value=1)) as mock_update:
+        result = await mod.generate_neo4j_overlay()
+
+    assert result["acme"]["status"] == "graph_data_in_default_store"
+    assert [call.args[1] for call in mock_update.call_args_list] == [{"id": "acme-2"}]

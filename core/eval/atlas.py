@@ -611,7 +611,9 @@ FAILURES: tuple[FailureMode, ...] = (
         detection="detector",
         instrument="ingest",
         applies_when=(("C3", ("rrf", "score_normalization", "learned_fusion")),),
-        signals=(Signal("detector", "bm25_dominance"),),
+        # The second signal observes the half itself, from the list it returned
+        # before the merge; the first infers it from the merged list.
+        signals=(Signal("detector", "bm25_dominance"), Signal("detector", "half_returned_nothing")),
         bait="tests/unit/test_atlas_baits.py::test_bait[F40]",
     ),
     FailureMode(

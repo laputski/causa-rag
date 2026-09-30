@@ -262,6 +262,56 @@ def detect_header_only(refs: list[dict[str, Any]]) -> DiagnosticItem | None:
     return None
 
 
+#: The halves each merging pipeline combines, by the pipeline's id. A pipeline
+#: not listed merges nothing, or merges what this platform cannot see.
+_HALVES_OF = {
+    "hybrid_rrf": ("dense", "sparse"),
+    "hybrid_weighted": ("dense", "sparse"),
+    "graph": ("graph", "dense"),
+}
+
+
+def detect_half_returned_nothing(run: dict[str, Any]) -> DiagnosticItem | None:
+    """A half the pipeline merges returned nothing, on every question.
+
+    Read from each half's own list before the merge, which runs record since
+    the halves were kept. The signal beside it reads the merged list and
+    infers where its fragments came from; this one observes it. Found live:
+    a realm whose dense collection had been empty for two months ran as
+    hybrid throughout, the lexical half supplied every fragment, recall fell
+    from 0.5 to 0.19, and the finding that did fire said the corpus had been
+    embedded with random vectors.
+
+    Every question, and never most of them: a half that finds nothing for
+    some questions is a half that found nothing relevant, which is what
+    retrieval is for. Silent for a run stored before the halves were
+    recorded, which has none to read.
+    """
+    expected = _HALVES_OF.get(str((run.get("config") or {}).get("pipeline_id") or ""))
+    if not expected:
+        return None
+    recorded = [q for q in run.get("question_results") or []
+                if any(q.get(f"{half}_source_refs") for half in expected)]
+    if len(recorded) < 3:
+        return None
+    for half in expected:
+        if not any(q.get(f"{half}_source_refs") for q in recorded):
+            return DiagnosticItem(
+                id="half_returned_nothing",
+                severity="error",
+                title="One half of the retrieval returned nothing on every question",
+                detail=(
+                    f"The {half} half returned no fragment on any of {len(recorded)} questions, so "
+                    "the other half supplied every context while the configuration still says the "
+                    "pipeline merges two."
+                ),
+                action="Check that the index this half reads exists and holds the corpus, then "
+                       "re-run; until then, read the run as a single-source one.",
+                params={"half": half, "questions": len(recorded)},
+            )
+    return None
+
+
 def detect_bm25_dominance(refs: list[dict[str, Any]]) -> DiagnosticItem | None:
     """One half of a hybrid retriever supplies almost the whole context.
 
@@ -1060,12 +1110,21 @@ def run_detectors(run: dict[str, Any]) -> list[DiagnosticItem]:
     # detector is given answers alone and has no way to know why they are empty.
     retrieval_only = bool((run.get("config") or {}).get("retrieval_only"))
 
+    # A dense half that returned nothing leaves every merged fragment with a
+    # dense score of zero, which the stub check reads as a corpus embedded
+    # with random vectors. Found live: an empty dense collection was reported
+    # at severity error as a stub embedder. The half's own list says what
+    # happened, and the embedder cannot be judged from a half that answered
+    # nothing, so the stub check stands aside and the half's finding speaks.
+    half_empty = detect_half_returned_nothing(run)
+    dense_said_nothing = half_empty is not None and half_empty.params.get("half") == "dense"
+
     candidates = [
         # No external special case any more: detect_stub_embedder now decides
         # from whether the run recorded a per-signal split at all, which is the
         # same question the special case was standing in for, asked of the data
         # instead of the configuration.
-        detect_stub_embedder(refs, run.get("corpus_manifest")),
+        None if dense_said_nothing else detect_stub_embedder(refs, run.get("corpus_manifest")),
         detect_duplicates(run),
         detect_header_only(refs),
         None if is_external else detect_bm25_dominance(refs),
@@ -1074,6 +1133,7 @@ def run_detectors(run: dict[str, Any]) -> list[DiagnosticItem]:
         detect_layer_bottleneck(run),
         detect_unverified_coverage(run),
         detect_assertions_not_judged(run),
+        half_empty,
         detect_undeclared_metric(run),
         detect_aggregate_disagrees_with_questions(run),
         detect_chunk_id_collision(run),

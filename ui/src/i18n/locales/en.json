@@ -2079,6 +2079,7 @@
     "more": "More actions",
     "baselineHint": "The run others in this realm are compared against",
     "finding": {
+      "half_returned_nothing": "One half of the retrieval returned nothing on every question",
       "assertions_not_judged": "Some answers were not checked against their assertions",
       "stub_embedder": "Looks like a stub embedder",
       "embedder_unverified": "The embedder could not be checked",
@@ -2101,6 +2102,7 @@
       "named_and_indexed_segmentation_differ": "The segmentation this run names is not the one its index was built with"
     },
     "findingAction": {
+      "half_returned_nothing": "Check that the index this half reads exists and holds the corpus, then re-run; until then, read the run as a single-source one.",
       "assertions_not_judged": "Make the judge reachable and re-run, or read the share as covering only the questions that have it.",
       "embedder_unverified": "Read the run's recall against its reference sources: a corpus indexed by a stub model retrieves at chance.",
       "stub_embedder": "Re-index the corpus with the real embedding model switched on.",
@@ -2148,6 +2150,7 @@
     "noTraceGaps": "The run recorded everything every check needs.",
     "diagnosisDepth": "Diagnosis depth",
     "findingDetail": {
+      "half_returned_nothing": "The {{half}} half returned no fragment on any of {{questions}} questions, so the other half supplied every context while the configuration still says the pipeline merges two.",
       "assertions_not_judged": "{{unjudged}} of {{carrying}} questions carrying assertions have no verdict on all of them ({{reason}}{{note}}), so the share of assertions answered is averaged over the questions the judge happened to reach.",
       "stub_embedder": {
         "by_the_load_record": "The load record for this corpus says its vectors were produced by the stub, which hashes text into a vector of the right width and no meaning (loaded {{loaded_at}}). Every similarity in this run is between a real query vector and a hash.",
@@ -2176,6 +2179,9 @@
       "unmeasured_stage_cost": "{{stages}} stage(s) of this run left no duration behind: {{named}}. What the stage costs cannot be weighed against what it buys, so keeping it is a decision nobody can check."
     },
     "findingWord": {
+      "dense": "dense (vector)",
+      "sparse": "lexical (BM25)",
+      "graph": "graph",
       "unreachable": "the judge's server could not be reached",
       "model_not_pulled": "the judge's model is not on its server",
       "transport_failed": "the judge stopped answering during the run",

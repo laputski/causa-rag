@@ -234,25 +234,21 @@ async def golden_set_coverage(
     import adapters.mongodb as mdb
     from core.eval.drift import coverage_report, nearest_similarities, uncovered_count
     from core.registry import registry
-    from services.api_gateway.routers.experiments import _load_dataset
+    from services.api_gateway.routers.experiments import DatasetNotFound, _load_dataset
 
     docs = await mdb.find_many(_COLLECTION, {"realm_id": realm_id, "corpus_id": corpus_id})
     questions = [str(d.get("query") or "") for d in docs if d.get("query")]
-    dataset = await _load_dataset(dataset_name)
-
-    # Found by re-verification: `_load_dataset` falls back to a five-question
-    # stub of invented text when a name matches nothing. Coverage then
-    # compares real traffic against fabricated questions and reports "100%
-    # uncovered" — a confidently wrong number that reads as a finding. A
-    # missing dataset is a caller mistake and is said so rather than measured.
-    if dataset_name not in ("stub", "") and getattr(dataset, "name", "") == "stub":
+    # Found by re-verification: a name matching nothing used to give a
+    # five-question stub of invented text, and coverage then compared real
+    # traffic against it and reported "100% uncovered". The loader says so
+    # itself now; a missing dataset is a caller mistake and is said so.
+    try:
+        dataset = await _load_dataset(dataset_name)
+    except DatasetNotFound as exc:
         raise HTTPException(
             status_code=404,
-            detail=(
-                f"Dataset {dataset_name!r} not found; refusing to measure coverage "
-                "against the stub dataset it would otherwise fall back to"
-            ),
-        )
+            detail=f"Dataset {dataset_name!r} not found; refusing to measure coverage without it",
+        ) from exc
 
     golden = [str(q.get("question") or "") for q in dataset.questions if q.get("question")]
 

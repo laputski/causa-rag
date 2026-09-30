@@ -577,7 +577,24 @@ async def _fill_answered_counts(summaries: dict[str, _Summary]) -> None:
 
 # ── Dataset loader ────────────────────────────────────────────────────────────
 
+class DatasetNotFound(LookupError):
+    """A dataset was named and nothing by that name exists."""
+
+
 async def _load_dataset(dataset_name: str, external_rag_id: str | None = None) -> Any:
+    """The named dataset, from the store or the golden files.
+
+    Raises DatasetNotFound when a name matches nothing. It used to return a
+    five-question stub of invented text instead, and a run then finished
+    green having measured nothing. Found live re-running a stored run of a
+    realm whose datasets live in the store: the run document keeps the
+    dataset's short name (`notes.v0.fast` here), the lookup by name cut it at
+    the first dot and found no dataset called `notes`, and the comparison and
+    resampling paths, which
+    load a stored run's dataset by that short name, had been measuring the
+    stub for every dataset whose name has a dot in it. "stub" and "" still
+    ask for the stub on purpose.
+    """
     from eval.dataset import EvalDataset, make_stub_dataset
 
     if dataset_name and dataset_name not in ("stub", ""):
@@ -604,6 +621,7 @@ async def _load_dataset(dataset_name: str, external_rag_id: str | None = None) -
         try:
             import adapters.mongodb as mdb
             doc = await mdb.find_one("datasets", {"filename": dataset_name}) \
+                  or await mdb.find_one("datasets", {"name": dataset_name}) \
                   or await mdb.find_one("datasets", {"name": dataset_name.split(".")[0]})
             if doc and doc.get("questions"):
                 ds = EvalDataset.__new__(EvalDataset)
@@ -622,6 +640,7 @@ async def _load_dataset(dataset_name: str, external_rag_id: str | None = None) -
         for p in sorted(golden_dir.glob("*.jsonl"), reverse=True):
             if p.stem.split(".")[0] == dataset_name:
                 return EvalDataset.from_jsonl(p)
+        raise DatasetNotFound(f"Dataset {dataset_name!r} not found")
     return make_stub_dataset(n=5)
 
 
@@ -1474,7 +1493,10 @@ async def diagnose_retrieval_miss_endpoint(
     if question is None:
         raise HTTPException(status_code=404, detail=f"Question {question_id!r} not found in run {run_id!r}")
 
-    dataset = await _load_dataset(result.dataset_name)
+    try:
+        dataset = await _load_dataset(result.dataset_name)
+    except DatasetNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     dataset_question = next((q for q in dataset.questions if q.get("id") == question_id), None)
     article_refs = (dataset_question or {}).get("article_refs") or []
     if not article_refs:
@@ -2335,7 +2357,10 @@ async def create_experiment(body: NewExperimentRequest) -> dict[str, Any]:
         _opensearch_cfg = await _get_realm_resource(body.realm_id, "opensearch")
         if cfg.retrieval_pins_enabled:
             _retrieval_pins = await _load_active_pins(body.realm_id, cfg.corpus_id)
-    dataset = await _load_dataset(body.dataset_name, external_rag_id=cfg.external_rag_id)
+    try:
+        dataset = await _load_dataset(body.dataset_name, external_rag_id=cfg.external_rag_id)
+    except DatasetNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     embedder = registry.resolve("embedder", cfg.embedder.component_id)
     # Coverage is resolved against the INDEX this run actually
     # searches, built once per run. External RAG keeps relying on each row's

@@ -111,6 +111,18 @@ async def generate_neo4j_overlay() -> dict[str, Any]:
     default_realm = realms[0]
     result[default_realm["id"]] = {"status": "default", "uri": _DEFAULT_BOLT_URI}
 
+    # A realm that already has a corpus in the graph store keeps its graph in
+    # the default container, because until now that was the only one. Pointing
+    # it at a new, empty container moves the pointer and not the graph. Found
+    # live: a realm with its whole graph in the default store had been
+    # repointed to a container that was never given a volume, and its graph
+    # pipeline answered from nothing. Such a realm is left where its data is,
+    # and the result says so, so an operator moves the data first.
+    graph_realms = {
+        c.get("realm_id") for c in await mdb.find_many("corpora", query={"deleted_at": None})
+        if "neo4j" in (c.get("backends") or {})
+    }
+
     # First pass: find every bolt port already claimed by a previously-
     # migrated Realm, so a Realm being assigned fresh ports in THIS run can't
     # collide with one assigned in an earlier run (idempotency across runs,
@@ -139,6 +151,9 @@ async def generate_neo4j_overlay() -> dict[str, Any]:
                 "status": "already_migrated", "uri": neo4j_res["uri"],
                 "service_name": f"neo4j-{safe_name}",
             }
+            continue
+        if realm_id in graph_realms:
+            result[realm_id] = {"status": "graph_data_in_default_store", "uri": _DEFAULT_BOLT_URI}
             continue
 
         while next_bolt in claimed_bolt_ports or not (_port_is_free(next_http) and _port_is_free(next_bolt)):

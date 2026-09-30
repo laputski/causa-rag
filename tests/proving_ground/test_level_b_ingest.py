@@ -278,6 +278,15 @@ def test_F40_a_missing_half_leaves_the_other_supplying_everything(
     assert alone_healthy < total_healthy // 2, (
         f"the healthy half already leans on one source: {alone_healthy} of {total_healthy}"
     )
+    # The second signal observes the half itself, from the list it returned
+    # before the merge, where the first infers it from the merged list.
+    assert "detector:half_returned_nothing" not in detector_signals(healthy), (
+        "a half already reads as empty on the healthy corpus"
+    )
+    assert "detector:half_returned_nothing" in detector_signals(missing), (
+        f"the lexical half returned nothing and the check that reads it said nothing: "
+        f"{sorted(detector_signals(missing))}"
+    )
     record("F40", "a lexical index that was never built leaves one half supplying everything",
            single_half_healthy=f"{alone_healthy}/{total_healthy}",
            single_half_missing=f"{alone_missing}/{total_missing}",

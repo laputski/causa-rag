@@ -565,3 +565,67 @@ checked each finding's detail and never its title. **Fix and guard:**
 `test_every_finding_has_a_title` in
 `tests/fitness/test_finding_details_are_translatable.py`, reading every finding
 id from the detectors, baited by removing one Russian title.
+
+---
+
+## 24. A dataset nobody could find was replaced by five invented questions
+
+**Symptom:** a re-run of a stored run finished green with five questions where
+the original had thirteen, and with no retrieval metric at all.
+
+**Found by:** re-running stored runs of a realm whose datasets live in the
+store, to check that realm still worked. **Root cause:** the loader looked a
+dataset up by file name, then by its short name cut at the first dot, and
+returned `make_stub_dataset(n=5)` when neither matched. A run document keeps
+the short name (`notes.v0.fast`), which cut at the dot is `notes`, which names
+nothing. The comparison and the resampling of flipped questions load a stored
+run's dataset by that short name, so for every dataset whose name has a dot
+they had been measuring the stub.
+
+**Fix:** the short name is looked up whole, and a name that matches nothing
+raises `DatasetNotFound`; each caller says so in its own way (404 for a new
+run, the diagnosis and coverage; an empty list where a missing dataset only
+costs a convenience). "stub" still asks for the stub on purpose.
+**Guard:** `tests/unit/test_a_dataset_that_is_not_there_is_not_replaced.py`,
+failing on the old loader.
+
+---
+
+## 25. Moving a realm to its own graph store moved the pointer and not the graph
+
+**Symptom:** a realm's graph pipeline answered from nothing, and its graph
+resource was reported unreachable, while tens of thousands of its graph fragments sat in
+the default store.
+
+**Found by:** checking that the realm worked after merging two local stacks.
+**Root cause:** `tools/generate_realm_neo4j_compose.py` gives every realm but
+the first its own container and rewrites the realm's URI to it. It never moved
+data, and a realm whose graph had been built in the default store was pointed
+at an empty container; this one was never even given a volume.
+
+**Fix:** a realm that already has a corpus in the graph store is left where its
+data is and reported as `graph_data_in_default_store`, so the data is moved
+before the pointer. This installation's graph was copied into the realm's own
+volume by hand. **Guard:** a case in `tests/unit/test_generate_realm_neo4j_compose.py`.
+
+---
+
+## 26. An empty dense collection ran as hybrid for two months, reported as a stub embedder
+
+**Symptom:** recall on one realm fell from 0.5 to 0.19 between two runs of one
+configuration. The finding that fired at error said the corpus had been
+embedded with random vectors.
+
+**Found by:** re-running that realm's stored runs. The halves each merge
+combines are recorded now, and every question's dense half was empty: the
+collection held no points since the vector store's volume was recreated in
+July, while the lexical index kept every fragment.
+
+**Fix:** a finding, `half_returned_nothing`, reads each half's own list before
+the merge and names the half that returned nothing on every question; it is a
+second signal of the catalogue entry for an absent half. The stub-embedder
+check stands aside when the dense half said nothing, since no embedder can be
+judged from a half that answered nothing. The collection was rebuilt from the
+lexical index's fragments, which keeps every chunk id identical on both halves.
+**Guard:** `tests/unit/test_a_half_that_returned_nothing_is_named.py`, and the
+proving-ground pair for the absent half now asserts the new signal as well.

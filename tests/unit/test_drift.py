@@ -64,20 +64,20 @@ def test_the_threshold_travels_so_a_reader_can_disagree_with_it() -> None:
 # ── Found by re-verification: a missing dataset silently became a stub ───
 
 async def test_coverage_refuses_a_dataset_that_does_not_exist() -> None:
-    """`_load_dataset` falls back to a five-question stub of invented text
-    when a name matches nothing. Coverage then compared real traffic against
-    fabricated questions and reported "100% uncovered" — a confidently wrong
-    number that reads as a finding rather than as a caller mistake."""
+    """`_load_dataset` used to fall back to a five-question stub of invented
+    text when a name matched nothing, and coverage compared real traffic
+    against fabricated questions and reported "100% uncovered". The loader
+    says the dataset is missing now, and coverage passes that on."""
     from unittest.mock import AsyncMock, patch
 
     from fastapi import HTTPException
 
-    from eval.dataset import make_stub_dataset
     from services.api_gateway.routers import production
+    from services.api_gateway.routers.experiments import DatasetNotFound
 
     with patch("adapters.mongodb.find_many", AsyncMock(return_value=[{"query": "q"}])), \
          patch("services.api_gateway.routers.experiments._load_dataset",
-               AsyncMock(return_value=make_stub_dataset(n=5))):
+               AsyncMock(side_effect=DatasetNotFound("Dataset 'nosuch.jsonl' not found"))):
         with pytest.raises(HTTPException) as exc:
             await production.golden_set_coverage(
                 realm_id="r", corpus_id="c", dataset_name="nosuch.jsonl",
