@@ -234,6 +234,54 @@ def test_update_question_on_generated_question_marks_edited_manually(client) -> 
     assert prov["model"] == "qwen3:8b"  # original generation context preserved
 
 
+def test_an_edit_keeps_every_field_the_form_does_not_show(client) -> None:
+    """Found by reading, not by running: the edit form sends four fields and
+    the row used to be replaced by exactly those four. Editing a golden row
+    in the interface deleted its `mode`, its explicit `answerability` and
+    anything else it carried, and nothing on the screen said so."""
+    stored = {"id": "q1", "question": "old?", "reference_answer": "old",
+              "question_type": "closed", "article_refs": ["base-ru/02"],
+              "mode": "regulations", "answerability": "answerable",
+              "assertions": ["Калибровка выполняется раз в три месяца."]}
+    with patch("adapters.mongodb.find_one", AsyncMock(return_value=dict(_DATASET, questions=[stored]))), \
+         patch("adapters.mongodb.update_one", AsyncMock(return_value=1)):
+        resp = client.put("/datasets/ds1/questions/q1", json={
+            "question": "new?", "reference_answer": "new",
+            "question_type": "closed", "article_refs": ["base-ru/02"],
+        })
+
+    q = resp.json()["questions"][0]
+    assert q["question"] == "new?"
+    assert q["mode"] == "regulations"
+    assert q["answerability"] == "answerable"
+    assert q["assertions"] == ["Калибровка выполняется раз в три месяца."]
+
+
+def test_an_edited_reference_reaches_the_field_the_evaluator_reads_first(client) -> None:
+    """The evaluator reads `ground_truth` before `reference_answer`, and the
+    proving ground's rows carry only `ground_truth`. Keeping the stored
+    field would show the new reference on the page and score against the
+    old one."""
+    stored = {"id": "q1", "question": "q?", "ground_truth": "old reference",
+              "article_refs": ["base-ru/02"]}
+    with patch("adapters.mongodb.find_one", AsyncMock(return_value=dict(_DATASET, questions=[stored]))), \
+         patch("adapters.mongodb.update_one", AsyncMock(return_value=1)):
+        resp = client.put("/datasets/ds1/questions/q1", json={
+            "question": "q?", "reference_answer": "new reference"})
+
+    q = resp.json()["questions"][0]
+    assert q["reference_answer"] == "new reference"
+    assert q["ground_truth"] == "new reference"
+
+
+def test_a_row_without_the_old_field_does_not_grow_one(client) -> None:
+    with patch("adapters.mongodb.find_one", AsyncMock(return_value=dict(_DATASET, questions=[dict(_DATASET["questions"][0])]))), \
+         patch("adapters.mongodb.update_one", AsyncMock(return_value=1)):
+        resp = client.put("/datasets/ds1/questions/q1", json={"question": "q?", "reference_answer": "a"})
+
+    assert "ground_truth" not in resp.json()["questions"][0]
+
+
 def test_update_question_404_when_question_id_not_in_dataset(client) -> None:
     with patch("adapters.mongodb.find_one", AsyncMock(return_value=dict(_DATASET))):
         resp = client.put("/datasets/ds1/questions/nope", json={"question": "q", "reference_answer": "a"})

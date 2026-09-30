@@ -287,8 +287,9 @@ async def add_questions_batch(
 async def update_question(
     dataset_id: str, question_id: str, body: QuestionWriteRequest, realm_id: str | None = None,
 ) -> dict[str, Any]:
-    """Replace one question's content by its own `id` (not array index —
-    index shifts under concurrent add/delete). Identity (`id`) can't be
+    """Edit one question's content by its own `id` (not array index,
+    which shifts under concurrent add/delete). Fields the body does not name
+    keep their stored values. Identity (`id`) can't be
     changed through the body. `provenance` in the request body is ignored —
     provenance is derived from the question's own stored history, not from
     whatever the client happens to echo back (see below)."""
@@ -308,7 +309,17 @@ async def update_question(
     if prov.get("origin") == "generated":
         prov["edited_manually"] = True
 
-    updated = body.model_dump()
+    # Merged over the stored row and never replacing it. The edit form sends
+    # four fields, and a row carries more: `mode`, an explicit
+    # `answerability`, `assertions`. Replacing the row deleted all of them on
+    # every edit made in the interface.
+    stored = questions[idx]
+    updated = {**stored, **body.model_dump(exclude_unset=True)}
+    # The evaluator reads `ground_truth` before `reference_answer`, so a row
+    # that still carries the older name would show the new reference and be
+    # scored against the old one.
+    if "ground_truth" in stored and "reference_answer" in body.model_fields_set:
+        updated["ground_truth"] = updated["reference_answer"]
     updated["id"] = question_id
     updated["provenance"] = prov
     questions[idx] = updated
