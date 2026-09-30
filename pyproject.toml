@@ -31,6 +31,11 @@ dependencies = [
     # a judge framework, which is why it only ever failed on a machine that had
     # not installed the judges. `fresh-clone` found it on its first real run.
     "python-multipart>=0.0.9",
+    # Seals a realm's secrets where they are stored (adapters/fernet_secrets.py).
+    # In the base set and not an extra: a realm with a password has to be
+    # savable on every installation, and one without the package could store
+    # nothing at all, since storing a secret in the clear is refused.
+    "cryptography>=42",
 ]
 
 [project.optional-dependencies]

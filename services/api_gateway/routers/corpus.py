@@ -304,8 +304,9 @@ async def ingest_corpus(
         import adapters.mongodb as mdb
         realm_doc = await mdb.find_one("realms", {"id": realm_id})
         if realm_doc:
+            from services.api_gateway.routers.realms import open_resource
             for r in realm_doc.get("resources", []):
-                realm_resources[r["type"]] = r
+                realm_resources[r["type"]] = open_resource(r)
 
     # Run ingestion in background
     asyncio.create_task(
@@ -452,7 +453,12 @@ async def _get_realm_resource(realm_id: str, resource_type: str) -> dict[str, An
     doc = await mdb.find_one("realms", {"id": realm_id})
     if not doc:
         return None
-    return next((r for r in doc.get("resources", []) if r["type"] == resource_type), None)
+    # Opened here, the one place a connection's settings are read from: a
+    # sealed secret handed on sealed would reach the driver as a dict, and one
+    # handed on empty would be replaced by the adapter's own default.
+    from services.api_gateway.routers.realms import open_resource
+    return open_resource(
+        next((r for r in doc.get("resources", []) if r["type"] == resource_type), None))
 
 
 def _resolve_qdrant(

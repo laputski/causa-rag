@@ -376,23 +376,48 @@ async def test_the_list_shows_header_names_and_no_value():
     assert set(listed[0]["headers"]) == {"Authorization", "X-Tenant"}
 
 
+@pytest.fixture
+def stub_box(monkeypatch):
+    from adapters.fernet_secrets import SecretBoxStub
+    monkeypatch.setattr(ext_rags, "secret_box", lambda: SecretBoxStub())
+
+
 @pytest.mark.asyncio
-async def test_registration_does_not_echo_the_key_back():
+async def test_registration_does_not_echo_the_key_back_and_stores_it_sealed(stub_box):
     body = ExternalRagCreateRequest(name="rag", url="http://rag.test/query",
                                     headers={"Authorization": "Bearer sk-live-123"})
     with patch.object(ext_rags.mdb, "insert_one", AsyncMock()) as insert:
         created = await ext_rags.create_external_rag(body)
     assert "sk-live-123" not in str(created)
-    # The store keeps the value: the platform sends it when it calls the RAG.
-    assert insert.call_args.args[1]["headers"] == {"Authorization": "Bearer sk-live-123"}
+    stored = insert.call_args.args[1]
+    assert "sk-live-123" not in str(stored)
+    # Opened where the platform calls the RAG, and nowhere else.
+    assert ext_rags.opened_headers(stored) == {"Authorization": "Bearer sk-live-123"}
 
 
 @pytest.mark.asyncio
-async def test_an_edit_that_sends_the_mask_back_keeps_the_stored_key():
-    """A client edits what it read, and what it read is the mask."""
+async def test_an_edit_that_sends_the_mask_back_keeps_the_stored_key(stub_box):
+    """A client edits what it read, and what it read is the mask. The stored
+    key here predates sealing and is kept as it is; the new value is sealed."""
     with patch.object(ext_rags.mdb, "find_one", AsyncMock(return_value=dict(_WITH_A_KEY))), \
          patch.object(ext_rags.mdb, "update_one", AsyncMock()) as update:
         await update_external_rag("r1", ExternalRagUpdateRequest(
             headers={"Authorization": ext_rags._MASK, "X-Tenant": "globex", "X-New": ext_rags._MASK}))
     written = update.call_args.args[2]["$set"]["headers"]
-    assert written == {"Authorization": "Bearer sk-live-123", "X-Tenant": "globex"}
+    assert set(written) == {"Authorization", "X-Tenant"}
+    assert written["Authorization"] == "Bearer sk-live-123"
+    assert "globex" not in str(written["X-Tenant"])
+    assert ext_rags.opened_headers({"headers": written})["X-Tenant"] == "globex"
+
+
+@pytest.mark.asyncio
+async def test_without_a_key_a_header_is_refused_and_never_stored_in_the_clear(monkeypatch):
+    from adapters.fernet_secrets import FernetSecretBox
+    monkeypatch.setattr(ext_rags, "secret_box", lambda: FernetSecretBox(key=""))
+    body = ExternalRagCreateRequest(name="rag", url="http://rag.test/query",
+                                    headers={"Authorization": "Bearer sk-live-123"})
+    with patch.object(ext_rags.mdb, "insert_one", AsyncMock()) as insert, \
+         pytest.raises(HTTPException) as exc:
+        await ext_rags.create_external_rag(body)
+    assert exc.value.status_code == 400 and "CAUSA_SECRET_KEY" in exc.value.detail
+    insert.assert_not_called()

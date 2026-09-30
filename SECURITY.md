@@ -43,6 +43,22 @@ compose file is a development convenience rather than a deployment artefact.
 Real secrets belong in `.env`, which is gitignored. `.env.example` documents
 every variable and holds no values worth protecting.
 
+## Secrets the platform stores
+
+A realm's resource may carry a password, and a registered RAG may carry
+headers that authorise it. Both are sealed where they are stored, with a key
+taken from `CAUSA_SECRET_KEY` and never from the database it protects. The API
+shows each as a mask, a realm export carries none of them whatever it is asked,
+and a secret is opened only where a connection is made. Without the key the
+platform runs and refuses every new secret, since storing one in the clear is
+what the key prevents; a secret sealed earlier cannot be opened, and the
+connection that needs it fails and says so instead of falling back to a
+default.
+
+A value stored before sealing existed is read as it is until
+`python3 -m tools.realm_secrets seal --write` seals it. The same tool reseals
+everything under a new key: `rotate --old-key <the old one> --write`.
+
 ## Data handling
 
 Nothing leaves the host. Generation and LLM judging call a local Ollama,

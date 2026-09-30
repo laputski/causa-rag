@@ -2276,9 +2276,16 @@ async def create_experiment(body: NewExperimentRequest) -> dict[str, Any]:
             raise HTTPException(
                 status_code=404, detail=f"external_rag_id {cfg.external_rag_id!r} not found"
             )
+        from core.secrets import SecretUnavailable
+        from services.api_gateway.routers.external_rags import opened_headers
+        try:
+            _headers = opened_headers(rag_doc)
+        except SecretUnavailable as exc:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         _resolved = {
             "url": rag_doc["url"],
-            "headers": rag_doc.get("headers") or {},
+            "headers": _headers,
             "retrieve_endpoint": rag_doc.get("retrieve_endpoint"),
             "request_template": rag_doc.get("request_template"),
             "response_mapping": rag_doc.get("response_mapping"),

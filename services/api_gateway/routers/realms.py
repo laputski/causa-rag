@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 import adapters.mongodb as mdb
 from core.models import ResourceConfig
+from core.secrets import MASK, SecretUnavailable, for_storage, masked, opened
 from tools.generate_realm_neo4j_compose import _COMPOSE_BASE, _OUTPUT_PATH, generate_neo4j_overlay
 
 router = APIRouter(prefix="/realms", tags=["realms"])
@@ -42,7 +43,10 @@ _CONNECTOR_TYPES_SEED: list[dict[str, Any]] = [
         "params_schema": {
             "uri": {"type": "string", "default": "bolt://localhost:7687"},
             "user": {"type": "string", "default": "neo4j"},
-            "password": {"type": "string"},
+            # Sealed where it is stored, shown as a mask, opened only to connect
+            # (core/secrets.py). Declared here, because a field's name says
+            # nothing about what its value opens.
+            "password": {"type": "string", "secret": True},
         },
     },
     {
@@ -109,6 +113,44 @@ DEFAULT_KEY_METRICS = [
 
 
 
+def secret_box() -> Any:
+    """The box sealing this installation's secrets; replaced in tests."""
+    from adapters.fernet_secrets import FernetSecretBox
+    return FernetSecretBox()
+
+
+def _secret_fields(resource_type: str, resource: dict[str, Any] | None = None) -> set[str]:
+    """What the connector type declares secret, and, for a resource stored
+    before the declaration existed, any field whose name reads as one. The
+    second is a floor under the first and never its replacement: masking a
+    field too many costs a reader nothing, and one too few is a key on the
+    screen."""
+    declared = {
+        name for ct in _CONNECTOR_TYPES_SEED if ct["type"] == resource_type
+        for name, spec in ct["params_schema"].items() if spec.get("secret")
+    }
+    named = {k for k in (resource or {}) if _SENSITIVE_KEY.search(k)}
+    return declared | named
+
+
+def open_resource(resource: dict[str, Any] | None) -> dict[str, Any] | None:
+    """A stored resource with its secrets opened, for making a connection.
+
+    Raises SecretUnavailable when a sealed secret cannot be opened, so the
+    caller fails and says why instead of connecting with a default."""
+    if resource is None:
+        return None
+    return opened(resource, _secret_fields(resource.get("type", ""), resource), secret_box())
+
+
+def _public_realm(doc: dict[str, Any]) -> dict[str, Any]:
+    """A realm as the API shows it: every secret of every resource masked."""
+    out = _strip_id(doc)
+    out["resources"] = [
+        masked(r, _secret_fields(r.get("type", ""), r)) for r in out.get("resources") or []]
+    return out
+
+
 def _strip_id(doc: dict[str, Any]) -> dict[str, Any]:
     out = {k: v for k, v in doc.items() if k != "_id"}
     # A realm created before key metrics existed returns the default list rather
@@ -152,7 +194,7 @@ async def list_realms(include_deleted: bool = False) -> list[dict[str, Any]]:
     docs = await mdb.find_many(_REALMS_COLLECTION, sort=[("created_at", -1)])
     if not include_deleted:
         docs = [d for d in docs if not d.get("deleted_at")]
-    return [_strip_id(d) for d in docs]
+    return [_public_realm(d) for d in docs]
 
 
 @router.post("", status_code=201)
@@ -171,7 +213,7 @@ async def create_realm(body: RealmCreateRequest) -> dict[str, Any]:
         "deleted_at": None,
     }
     await mdb.upsert_one(_REALMS_COLLECTION, {"id": realm_id}, doc)
-    return _strip_id(doc)
+    return _public_realm(doc)
 
 
 
@@ -200,7 +242,7 @@ _EXPORT_FORMAT = "causa-realm/v1"
 # interface protects against somebody reading over your shoulder and nothing
 # else.
 _SENSITIVE_KEY = re.compile(r"password|secret|token|api[_-]?key", re.IGNORECASE)
-_MASK = "••••••••"
+_MASK = MASK
 
 
 def _mask_resources(resources: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
@@ -211,8 +253,8 @@ def _mask_resources(resources: list[dict[str, Any]]) -> tuple[list[dict[str, Any
     fields: list[str] = []
     for resource in resources:
         copy = dict(resource)
-        for key in copy:
-            if _SENSITIVE_KEY.search(key) and copy[key]:
+        for key in sorted(_secret_fields(resource.get("type", ""), resource)):
+            if copy.get(key):
                 copy[key] = _MASK
                 fields.append(f"{resource.get('type', '?')}.{key}")
         masked.append(copy)
@@ -244,9 +286,11 @@ async def export_realm(realm_id: str, include_secrets: bool = False) -> dict[str
         raise HTTPException(status_code=404, detail=f"Realm '{realm_id}' not found")
 
     realm = _strip_id(doc)
-    masked_fields: list[str] = []
-    if not include_secrets:
-        realm["resources"], masked_fields = _mask_resources(realm.get("resources", []))
+    # Never carries a secret, whatever `include_secrets` asks. A sealed value
+    # opens only under this installation's key, so it would arrive useless;
+    # an opened one is a password in a file people email. The parameter is
+    # kept so a caller sending it is not refused, and it changes nothing.
+    realm["resources"], masked_fields = _mask_resources(realm.get("resources", []))
 
     async def scoped(collection: str) -> list[dict[str, Any]]:
         return [_strip_id(d) for d in await mdb.find_many(collection, {"realm_id": realm_id})]
@@ -365,6 +409,11 @@ async def import_realm(
     if masked:
         warnings.append("These need entering again: " + ", ".join(masked))
 
+    # A masked secret written back would be stored as dots and sent as the
+    # password. Dropped, and `masked_fields` above says which to enter again.
+    realm["resources"] = [
+        {k: v for k, v in r.items() if v != _MASK} for r in realm.get("resources") or []]
+
     if not dry_run:
         realm.pop("deleted_at", None)
         realm["created_at"] = realm.get("created_at") or datetime.now(UTC).isoformat()
@@ -389,7 +438,7 @@ async def get_realm(realm_id: str) -> dict[str, Any]:
     doc = await mdb.find_one(_REALMS_COLLECTION, {"id": realm_id})
     if not doc or doc.get("deleted_at"):
         raise HTTPException(status_code=404, detail=f"Realm '{realm_id}' not found")
-    return _strip_id(doc)
+    return _public_realm(doc)
 
 
 class RealmUpdateRequest(BaseModel):
@@ -420,7 +469,7 @@ async def update_realm(realm_id: str, body: RealmUpdateRequest) -> dict[str, Any
         update["purpose"] = body.purpose
     await mdb.update_one(_REALMS_COLLECTION, {"id": realm_id}, {"$set": update})
     doc.update(update)
-    return _strip_id(doc)
+    return _public_realm(doc)
 
 
 @router.delete("/{realm_id}", status_code=204)
@@ -459,7 +508,7 @@ async def restore_realm(realm_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=f"No soft-deleted Realm '{realm_id}' found")
     await mdb.update_one(_REALMS_COLLECTION, {"id": realm_id}, {"$set": {"deleted_at": None}})
     doc["deleted_at"] = None
-    return _strip_id(doc)
+    return _public_realm(doc)
 
 
 # ── Resource management ──────────────────────────────────────────────────────
@@ -477,7 +526,7 @@ async def set_key_metrics(realm_id: str, body: KeyMetricsRequest) -> dict[str, A
         _REALMS_COLLECTION, {"id": realm_id}, {"$set": {"key_metrics": body.key_metrics}},
     )
     doc["key_metrics"] = body.key_metrics
-    return _strip_id(doc)
+    return _public_realm(doc)
 
 
 
@@ -495,14 +544,25 @@ async def set_realm_resources(realm_id: str, resources: list[ResourceConfig]) ->
                 detail=f"Unknown connector type '{r.type}'. Supported: {sorted(valid_types)}",
             )
 
-    serialized = [r.model_dump() for r in resources]
+    stored = {r.get("type"): r for r in doc.get("resources") or []}
+    box = secret_box()
+    try:
+        serialized = [
+            for_storage(r.model_dump(), stored.get(r.type),
+                        _secret_fields(r.type, stored.get(r.type)), box)
+            for r in resources
+        ]
+    except SecretUnavailable as exc:
+        # Stored in the clear instead, it would be the failure sealing exists
+        # to prevent, done quietly.
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     await mdb.update_one(
         _REALMS_COLLECTION,
         {"id": realm_id},
         {"$set": {"resources": serialized}},
     )
     doc["resources"] = serialized
-    return _strip_id(doc)
+    return _public_realm(doc)
 
 
 class ResourceTestRequest(BaseModel):
@@ -522,6 +582,10 @@ async def test_realm_resource(realm_id: str, body: ResourceTestRequest) -> dict[
             detail=f"No '{body.type}' resource registered for Realm '{realm_id}'",
         )
 
+    try:
+        cfg = opened(cfg, _secret_fields(body.type, cfg), secret_box())
+    except SecretUnavailable as exc:
+        return {"status": "error", "type": body.type, "detail": str(exc)}
     try:
         result = await _ping_resource(body.type, cfg)
     except Exception as e:

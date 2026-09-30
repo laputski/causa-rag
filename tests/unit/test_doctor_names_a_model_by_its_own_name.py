@@ -27,3 +27,12 @@ def test_the_model_itself_is(monkeypatch) -> None:
 
     rows = _rows(monkeypatch, ["qwen3:8b", ASSERTION_JUDGE_MODEL])
     assert rows[ASSERTION_JUDGE_MODEL] == doctor.OK
+
+
+def test_the_secret_key_row_says_whether_secrets_can_be_saved(monkeypatch) -> None:
+    from cryptography.fernet import Fernet
+
+    monkeypatch.delenv("CAUSA_SECRET_KEY", raising=False)
+    assert doctor.check_secret_key().status == doctor.WARN
+    monkeypatch.setenv("CAUSA_SECRET_KEY", Fernet.generate_key().decode())
+    assert doctor.check_secret_key().status == doctor.OK

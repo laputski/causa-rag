@@ -360,10 +360,27 @@ def check_python_env() -> Check:
     return Check("python env", OK, f"{version}{'' if in_venv else ', not in a venv'}")
 
 
+def check_secret_key() -> Check:
+    """Without the key the platform runs, and saving a realm's password or a
+    registered RAG's API key is refused, so nothing lands in the clear. A
+    warning and not a failure: an installation with no secrets needs none."""
+    try:
+        from adapters.fernet_secrets import FernetSecretBox
+    except Exception:
+        return Check("secret key", WARN, "the cryptography package is not installed",
+                     'pip install -e ".[dev]"')
+    box = FernetSecretBox()
+    if box.available:
+        return Check("secret key", OK, "set; secrets are sealed where they are stored")
+    return Check("secret key", WARN, f"{box.reason}; a new password or API key cannot be saved",
+                 "python3 -c \"from cryptography.fernet import Fernet; "
+                 "print(Fernet.generate_key().decode())\" and set CAUSA_SECRET_KEY")
+
+
 SERVICE_CHECKS = (check_docker, check_qdrant, check_opensearch, check_mongodb,
                   check_redis, check_langfuse, check_neo4j)
 ALL_CHECKS = SERVICE_CHECKS + (check_ollama, check_embedder_weights, check_gateway,
-                               check_realms, check_ui, check_python_env)
+                               check_realms, check_ui, check_python_env, check_secret_key)
 
 
 # ── rendering ────────────────────────────────────────────────────────────────

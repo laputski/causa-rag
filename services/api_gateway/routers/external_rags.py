@@ -13,7 +13,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 import adapters.mongodb as mdb
-from services.api_gateway.routers.realms import _MASK
+from core.secrets import SecretUnavailable, for_storage, opened
+from services.api_gateway.routers.realms import _MASK, secret_box
 
 router = APIRouter(prefix="/external-rags", tags=["external-rags"])
 # Published at the bare /external-rag-spec path (not
@@ -132,6 +133,29 @@ async def list_external_rags(realm_id: str | None = None) -> list[dict[str, Any]
         query["realm_id"] = realm_id
     docs = await mdb.find_many(_COLLECTION, query=query, sort=[("created_at", -1)])
     return [_public(d) for d in docs]
+
+
+def _sealed_headers(sent: dict[str, str], stored: dict[str, Any] | None) -> dict[str, Any]:
+    """Every header value sealed for storage, the mask meaning "keep".
+
+    All of them and not the ones whose names look secret: a header name says
+    nothing about what its value opens. Without a key it is refused: stored
+    in the clear, it would be the leak sealing exists to stop."""
+    names = set(sent) | set(stored or {})
+    kept = {n: v for n, v in (stored or {}).items() if n in sent}
+    try:
+        return for_storage(dict(sent), kept, names, secret_box())
+    except SecretUnavailable as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def opened_headers(doc: dict[str, Any]) -> dict[str, str]:
+    """A registered RAG's headers as a request needs them: sealed values
+    opened, values stored before sealing read as they are. Raises
+    SecretUnavailable when a sealed value cannot be opened, so the call fails
+    and says why instead of going out without its key."""
+    headers = doc.get("headers") or {}
+    return {k: str(v) for k, v in opened(headers, set(headers), secret_box()).items()}
 
 
 def _public(doc: dict[str, Any]) -> dict[str, Any]:
@@ -253,7 +277,7 @@ async def create_external_rag(body: ExternalRagCreateRequest) -> dict[str, Any]:
         "name": body.name,
         "url": body.url,
         "description": body.description,
-        "headers": body.headers,
+        "headers": _sealed_headers(body.headers, None) if body.headers else {},
         "retrieve_endpoint": body.retrieve_endpoint,
         "timeout_s": body.timeout_s,
         "request_template": body.request_template,
@@ -289,13 +313,12 @@ async def update_external_rag(rag_id: str, body: ExternalRagUpdateRequest) -> di
         raise HTTPException(status_code=404, detail=f"External RAG {rag_id!r} not found")
     if "headers" in updates:
         # A client that edits what it read sends the mask back. It means "keep
-        # this one", and written as it is it would go out as the header.
+        # this one", and written as it is it would go out as the header. A
+        # header the edit leaves out is removed; one it names anew is sealed.
         stored = doc.get("headers") or {}
-        updates["headers"] = {
-            name: stored[name] if value == _MASK else value
-            for name, value in (updates["headers"] or {}).items()
-            if value != _MASK or name in stored
-        }
+        sent = {name: value for name, value in (updates["headers"] or {}).items()
+                if value != _MASK or name in stored}
+        updates["headers"] = _sealed_headers(sent, stored)
     await mdb.update_one(_COLLECTION, {"id": rag_id}, {"$set": updates})
     merged = {**doc, **updates}
     return _public(merged)
@@ -350,7 +373,7 @@ async def test_external_rag(rag_id: str) -> dict[str, Any]:
     try:
         pipeline = HttpPipeline(
             url=doc["url"],
-            headers=doc.get("headers") or {},
+            headers=opened_headers(doc),
             request_template=doc.get("request_template"),
             response_mapping=doc.get("response_mapping"),
             timeout=doc.get("timeout_s") or 30.0,
