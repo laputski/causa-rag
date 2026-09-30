@@ -68,11 +68,16 @@ _CONNECTOR_TYPES_SEED: list[dict[str, Any]] = [
 
 
 async def seed_connector_types() -> None:
-    """Idempotent seed — only inserts if the collection is empty."""
-    n = await mdb.count(_CONNECTOR_TYPES_COLLECTION)
-    if n == 0:
-        for ct in _CONNECTOR_TYPES_SEED:
-            await mdb.upsert_one(_CONNECTOR_TYPES_COLLECTION, {"type": ct["type"]}, ct)
+    """Writes every declared type on every start, replacing what is stored.
+
+    It used to write only into an empty collection, so an installation seeded
+    once kept the schema of its first start, and a field added here reached no
+    machine that had run the platform before. Nothing else writes the
+    catalogue (it has a read endpoint and no write one), so the declaration in
+    this file is the only source of truth and replacing is safe.
+    """
+    for ct in _CONNECTOR_TYPES_SEED:
+        await mdb.upsert_one(_CONNECTOR_TYPES_COLLECTION, {"type": ct["type"]}, ct)
 
 
 def _slug(name: str) -> str:
@@ -214,6 +219,24 @@ def _mask_resources(resources: list[dict[str, Any]]) -> tuple[list[dict[str, Any
     return masked, fields
 
 
+def _mask_headers(rags: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
+    """Every header value of a registered RAG, masked. Found by reading: they
+    went into the file as stored, and a RAG's headers are where its API key
+    lives. All of them and not the ones whose names look secret, because a
+    header name says nothing about what its value opens."""
+    masked: list[dict[str, Any]] = []
+    fields: list[str] = []
+    for rag in rags:
+        copy = dict(rag)
+        headers = copy.get("headers") or {}
+        if headers:
+            copy["headers"] = {name: _MASK for name in headers}
+            fields += [f"external_rags.{rag.get('name', rag.get('id', '?'))}.headers.{name}"
+                       for name in headers]
+        masked.append(copy)
+    return masked, fields
+
+
 @router.get("/{realm_id}/export")
 async def export_realm(realm_id: str, include_secrets: bool = False) -> dict[str, Any]:
     doc = await mdb.find_one(_REALMS_COLLECTION, {"id": realm_id})
@@ -228,13 +251,21 @@ async def export_realm(realm_id: str, include_secrets: bool = False) -> dict[str
     async def scoped(collection: str) -> list[dict[str, Any]]:
         return [_strip_id(d) for d in await mdb.find_many(collection, {"realm_id": realm_id})]
 
-    settings_doc = await mdb.find_one("settings", {"realm_id": realm_id}) or {}
+    external_rags = await scoped("external_rags")
+    if not include_secrets:
+        external_rags, masked_headers = _mask_headers(external_rags)
+        masked_fields += masked_headers
+
+    # Keyed by `_id`, the way the settings router writes and reads them. The
+    # export used to look for a `realm_id` field the store never writes, so no
+    # export carried the settings of the realm it exported.
+    settings_doc = await mdb.find_one("settings", {"_id": realm_id}) or {}
 
     return {
         "format": _EXPORT_FORMAT,
         "exported_at": datetime.now(UTC).isoformat(),
         "realm": realm,
-        "external_rags": await scoped("external_rags"),
+        "external_rags": external_rags,
         "prompts": await scoped("prompts"),
         "generation_presets": await scoped("generation_presets"),
         "datasets": await scoped("datasets"),
@@ -309,6 +340,10 @@ async def import_realm(
         if dry_run:
             continue
         for d in docs:
+            if key == "external_rags" and d.get("headers"):
+                # A masked value written back would go out as the header
+                # itself. Dropped, and `masked_fields` below says which to enter.
+                d = {**d, "headers": {n: v for n, v in d["headers"].items() if v != _MASK}}
             await mdb.insert_one(collection, {**d, "realm_id": realm_id})
         if key == "prompts" and docs:
             # The pipeline reads prompts from files, synchronously, with no
@@ -336,7 +371,9 @@ async def import_realm(
         await mdb.insert_one(_REALMS_COLLECTION, realm)
         settings = bundle.get("settings") or {}
         if settings:
-            await mdb.insert_one("settings", {**settings, "realm_id": realm_id})
+            # Where services/api_gateway/routers/settings.py reads them. Written
+            # with a `realm_id` field instead, they were stored and never read.
+            await mdb.upsert_one("settings", {"_id": realm_id}, {**settings, "_id": realm_id})
 
     return {
         "dry_run": dry_run,

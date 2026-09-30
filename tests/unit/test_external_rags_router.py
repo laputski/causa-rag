@@ -360,3 +360,39 @@ async def test_known_embedders_for_corpus_empty_without_realm_or_corpus_id():
     assert result == set()
     result = await ext_rags._known_embedders_for_corpus("demo", None)
     assert result == set()
+
+
+_WITH_A_KEY = {"id": "r1", "name": "rag", "url": "http://rag.test/query",
+               "headers": {"Authorization": "Bearer sk-live-123", "X-Tenant": "acme"}}
+
+
+@pytest.mark.asyncio
+async def test_the_list_shows_header_names_and_no_value():
+    """Found by reading: the list returned every header as stored, and a
+    registered RAG's headers are where its API key lives."""
+    with patch.object(ext_rags.mdb, "find_many", AsyncMock(return_value=[dict(_WITH_A_KEY)])):
+        listed = await ext_rags.list_external_rags()
+    assert "sk-live-123" not in str(listed)
+    assert set(listed[0]["headers"]) == {"Authorization", "X-Tenant"}
+
+
+@pytest.mark.asyncio
+async def test_registration_does_not_echo_the_key_back():
+    body = ExternalRagCreateRequest(name="rag", url="http://rag.test/query",
+                                    headers={"Authorization": "Bearer sk-live-123"})
+    with patch.object(ext_rags.mdb, "insert_one", AsyncMock()) as insert:
+        created = await ext_rags.create_external_rag(body)
+    assert "sk-live-123" not in str(created)
+    # The store keeps the value: the platform sends it when it calls the RAG.
+    assert insert.call_args.args[1]["headers"] == {"Authorization": "Bearer sk-live-123"}
+
+
+@pytest.mark.asyncio
+async def test_an_edit_that_sends_the_mask_back_keeps_the_stored_key():
+    """A client edits what it read, and what it read is the mask."""
+    with patch.object(ext_rags.mdb, "find_one", AsyncMock(return_value=dict(_WITH_A_KEY))), \
+         patch.object(ext_rags.mdb, "update_one", AsyncMock()) as update:
+        await update_external_rag("r1", ExternalRagUpdateRequest(
+            headers={"Authorization": ext_rags._MASK, "X-Tenant": "globex", "X-New": ext_rags._MASK}))
+    written = update.call_args.args[2]["$set"]["headers"]
+    assert written == {"Authorization": "Bearer sk-live-123", "X-Tenant": "globex"}

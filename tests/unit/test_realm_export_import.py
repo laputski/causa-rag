@@ -37,6 +37,11 @@ class FakeMongo:
             if self._match(d, query):
                 d.update(update.get("$set", {}))
 
+    async def upsert_one(self, collection, query, doc):
+        docs = self.data.setdefault(collection, [])
+        docs[:] = [d for d in docs if not self._match(d, query)]
+        docs.append(dict(doc))
+
 
 @pytest.fixture
 def fake(monkeypatch):
@@ -49,15 +54,20 @@ def fake(monkeypatch):
             ],
             "created_at": "2026-01-01T00:00:00Z",
         }],
-        "external_rags": [{"id": "r1", "name": "demo-rag", "realm_id": "demo"}],
+        "external_rags": [{"id": "r1", "name": "demo-rag", "realm_id": "demo",
+                           "headers": {"Authorization": "Bearer sk-live-123"}}],
         "prompts": [{"id": "demo_prompt_v1", "realm_id": "demo"}],
         "generation_presets": [{"id": "p1", "realm_id": "demo"}],
         "datasets": [{"filename": "handbook.v1.fast.jsonl", "realm_id": "demo",
                       "questions": [{"id": "q-1", "question": "?"}]}],
         "corpora": [{"corpus_id": "handbook", "realm_id": "demo", "description": "The staff handbook"}],
-        "settings": [{"realm_id": "demo", "model": "qwen3:8b"}],
+        # Keyed the way services/api_gateway/routers/settings.py keys it. The
+        # fake used to carry a `realm_id` field instead, which is the shape the
+        # export looked for and the store never had, so the two agreed with
+        # each other and neither with the platform.
+        "settings": [{"_id": "demo", "active_model": "realm-own-model:1b"}],
     })
-    for name in ("find_one", "find_many", "insert_one", "update_one"):
+    for name in ("find_one", "find_many", "insert_one", "update_one", "upsert_one"):
         monkeypatch.setattr(mdb, name, getattr(store, name))
     return store
 
@@ -73,7 +83,8 @@ async def test_export_masks_secrets_by_default(fake):
     # The list is required: a connection with dots instead of a password looks
     # configured and does not work, and the receiving side must learn that before
     # the first run rather than from its failure.
-    assert bundle["masked_fields"] == ["neo4j.password"]
+    assert bundle["masked_fields"] == [
+        "neo4j.password", "external_rags.demo-rag.headers.Authorization"]
 
 
 # @lat: [[realm#Realm#Выгрузка и загрузка реалма#Корпус переносится ссылкой]]
@@ -135,3 +146,34 @@ async def test_unknown_format_is_rejected(fake):
     with pytest.raises(HTTPException) as exc:
         await R.import_realm({"format": "keycloak/v1", "realm": {"id": "x"}})
     assert exc.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_export_carries_no_header_value_of_an_external_rag(fake):
+    """Found by reading: the headers of a registered RAG, which is where its
+    API key lives, went into the export file as they were stored."""
+    bundle = await R.export_realm("demo")
+    assert "sk-live-123" not in str(bundle)
+    assert "external_rags.demo-rag.headers.Authorization" in bundle["masked_fields"]
+
+
+@pytest.mark.asyncio
+async def test_an_imported_rag_does_not_send_the_mask_as_its_key(fake):
+    """A masked value written back would go out as the header itself."""
+    bundle = await R.export_realm("demo")
+    await R.import_realm(bundle, on_conflict="rename")
+    imported = await mdb.find_one("external_rags", {"realm_id": "demo-2"})
+    assert R._MASK not in str(imported.get("headers"))
+
+
+@pytest.mark.asyncio
+async def test_settings_travel_to_where_the_settings_page_reads_them(fake):
+    """Found by reading: the export looked settings up by a field the store
+    never writes, so no export ever carried them."""
+    from services.api_gateway.routers import settings as S
+    bundle = await R.export_realm("demo")
+    assert bundle["settings"].get("active_model") == "realm-own-model:1b"
+
+    report = await R.import_realm(bundle, on_conflict="rename")
+    doc = await S._get_settings_doc(report["realm_id"])
+    assert doc.get("active_model") == "realm-own-model:1b"

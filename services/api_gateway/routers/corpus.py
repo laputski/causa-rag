@@ -361,8 +361,11 @@ async def _run_ingestion(
                     cmd += ["--neo4j-uri", n["uri"]]
                 if n.get("user"):
                     cmd += ["--neo4j-user", n["user"]]
+                # In the environment and never on the command line, which every
+                # user on the machine can read while the process runs. The CLI
+                # falls back to NEO4J_PASSWORD when the flag is absent.
                 if n.get("password"):
-                    cmd += ["--neo4j-password", n["password"]]
+                    env["NEO4J_PASSWORD"] = str(n["password"])
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,

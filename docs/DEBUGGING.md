@@ -436,3 +436,102 @@ is given.
 
 **How to detect:** compare `count` against the length of what `find_many`
 returns on any collection expected to hold more than a thousand rows.
+
+---
+
+## 17. Editing a question in the interface deleted what the form did not show
+
+**Symptom:** none on the screen. A golden row edited through the dataset page
+came back with its question and reference changed as intended, and without its
+`mode`, its explicit `answerability` or any other field the form had no input
+for. A row that was declared answerable became one whose answerability was
+inferred again from its references.
+
+**Found by:** reading, while planning questions that carry `assertions`. The
+edit endpoint would have deleted those on the first edit too.
+
+**Root cause:** `PUT /datasets/{id}/questions/{qid}` replaced the stored row
+with the request body, and the form sends four fields. A second difference sat
+beside it: the evaluator reads `ground_truth` before `reference_answer`, and the
+proving ground's rows carry only `ground_truth`, so merging alone would have
+shown the new reference and scored against the old one.
+
+**Fix:** the body is merged over the stored row, taking only the fields the
+request named, and a row that carries `ground_truth` gets the new reference in
+it as well.
+
+**Guard:** three tests in `tests/unit/test_datasets_router.py`: an edit keeps
+every field the form does not show, an edited reference reaches `ground_truth`,
+and a row without `ground_truth` does not grow one. The first two failed on the
+code before the fix.
+
+**How to detect:** compare the keys of a row before and after an edit made in
+the interface.
+
+---
+
+## 18. A registered RAG's API key left the platform in every response and every export
+
+**Symptom:** none on the screen, since the interface never shows headers. The
+list of external RAGs, the answer to registering one and the answer to editing
+one all carried its headers as stored, and a realm export wrote them into the
+file.
+
+**Found by:** reading, while planning secrets for remote services. The export
+masked a realm's resources and nothing else; a registered RAG's headers are
+where its key lives.
+
+**Fix:** the API shows header names with masked values, the export masks every
+header value and lists each one in `masked_fields`, an import drops a masked
+value instead of storing it, and an edit that sends the mask back keeps the
+stored value. The platform reads the real value from the store when it calls
+the RAG, so nothing on the other side of the API needs it.
+
+**Guard:** three tests in `tests/unit/test_external_rags_router.py` and two in
+`tests/unit/test_realm_export_import.py`; the first three failed on the code
+before the fix, and the import guard failed when its fix was disabled.
+
+---
+
+## 19. A realm export never carried the realm's settings
+
+**Symptom:** an imported realm started with default settings, whatever the
+exported one had chosen. The file had a `settings` key; it was always empty.
+
+**Found by:** reading. The export looked settings up by a `realm_id` field,
+the settings router stores them under `_id`, and the import wrote them back
+with a `realm_id` field, where the settings router would never have read them.
+
+**Why no test saw it:** the fake store in the export test held its settings
+with a `realm_id` field, the shape the export looked for and the store never
+had. The fake and the code agreed with each other and neither with the
+platform. Its model value also equalled the default, so a lost setting would
+have read back as the right one.
+
+**Fix:** both sides use `_id`. **Guard:**
+`test_settings_travel_to_where_the_settings_page_reads_them`, with a value no
+default can supply.
+
+---
+
+## 20. The graph store's password was on the ingestion command line
+
+**Symptom:** none. Every user on the machine could read it with `ps` while an
+upload was being indexed.
+
+**Found by:** reading. The CLI already fell back to `NEO4J_PASSWORD` when the
+flag was absent. **Fix:** the password goes into the subprocess environment.
+**Guard:** `tests/unit/test_ingestion_keeps_the_password_off_the_command_line.py`.
+
+---
+
+## 21. The connector catalogue kept the schema of the first start
+
+**Symptom:** none yet, and that is the point of recording it: the first field
+added to a connector type would have existed in the code and in no form on any
+installation that had started before.
+
+**Found by:** reading, before adding fields for remote stores. The seed wrote
+only into an empty collection. **Fix:** every declared type is written on every
+start; nothing else writes the catalogue. **Guard:**
+`tests/unit/test_the_connector_catalogue_reaches_an_existing_install.py`.

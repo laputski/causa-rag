@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 import adapters.mongodb as mdb
+from services.api_gateway.routers.realms import _MASK
 
 router = APIRouter(prefix="/external-rags", tags=["external-rags"])
 # Published at the bare /external-rag-spec path (not
@@ -130,7 +131,21 @@ async def list_external_rags(realm_id: str | None = None) -> list[dict[str, Any]
     if realm_id:
         query["realm_id"] = realm_id
     docs = await mdb.find_many(_COLLECTION, query=query, sort=[("created_at", -1)])
-    return [{k: v for k, v in d.items() if k != "_id"} for d in docs]
+    return [_public(d) for d in docs]
+
+
+def _public(doc: dict[str, Any]) -> dict[str, Any]:
+    """A record as the API may show it: header names kept, values masked.
+
+    Found by reading: every response carried the headers as stored, and a
+    registered RAG's headers are where its API key lives. The platform
+    itself reads them from the store when it calls the RAG
+    (`experiments.py`, `test_external_rag` below), so nothing on the other
+    side of the API needs the value back."""
+    public = {k: v for k, v in doc.items() if k != "_id"}
+    if public.get("headers"):
+        public["headers"] = {name: _MASK for name in public["headers"]}
+    return public
 
 
 @spec_router.get("/external-rag-spec")
@@ -261,7 +276,7 @@ async def create_external_rag(body: ExternalRagCreateRequest) -> dict[str, Any]:
         "created_at": datetime.now(UTC).isoformat(),
     }
     await mdb.insert_one(_COLLECTION, dict(doc))
-    return doc
+    return _public(doc)
 
 
 @router.patch("/{rag_id}")
@@ -272,9 +287,18 @@ async def update_external_rag(rag_id: str, body: ExternalRagUpdateRequest) -> di
     doc = await mdb.find_one(_COLLECTION, {"id": rag_id})
     if not doc:
         raise HTTPException(status_code=404, detail=f"External RAG {rag_id!r} not found")
+    if "headers" in updates:
+        # A client that edits what it read sends the mask back. It means "keep
+        # this one", and written as it is it would go out as the header.
+        stored = doc.get("headers") or {}
+        updates["headers"] = {
+            name: stored[name] if value == _MASK else value
+            for name, value in (updates["headers"] or {}).items()
+            if value != _MASK or name in stored
+        }
     await mdb.update_one(_COLLECTION, {"id": rag_id}, {"$set": updates})
     merged = {**doc, **updates}
-    return {k: v for k, v in merged.items() if k != "_id"}
+    return _public(merged)
 
 
 @router.delete("/{rag_id}", status_code=204)
