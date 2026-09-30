@@ -90,7 +90,7 @@ def _the_question_names_its_sources(run: Mapping[str, Any], question: Mapping[st
     drawn from, not every source that answers it, so a recall against them
     measures the list and not the retrieval. A question with no scope is a
     local one: every question written before scopes existed was."""
-    return question.get("scope", "local") != "global"
+    return bool(question.get("scope", "local") != "global")
 
 
 REACHED_THE_GENERATOR = Precondition(

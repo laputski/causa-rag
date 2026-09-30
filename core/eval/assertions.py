@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import re
+from typing import Any
 
 _PROMPT_RU = """Ты проверяешь, высказано ли в ответе утверждение.
 
@@ -103,7 +104,7 @@ def parse_verdict(reply: str) -> bool | None:
     return value if isinstance(value, bool) else None
 
 
-def coverage(verdicts: list[dict]) -> float | None:
+def coverage(verdicts: list[dict[str, Any]]) -> float | None:
     """The share of statements the answer makes, or None when any verdict is
     missing. A share over the statements that happened to be judged would be
     a number about another question than the one asked."""

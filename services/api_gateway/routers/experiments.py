@@ -860,7 +860,7 @@ class _CompositeEvaluator:
         """What the run records about who judged, read after it finished."""
         if self._judge is None:
             return {}
-        return self._judge.record()
+        return dict(self._judge.record())
 
     def resolve_answerability(self, question: dict[str, Any]) -> str:
         """Exposed so the runner can persist the actual answerability class
