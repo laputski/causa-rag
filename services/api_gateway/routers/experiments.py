@@ -6,6 +6,7 @@ import json
 import uuid
 from collections.abc import Callable
 from dataclasses import fields as dataclass_fields
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,7 @@ from core.experiment.compare import CompatWarning, check_comparability
 from core.experiment.compare import compare as do_compare
 from core.experiment.config import ExperimentConfig
 from core.experiment.runner import ExperimentResult, ExperimentRunner
+from core.fragment_texts import externalise, internalise, text_ids_in
 from core.registry import registry
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
@@ -61,7 +63,12 @@ _stop_requested: set[str] = set()
 #: It rose by 28 bytes when the split stopped taking out an empty list of
 #: windows along with the full ones. That is the price of a run coming back
 #: shaped the way it was stored, and the ceiling below does not move for it.
-WORST_BYTES_PER_QUESTION = 35_823
+#:
+#: It rose by 132 more when old runs' windows were cleared: a cleared run
+#: keeps what its windows showed (the stages of each question among it), and
+#: the fattest stored run is one of them. A run written since the texts moved
+#: to their own store weighs a fraction of this.
+WORST_BYTES_PER_QUESTION = 35_955
 #: How many questions a run of that shape can hold before the engine refuses
 #: the document. The engine's own limit is 16 MiB.
 QUESTIONS_A_RUN_CAN_HOLD = 16 * 1024 * 1024 // WORST_BYTES_PER_QUESTION
@@ -86,6 +93,9 @@ _running_meta: dict[str, dict[str, Any]] = {}
 #: is what bounds a run, and it now holds nothing that grows with the width of
 #: a retrieval.
 _WINDOWS_COLLECTION = "experiment_run_windows"
+
+#: Each fragment text once, keyed by an identifier taken from the text.
+_TEXTS_COLLECTION = "fragment_texts"
 
 #: The lists that move: the windows and each half's list before a merge.
 #: Everything else a question carries is small.
@@ -274,13 +284,15 @@ async def _save(result: ExperimentResult) -> None:
     without a line anywhere saying so.
     """
     data = result.to_dict()
-    # Deduplicated before the split, because the three lists of one question
-    # are what repeat and two of them are about to move to another document.
-    # The file below keeps `data` whole: there is no size limit there, and a
-    # complete record is worth more than a small one.
-    light, windows = _split_windows(_dedupe_texts(data))
+    # Texts leave first, into the one store that holds each of them once
+    # (`core/fragment_texts.py`); the run and its file keep identifiers.
+    shaped, texts = externalise(data, _REF_FIELDS)
+    light, windows = _split_windows(shaped)
+    texts_stored = False
     try:
         import adapters.mongodb as mdb
+        await _store_texts(texts)
+        texts_stored = True
         await mdb.upsert_one("experiment_runs", {"run_id": result.run_id}, light)
         # Replaced and never added to: a run written twice under one id would
         # otherwise keep both sets of windows and serve whichever the engine
@@ -300,9 +312,82 @@ async def _save(result: ExperimentResult) -> None:
             hint="the run is on disk and is still readable; a document over the "
                  "engine's size limit is the usual cause",
         )
-    # keep file copy as backup
-    p = _STORE_DIR / f"{result.run_id}.json"
+    # The file is the copy that survives the database refusing the run, so it
+    # carries identifiers only when the texts are safe in their store, and the
+    # texts themselves when they are not.
+    _write_run_file(result.run_id, shaped if texts_stored else data)
+
+
+def _write_run_file(run_id: str, data: dict[str, Any]) -> None:
+    p = _STORE_DIR / f"{run_id}.json"
     p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+async def _store_texts(texts: dict[str, str]) -> None:
+    """Put each text in the store once, and mark every one as seen now.
+
+    Seen now even when it was there already: the clean-up removes only texts
+    nothing refers to and nothing has touched for an hour, and a run being
+    written refers to its texts only once its own documents are in.
+    """
+    if not texts:
+        return
+    import adapters.mongodb as mdb
+    now = datetime.now(UTC).isoformat()
+    await mdb.bulk_upsert(_TEXTS_COLLECTION, [
+        ({"_id": key}, {"$setOnInsert": {"text": text, "chars": len(text)},
+                        "$set": {"seen_at": now}})
+        for key, text in texts.items()
+    ])
+
+
+async def _texts_for(keys: set[str]) -> dict[str, str]:
+    if not keys:
+        return {}
+    try:
+        import adapters.mongodb as mdb
+        docs = await mdb.find_many(_TEXTS_COLLECTION, {"_id": {"$in": sorted(keys)}})
+    except Exception:
+        return {}
+    return {str(d["_id"]): d.get("text", "") for d in docs}
+
+
+async def _with_texts(payload: dict[str, Any]) -> dict[str, Any]:
+    """The run with its fragments' texts, read from their one store."""
+    keys = text_ids_in(payload.get("question_results") or [], _REF_FIELDS)
+    return internalise(payload, _REF_FIELDS, await _texts_for(keys))
+
+
+async def _clear_windows(run_id: str, now: str) -> bool:
+    """Remove a run's retrieval windows, keeping what they showed.
+
+    The run is marked before its windows are deleted and never after: a run
+    whose windows vanished unmarked would be read as a system that does not
+    report them, which is a finding against the system. A mark whose windows
+    are still there is only untidy, and the next pass deletes them.
+
+    The file beside the run is rewritten the same way, since the file is the
+    other place the windows live.
+    """
+    result = await _get_one_result(run_id)
+    if result is None or result.debug_cleared_at:
+        return False
+    payload = result.to_dict()
+    payload["tuning_provenance"] = _tuning_provenance(payload, await _get_summaries())
+    marks = {"debug_cleared_at": now, "debug_summary": _freeze(payload)}
+
+    import adapters.mongodb as mdb
+    stored = await mdb.find_one("experiment_runs", {"run_id": run_id})
+    if stored:
+        stored.pop("_id", None)
+        await mdb.upsert_one("experiment_runs", {"run_id": run_id},
+                             {**_without_windows(stored), **marks})
+        await mdb.delete_many(_WINDOWS_COLLECTION, {"run_id": run_id})
+    path = _STORE_DIR / f"{run_id}.json"
+    if path.is_file():
+        on_disk = json.loads(path.read_text(encoding="utf-8"))
+        _write_run_file(run_id, {**_without_windows(on_disk), **marks})
+    return True
 
 
 def _parse_result(data: dict[str, Any], stem: str = "") -> ExperimentResult | None:
@@ -339,6 +424,8 @@ def _parse_result(data: dict[str, Any], stem: str = "") -> ExperimentResult | No
         r.applied = data.get("applied") or {}
         r.corpus_manifest = data.get("corpus_manifest") or {}
         r.unavailable_components = data.get("unavailable_components") or []
+        r.debug_cleared_at = data.get("debug_cleared_at") or ""
+        r.debug_summary = data.get("debug_summary") or {}
         for qd in data.get("question_results", []):
             # Every field the class declares, read back by name. The list used
             # to be typed out here, and a field added to the class was written
@@ -698,14 +785,69 @@ def _attach_refusal_verdict(question_results: list[dict[str, Any]]) -> None:
         qr["is_refusal"] = not answer.strip() or bool(_NOT_FOUND.search(answer))
 
 
-def _attach_stages(question_results: list[dict[str, Any]]) -> None:
-    """Each question's retrieval stages, and where the source it needed was
-    at each (`core/eval/stages.py`). Computed at read time from what the run
-    stored, like the funnel below, so a run stored before the halves were
-    recorded gets the stages from the window onwards."""
+def _from_the_windows(payload: dict[str, Any]) -> dict[str, Any]:
+    """Every conclusion the run page draws, computed from what the run holds.
+
+    One function for all of them, because clearing a run's windows has to
+    keep each of them, and a conclusion computed somewhere else would be the
+    one that quietly changed after a clean-up.
+    """
+    from core.eval.detectors import run_detectors
     from core.eval.stages import stages_of
-    for qr in question_results:
-        qr["stages"] = stages_of(qr)
+    from core.eval.trace_completeness import assess_trace_completeness, diagnosis_depth
+    questions = payload.get("question_results") or []
+    return {
+        "diagnostics": [d.to_dict() for d in run_detectors(payload)],
+        "stages": [stages_of(qr) for qr in questions],
+        "trace_gaps": [g.to_dict() for g in assess_trace_completeness(questions)],
+        "diagnosis_depth": diagnosis_depth(questions),
+        "context_size_advice": _context_size_advice(payload),
+    }
+
+
+def _without_windows(payload: dict[str, Any]) -> dict[str, Any]:
+    return {**payload, "question_results": [
+        {k: v for k, v in qr.items() if k not in _HEAVY_FIELDS}
+        for qr in payload.get("question_results") or []]}
+
+
+def _freeze(payload: dict[str, Any]) -> dict[str, Any]:
+    """What a run's windows show, kept for when they are gone.
+
+    The findings kept are exactly those the windows decide: whatever differs
+    between the run read with its windows and the same run read without them.
+    Worked out by comparing and never by a list of the checks that read
+    windows, because such a list is the thing somebody forgets to extend.
+    The rest stay live, since some of them read the other runs in the store
+    and ought to follow it.
+    """
+    whole = _from_the_windows(payload)
+    bare = _from_the_windows(_without_windows(payload))
+    return {
+        "findings": [d for d in whole["diagnostics"] if d not in bare["diagnostics"]],
+        "suppress": sorted({d["id"] for d in bare["diagnostics"]
+                            if d not in whole["diagnostics"]}),
+        "stages": whole["stages"],
+        "trace_gaps": whole["trace_gaps"],
+        "diagnosis_depth": whole["diagnosis_depth"],
+        "context_size_advice": whole["context_size_advice"],
+    }
+
+
+def _conclusions(payload: dict[str, Any]) -> dict[str, Any]:
+    live = _from_the_windows(payload)
+    if not payload.get("debug_cleared_at"):
+        return live
+    frozen = payload.get("debug_summary") or {}
+    replaced = set(frozen.get("suppress") or []) | {d["id"] for d in frozen.get("findings") or []}
+    return {
+        "diagnostics": [d for d in live["diagnostics"] if d["id"] not in replaced]
+                       + list(frozen.get("findings") or []),
+        "stages": frozen.get("stages") or live["stages"],
+        "trace_gaps": frozen.get("trace_gaps", live["trace_gaps"]),
+        "diagnosis_depth": frozen.get("diagnosis_depth", live["diagnosis_depth"]),
+        "context_size_advice": frozen.get("context_size_advice"),
+    }
 
 
 def _attach_funnel(question_results: list[dict[str, Any]]) -> None:
@@ -1208,6 +1350,10 @@ async def delete_experiment(run_id: str) -> None:
         import adapters.mongodb as mdb
         n = await mdb.delete_one("experiment_runs", {"run_id": run_id})
         deleted = n > 0
+        # The windows went with the run's document into their own collection
+        # and have to follow it out. Found by reading: they were left behind,
+        # one document per question, with no run pointing at them.
+        await mdb.delete_many(_WINDOWS_COLLECTION, {"run_id": run_id})
     except Exception:
         pass
     p = _STORE_DIR / f"{run_id}.json"
@@ -1370,6 +1516,9 @@ async def get_calibration(
     return {
         "calibration": calibrate_metric(question_results, feedback, metric, threshold).to_dict(),
         "position_bias": measure_position_bias(observations).to_dict(),
+        # A cleared run has no candidate window left, so the positions above
+        # were read off each answer's context instead, which is shorter.
+        "windows_cleared_at": payload.get("debug_cleared_at") or None,
     }
 
 
@@ -1408,7 +1557,9 @@ async def get_experiment(run_id: str) -> dict[str, Any]:
                 "progress": events[-1] if events else None,
             }
         raise HTTPException(status_code=404, detail=f"Run {run_id!r} not found")
-    payload = result.to_dict()
+    # The one read that carries texts: this page shows fragments, and every
+    # other reader of a run needs only what the references keep beside them.
+    payload = await _with_texts(result.to_dict())
     payload["status"] = "done"
 
     # How much searching this number is the best of. Computed here because it
@@ -1424,13 +1575,16 @@ async def get_experiment(run_id: str) -> dict[str, Any]:
 
     # silent-degradation detectors, each carrying the catalogue entries it is
     # evidence for so a reader can tell a known failure from a bare sentence.
-    from core.eval.detectors import run_detectors
+    # Everything read from the windows comes through one place, which serves
+    # a run whose windows were cleared from what was concluded before they went.
     from services.api_gateway.routers.atlas import attach_failure_ids
-    payload["diagnostics"] = [d.to_dict() for d in run_detectors(payload)]
+    concluded = _conclusions(payload)
+    payload["diagnostics"] = concluded["diagnostics"]
     attach_failure_ids(payload["diagnostics"], "detector")
 
     _attach_funnel(payload["question_results"])
-    _attach_stages(payload["question_results"])
+    for qr, stages in zip(payload["question_results"], concluded["stages"], strict=True):
+        qr["stages"] = stages
     _attach_refusal_verdict(payload["question_results"])
 
     # What this run made impossible to check, beside what it did check. The two
@@ -1438,9 +1592,8 @@ async def get_experiment(run_id: str) -> dict[str, Any]:
     # sign that a whole class of them could not have been produced at all. A
     # check that could not run and a check that ran and found nothing are the
     # same absence on a screen unless one of them is named.
-    from core.eval.trace_completeness import assess_trace_completeness, diagnosis_depth
-    payload["trace_gaps"] = [g.to_dict() for g in assess_trace_completeness(payload["question_results"])]
-    payload["diagnosis_depth"] = diagnosis_depth(payload["question_results"])
+    payload["trace_gaps"] = concluded["trace_gaps"]
+    payload["diagnosis_depth"] = concluded["diagnosis_depth"]
 
     # How many questions each root cause accounts for. Derived at
     # read time from the stored per-question verdicts rather than stored
@@ -1471,7 +1624,7 @@ async def get_experiment(run_id: str) -> dict[str, Any]:
 
     # Phase 3 — what the run would have shown at a different context size,
     # answered from what it already recorded rather than by running again.
-    payload["context_size_advice"] = _context_size_advice(payload)
+    payload["context_size_advice"] = concluded["context_size_advice"]
 
     # auto-compare against the pinned baseline.
     baseline_id = await _get_baseline_run_id()
@@ -1498,6 +1651,51 @@ async def get_experiment(run_id: str) -> dict[str, Any]:
     except Exception:
         payload["deepeval_report"] = None
     return payload
+
+
+async def _exported(run_id: str, with_texts: bool) -> dict[str, Any]:
+    from fastapi import HTTPException
+    result = await _get_one_result(run_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"Run {run_id!r} not found")
+    if with_texts:
+        return await _with_texts(result.to_dict())
+    return externalise(result.to_dict(), _REF_FIELDS)[0]
+
+
+def _encoded(data: dict[str, Any]) -> bytes:
+    return json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+
+
+@router.get("/{run_id}/export/size")
+async def export_size(run_id: str) -> dict[str, Any]:
+    """How large the file is either way, so the choice is made knowing it.
+
+    Also says whether the run's windows were cleared, because a file of a
+    cleared run holds the context of each answer and none of the lists that
+    were debugged with.
+    """
+    bare = await _exported(run_id, with_texts=False)
+    return {
+        "run_id": run_id,
+        "bytes_without_texts": len(_encoded(bare)),
+        "bytes_with_texts": len(_encoded(await _exported(run_id, with_texts=True))),
+        "debug_cleared_at": bare.get("debug_cleared_at") or None,
+    }
+
+
+@router.get("/{run_id}/export")
+async def export_run(run_id: str, with_texts: bool = False) -> Any:
+    """The run as a file: with each fragment's text, or with identifiers only.
+
+    Identifiers only is the default because it is what the run itself keeps;
+    the texts are what the store holds and can be many times the size.
+    """
+    from fastapi import Response
+    body = _encoded(await _exported(run_id, with_texts))
+    suffix = "with-texts" if with_texts else "refs"
+    return Response(content=body, media_type="application/json", headers={
+        "Content-Disposition": f'attachment; filename="{run_id}.{suffix}.json"'})
 
 
 _MAX_MISS_DIAGNOSIS_WIDENED_K = 200
@@ -2311,6 +2509,8 @@ async def _run_experiment_background(
                 _diagnose_root_causes, result, diag_pipeline, ref_resolver, expected_refs,
             )
         await _save(result)
+        from services.api_gateway.run_retention import after_a_run
+        after_a_run()
     except Exception as exc:
         log = __import__("structlog").get_logger()
         log.error("experiment.background.failed", run_id=run_id, error=str(exc))
@@ -2410,6 +2610,11 @@ async def create_experiment(body: NewExperimentRequest) -> dict[str, Any]:
     try:
         dataset = await _load_dataset(body.dataset_name, external_rag_id=cfg.external_rag_id)
     except DatasetNotFound as exc:
+        # Imported here: this function imports the name inside one branch
+        # above, which makes it local to the whole function, and a line using
+        # it anywhere else raised UnboundLocalError. Found live as a 500 for a
+        # dataset that was not there.
+        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     embedder = registry.resolve("embedder", cfg.embedder.component_id)
     # Coverage is resolved against the INDEX this run actually

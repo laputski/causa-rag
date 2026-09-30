@@ -382,6 +382,12 @@ class ExperimentResult:
     # Empty on a run stored before this field existed, which reads as "nothing
     # to say" and never as "everything was available".
     unavailable_components: list[str] = field(default_factory=list)
+    # When the run's retrieval windows were removed to keep the store small,
+    # and what was concluded from them before they went. Empty on a run that
+    # still has them. Without the date a cleared run would read as a system
+    # that never reported its windows, which is a finding about the system.
+    debug_cleared_at: str = ""
+    debug_summary: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -403,6 +409,8 @@ class ExperimentResult:
             "applied": self.applied,
             "corpus_manifest": self.corpus_manifest,
             "unavailable_components": self.unavailable_components,
+            "debug_cleared_at": self.debug_cleared_at,
+            "debug_summary": self.debug_summary,
             "aggregate_metrics": self.aggregate_metrics,
             # Every field of a question, derived from the class and never
             # listed by hand: a list typed here drops the next field added,

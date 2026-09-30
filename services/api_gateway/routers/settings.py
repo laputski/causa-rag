@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 router = APIRouter(tags=["settings"])
 
@@ -112,3 +112,38 @@ async def list_models(completion_only: bool = False) -> list[dict[str, Any]]:
             return models
     except Exception as e:
         return [{"name": os.getenv("OLLAMA_MODEL", "qwen3:8b"), "size_gb": 0, "error": str(e)}]
+
+
+# ── How long runs keep their retrieval windows ────────────────────────────────
+
+class DebugRetentionRequest(BaseModel):
+    """At least one run kept per realm and at least a day: a rule that
+    cleared a run the moment it was saved would leave nobody anything to
+    debug, and a store that small has lost the feature it was kept for."""
+
+    keep_last_per_realm: int = Field(ge=1, le=1000)
+    max_age_days: int = Field(ge=1, le=36500)
+    max_mib: int = Field(ge=16, le=1024 * 1024)
+
+
+@router.get("/settings/debug-retention")
+async def get_debug_retention() -> dict[str, Any]:
+    from dataclasses import asdict
+
+    from services.api_gateway.run_retention import retention
+    return asdict(await retention())
+
+
+@router.put("/settings/debug-retention")
+async def set_debug_retention(body: DebugRetentionRequest) -> dict[str, Any]:
+    from core.run_retention import Retention
+    from services.api_gateway.run_retention import save_retention
+    await save_retention(Retention(**body.model_dump()))
+    return body.model_dump()
+
+
+@router.post("/settings/debug-retention/preview")
+async def preview_debug_retention() -> dict[str, Any]:
+    """What the next pass would clear, without clearing it."""
+    from services.api_gateway.run_retention import prune
+    return await prune(write=False)

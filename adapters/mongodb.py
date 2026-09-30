@@ -116,3 +116,29 @@ async def delete_many(collection: str, query: dict[str, Any]) -> int:
 
 async def count(collection: str, query: dict[str, Any] | None = None) -> int:
     return await get_collection(collection).count_documents(query or {})
+
+
+async def bulk_upsert(collection: str, ops: list[tuple[dict[str, Any], dict[str, Any]]]) -> None:
+    """Many `update_one(..., upsert=True)` in one round trip, in no order."""
+    if not ops:
+        return
+    from pymongo import UpdateOne
+    await get_collection(collection).bulk_write(
+        [UpdateOne(query, update, upsert=True) for query, update in ops], ordered=False)
+
+
+async def data_size(collection: str) -> int:
+    """Bytes of the collection's documents, uncompressed.
+
+    What the documents weigh and not what the files on disk do: the engine
+    compresses, so this is an upper bound on the space a clean-up can free.
+    """
+    stats = await get_client()[_DB_NAME].command("collStats", collection)
+    return int(stats.get("size", 0))
+
+
+async def sizes_by(collection: str, field: str) -> dict[str, int]:
+    """Bytes of the collection's documents, summed per value of one field."""
+    cursor = get_collection(collection).aggregate([
+        {"$group": {"_id": f"${field}", "bytes": {"$sum": {"$bsonSize": "$$ROOT"}}}}])
+    return {str(d["_id"]): int(d["bytes"]) async for d in cursor}

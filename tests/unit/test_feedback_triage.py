@@ -234,3 +234,47 @@ class TestDecideTriage:
                 "/experiments/run1/questions/q1/feedback/triage/decide", json={"action": "confirm"},
             )
         assert resp.status_code == 404
+
+
+class TestTheCrossCheckSeesTheWindows:
+    """The cross-check reads the list before the reranker, which moved out of
+    the run's document into a collection of its own. Found by reading: the
+    triage read the document alone, so a source the reranker dropped was
+    checked against nothing and counted as never retrieved."""
+
+    def _store(self, monkeypatch, *, cleared: bool = False):
+        from services.api_gateway.routers.experiments import _WINDOWS_COLLECTION
+        from tests.unit._fake_mongo import FakeMongo
+        run = {**_RUN, "question_results": [
+            {k: v for k, v in _RUN["question_results"][0].items() if k != "pre_rerank_source_refs"}]}
+        if cleared:
+            run["debug_cleared_at"] = "2026-09-01T00:00:00+00:00"
+        windows = [] if cleared else [{
+            "run_id": "run1", "question_id": "q1", "position": 0,
+            "pre_rerank_source_refs": [{"article_no": "art-11"}]}]
+        return FakeMongo({
+            "experiment_runs": [run], _WINDOWS_COLLECTION: windows,
+            "answer_feedback": [dict(_FEEDBACK_WITH_COMMENT)],
+        }).install(monkeypatch)
+
+    def _triage(self, client, monkeypatch, **kw):
+        self._store(monkeypatch, **kw)
+        gen = MagicMock()
+        gen.generate.return_value = json.dumps({
+            "error_classes": ["wrong_citation"], "target_spans": ["1 year"],
+            "expected_refs": ["art-11"], "severity": "medium", "confidence": 0.8})
+        with patch("services.api_gateway.routers.feedback._resolve_triage_generator",
+                   AsyncMock(return_value=gen)):
+            resp = client.post("/experiments/run1/questions/q1/feedback/triage")
+        assert resp.status_code == 200
+        return resp.json()["triage_result"]
+
+    def test_a_source_the_reranker_dropped_counts_as_retrieved(self, client, monkeypatch) -> None:
+        triage = self._triage(client, monkeypatch)
+        assert triage["verified_refs"] == {"art-11": True}
+
+    def test_a_run_whose_windows_were_cleared_is_sent_to_a_person(self, client, monkeypatch) -> None:
+        """Without the list the check cannot tell dropped from never found,
+        and saying "not verified" would be a verdict it has no evidence for."""
+        triage = self._triage(client, monkeypatch, cleared=True)
+        assert triage["needs_manual_review"] is True

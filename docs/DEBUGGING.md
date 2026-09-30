@@ -679,3 +679,63 @@ refused, and this installation's stored prompts were corrected.
 **Guard:** `tests/unit/test_the_question_reaches_the_prompt.py`. Its refusal
 case, run once with the check disabled to see it fail, wrote a real prompt
 into the running installation; it now fails on any touch of the store.
+
+## 29. A deleted run left its windows behind
+
+**Symptom:** none yet. A deleted run's retrieval windows would have stayed in
+`experiment_run_windows` for good, one document per question, pointed at by
+nothing and read by nothing.
+
+**Found by:** reading, while planning the clean-up of old runs' windows.
+**Root cause:** the windows moved out of the run document into a collection of
+their own, and `delete_experiment` went on deleting the document and the file
+only. **Fix:** deleting a run deletes its windows.
+**Guard:** `tests/unit/test_a_deleted_run_takes_its_windows.py`.
+
+## 30. The feedback triage checked against a list that was no longer there
+
+**Symptom:** a reviewer's comment naming a source the reranker had dropped was
+triaged as "the source was never retrieved", and the diagnosis was marked
+unconfirmed.
+
+**Found by:** reading. **Root cause:** the triage read the run document alone,
+and the list before the reranker had moved to the collection of windows, so
+the cross-check compared the model's references with the final context only.
+**Fix:** the triage reads the run with its windows, and on a run whose windows
+were cleared it sends the diagnosis to a person instead of calling it
+unverified. **Guard:** `TestTheCrossCheckSeesTheWindows` in
+`tests/unit/test_feedback_triage.py`.
+
+## 31. A clean-up of stored runs ran on the store it was being written for
+
+**Symptom:** every run file in `eval/results/runs/` changed within one minute,
+without a run having been made, and 121 of the 142 stored runs had lost their
+retrieval windows. Twenty minutes later the baseline run lost its windows too.
+
+**Found by:** a unit test that measures the stored run files, which failed
+because their shape had changed. **Root cause:** the gateway in use was started
+with `--reload` from the working tree, and the new clean-up pass started with
+the gateway. Saving the file started it, before any of its tests existed. The
+second time, a deliberately broken copy written to see a guard fail (the one
+that protects the baseline) was on disk for a second, and the reload ran it.
+What each run concluded from its windows had been frozen before they went, by
+the code that the tests later confirmed; the windows themselves are gone.
+**Fix:** the pass runs by itself only with `CAUSA_RUN_RETENTION=on`; the
+preview endpoint and `tools/prune_run_debug.py` work either way. Guards are
+now baited in memory, never by editing a file a running gateway imports.
+**Guard:** `test_the_pass_does_not_run_by_itself_unless_switched_on` in
+`tests/unit/test_old_runs_lose_their_windows_and_nothing_else.py`.
+
+## 32. A run asked for a missing dataset answered 500
+
+**Symptom:** `POST /experiments` naming a dataset that had been deleted
+answered 500 with `UnboundLocalError: cannot access local variable
+'HTTPException'`.
+
+**Found by:** starting a live run with a stored run's configuration. **Root
+cause:** the function imports `HTTPException` inside one branch, which makes
+the name local to the whole function, and the line reporting the missing
+dataset (incident 24) used it outside that branch. **Fix:** the name is
+imported where it is used. **Guard:**
+`test_a_run_asked_for_a_dataset_that_is_not_there_is_a_404` in
+`tests/unit/test_a_dataset_that_is_not_there_is_not_replaced.py`.

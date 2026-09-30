@@ -42,3 +42,27 @@ def test_a_name_that_matches_nothing_is_reported() -> None:
 
 def test_the_stub_is_still_there_for_whoever_asks_for_it() -> None:
     assert asyncio.run(_load_dataset("stub")).name == "stub"
+
+
+def test_a_run_asked_for_a_dataset_that_is_not_there_is_a_404(monkeypatch) -> None:
+    """Found live: the route answered 500. `HTTPException` was imported
+    inside one branch of the same function, which makes the name local to
+    all of it, so the line reporting the missing dataset raised instead."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from services.api_gateway.routers import experiments as E
+    from tests.unit._fake_mongo import FakeMongo
+
+    FakeMongo().install(monkeypatch)
+    app = FastAPI()
+    app.include_router(E.router)
+    with TestClient(app) as client:
+        resp = client.post("/experiments", json={
+            "config": {"name": "c",
+                       "chunking_strategy": {"kind": "chunker", "component_id": "fixed"},
+                       "embedder": {"kind": "embedder", "component_id": "bge_m3"},
+                       "generator": {"kind": "generator", "component_id": "ollama"}},
+            "dataset_name": "notes.v9.missing"})
+    assert resp.status_code == 404
+    assert "notes.v9.missing" in resp.json()["detail"]

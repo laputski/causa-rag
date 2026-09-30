@@ -17,6 +17,7 @@ Every request gets a trace_id via middleware.
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import uuid
 from collections.abc import AsyncIterator
@@ -290,8 +291,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception as exc:
         log.warning("gateway.prompts_sync_failed", error=str(exc))
 
+    # Old runs' retrieval windows are cleared and unreferenced fragment texts
+    # removed, now and every hour (services/api_gateway/run_retention.py).
+    from services.api_gateway.run_retention import keep_pruning
+    pruning = asyncio.create_task(keep_pruning())
+
     log.info("gateway.startup", components=registry.list_all())
     yield
+    pruning.cancel()
     log.info("gateway.shutdown")
 
 

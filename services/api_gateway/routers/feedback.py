@@ -209,8 +209,14 @@ async def triage_feedback(run_id: str, question_id: str, realm_id: str | None = 
         parse_triage_response,
         propose_lever,
     )
+    from services.api_gateway.routers.experiments import _merge_windows, _windows_of
 
     run_doc = await _get_run_or_404(run_id, realm_id)
+    # The list before the reranker lives beside the run and not in it. Found
+    # by reading: this read the document alone, so the check below compared
+    # the model's references against the final context only, and a source the
+    # reranker dropped was counted as never retrieved.
+    run_doc = _merge_windows(run_doc, (await _windows_of([run_id])).get(run_id, []))
     question = _question_in_run(run_doc, question_id)
     if question is None:
         raise HTTPException(status_code=404, detail=f"Question {question_id!r} not found in run {run_id!r}")
@@ -254,6 +260,11 @@ async def triage_feedback(run_id: str, question_id: str, realm_id: str | None = 
         result, source_refs=question.get("source_refs") or [],
         pre_rerank_source_refs=question.get("pre_rerank_source_refs"), funnel_layer=funnel_layer,
     )
+    if run_doc.get("debug_cleared_at"):
+        # The list the check needs was cleared with the run's old windows, so
+        # an unverified reference may have been found and dropped. A person
+        # decides; the check has no evidence either way.
+        result.needs_manual_review = True
     proposal = propose_lever(result, taxonomy)
 
     now = datetime.now(UTC).isoformat()

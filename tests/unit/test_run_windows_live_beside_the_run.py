@@ -121,9 +121,12 @@ def test_a_second_write_of_one_run_replaces_its_windows(monkeypatch: pytest.Monk
             calls.append(("insert", collection))
             return "id"
 
+        async def bulk_upsert(self, collection: str, ops: Any) -> None:
+            calls.append(("texts", collection))
+
     import adapters.mongodb as mdb
     fake = _Mongo()
-    for name in ("upsert_one", "delete_many", "insert_one"):
+    for name in ("upsert_one", "delete_many", "insert_one", "bulk_upsert"):
         monkeypatch.setattr(mdb, name, getattr(fake, name))
     monkeypatch.setattr(E, "_STORE_DIR", E._STORE_DIR)
 

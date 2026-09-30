@@ -103,3 +103,38 @@ def _fresh_mongo_client_per_test():
     except ImportError:  # a layer that does not use Mongo at all
         return
     mdb._client = None
+
+
+class _NoDatabaseInTheFastLayers(RuntimeError):
+    pass
+
+
+@pytest.fixture(autouse=True)
+def _no_live_database_in_the_fast_layers(request, monkeypatch):
+    """A fast test never reaches the developer's own database.
+
+    Most of the gateway treats an unreachable database as a normal state and
+    carries on, so a test that mocked three of the adapter's functions and
+    not a fourth went quietly to whatever Mongo was listening on this
+    machine. Found when a test of the run store wrote a text into the live
+    store of fragment texts; in CI there is no database and the same test
+    took the unreachable branch, so it passed both ways and wrote only here.
+
+    The client is refused, and never pointed somewhere unreachable: the
+    driver would wait its whole selection timeout on every such call. A test
+    replacing an adapter function is unaffected, and one that needed the
+    real engine belongs to the integration layer.
+    """
+    path = str(getattr(request.node, "fspath", ""))
+    if any(layer in path.replace("\\", "/") for layer in _STUB_ONLY):
+        try:
+            import adapters.mongodb as mdb
+        except ImportError:
+            yield
+            return
+
+        def _refuse() -> None:
+            raise _NoDatabaseInTheFastLayers(
+                "a fast test reached for the database; replace the adapter function it needs")
+        monkeypatch.setattr(mdb, "get_client", _refuse)
+    yield

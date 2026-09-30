@@ -12,6 +12,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from core.fragment_texts import text_chars, text_key
+
 Severity = str  # "ok" | "info" | "warn" | "error"
 
 # A refusal phrase, in either of the two languages this platform has served so
@@ -224,8 +226,11 @@ def detect_duplicates(run: dict[str, Any]) -> DiagnosticItem | None:
     per_question = 0
     affected = 0
     for question in run.get("question_results") or []:
-        texts = [r.get("chunk_text", "") for r in (question.get("source_refs") or [])
-                 if r.get("chunk_text")]
+        # Compared by the text's identifier, which a stored reference keeps
+        # when its text lives in the store of texts; equal identifiers are
+        # equal texts.
+        texts = [text_key(r) for r in (question.get("source_refs") or [])
+                 if (text_chars(r) or 0) > 0]
         repeats = len(texts) - len(set(texts))
         if repeats:
             per_question += repeats
@@ -248,7 +253,7 @@ def detect_header_only(refs: list[dict[str, Any]]) -> DiagnosticItem | None:
     candidates = [r for r in refs if r.get("structural_path")]
     if not candidates:
         return None
-    header_only = [r for r in candidates if len((r.get("chunk_text") or "").strip()) < 40]
+    header_only = [r for r in candidates if (text_chars(r) or 0) < 40]
     if header_only and len(header_only) / len(candidates) > 0.5:
         return DiagnosticItem(
             id="header_only",
@@ -996,9 +1001,12 @@ def detect_chunk_id_collision(run: dict[str, Any]) -> DiagnosticItem | None:
                 chunk_id = ref.get("chunk_id")
                 if not chunk_id:
                     continue
-                # A prefix is enough to tell two fragments apart and keeps a
-                # long run from holding every fragment's full text at once.
-                texts.setdefault(chunk_id, set()).add((ref.get("chunk_text") or "")[:400])
+                # The text's identifier, which tells two texts apart without
+                # holding either. It used to be the first 400 characters, so
+                # two texts differing only after them counted as one.
+                said = text_key(ref)
+                if said is not None:
+                    texts.setdefault(chunk_id, set()).add(said)
 
     colliding = sorted(chunk_id for chunk_id, seen in texts.items() if len(seen) > 1)
     if not colliding:

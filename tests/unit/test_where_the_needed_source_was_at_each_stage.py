@@ -104,9 +104,9 @@ def test_a_question_about_the_whole_corpus_is_ranked_nowhere() -> None:
 def test_the_run_page_payload_carries_each_question_s_stages() -> None:
     """Attached where the funnel verdict is, so the page reads both from one
     payload and a stored run needs nothing recomputed by the browser."""
-    from services.api_gateway.routers.experiments import _attach_stages
+    from services.api_gateway.routers.experiments import _conclusions
 
     gold = _ref(1, "07")
     questions = [{"expected_refs": ["base/07"], "dense_source_refs": [gold], "source_refs": []}]
-    _attach_stages(questions)
-    assert questions[0]["stages"]["lost_at"] == "fusion"
+    stages = _conclusions({"config": {}, "question_results": questions})["stages"]
+    assert stages[0]["lost_at"] == "fusion"
