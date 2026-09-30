@@ -50,6 +50,7 @@ def diagnose_question(
     answerability: str,
     metrics: dict[str, float],
     pre_rerank_recall_at_k: float | None = None,
+    scope: str = "local",
 ) -> FunnelVerdict:
     """Pure function — no I/O, no LLM. `metrics` is a question's
     services/api_gateway/routers/experiments.py:_CompositeEvaluator output
@@ -59,6 +60,15 @@ def diagnose_question(
     None otherwise (nothing to distinguish — see core/pipeline.py docstring
     on pre_rerank_source_refs).
     """
+    # A question about the corpus as a whole has no bounded set of sources,
+    # so it carries no recall, and without this the similarity branch below
+    # would read that absence as "retrieval found the source".
+    if scope == "global":
+        return FunnelVerdict(
+            layer="not_applicable",
+            detail="Outside the diagnosable funnel: the question asks about the corpus as a "
+                   "whole and names no bounded set of sources.",
+        )
     if answerability != "answerable":
         reason = (
             "the question falls outside the corpus domain (out_of_scope)" if answerability == "out_of_scope"

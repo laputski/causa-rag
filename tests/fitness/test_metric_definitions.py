@@ -118,6 +118,7 @@ def test_a_precondition_can_actually_fail() -> None:
     breaches = {
         "the run reached the generator": ({"config": {"retrieval_only": True}}, {}),
         "the question is one the corpus covers": ({}, {"answerability": "out_of_scope"}),
+        "the question names every source that answers it": ({}, {"scope": "global"}),
         "retrieval found at least one source the question needs": (
             {}, {"metrics": {"retrieval_recall_at_k": 0.0}}),
     }

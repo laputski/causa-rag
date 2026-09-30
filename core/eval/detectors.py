@@ -424,7 +424,8 @@ def detect_layer_bottleneck(run: dict[str, Any]) -> DiagnosticItem | None:
     for qr in run.get("question_results", []):
         metrics = qr.get("metrics") or {}
         answerability = "answerable" if "retrieval_recall_at_k" in metrics else "not_applicable"
-        verdict = diagnose_question(answerability, metrics, metrics.get("pre_rerank_recall_at_k"))
+        verdict = diagnose_question(answerability, metrics, metrics.get("pre_rerank_recall_at_k"),
+                                    scope=qr.get("scope") or "local")
         if verdict.layer == "not_applicable":
             continue
         total_applicable += 1
@@ -875,8 +876,8 @@ def detect_metric_without_grounds(run: dict[str, Any]) -> DiagnosticItem | None:
         # that reached a reader in the server's English whatever their
         # language: the frame said "three metrics were recorded against
         # questions that cannot support them" in theirs, and then named the
-        # three in English. A precondition is one of three and carries an
-        # identifier, which is what makes the clause translatable; a metric's
+        # three in English. A precondition is one of a closed set and carries
+        # an identifier, which is what makes the clause translatable; a metric's
         # name stays as it is, because it is the name a reader has to search
         # for to find the number.
         params={

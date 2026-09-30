@@ -7326,6 +7326,23 @@
             "title": "Article Refs",
             "default": []
           },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "local",
+              "global"
+            ],
+            "title": "Scope",
+            "default": "local"
+          },
+          "assertions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Assertions",
+            "default": []
+          },
           "provenance": {
             "anyOf": [
               {

@@ -19,7 +19,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -60,6 +60,12 @@ class QuestionWriteRequest(BaseModel):
     reference_answer: str = Field(min_length=1)
     question_type: str = ""
     article_refs: list[str] = []
+    # "global" for a question about the corpus as a whole, whose references
+    # are the documents it was drawn from and not every source answering it.
+    scope: Literal["local", "global"] = "local"
+    # Statements a correct answer must make, checked against the answer by a
+    # judge during a run.
+    assertions: list[str] = []
     # Trusted only for origin/model/corpus_id/chunk_id/preset_id, when a
     # generated draft is being saved (see services/api_gateway/routers/
     # generation.py) — created_at is always stamped server-side regardless

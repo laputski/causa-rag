@@ -85,12 +85,23 @@ def _something_relevant_was_retrieved(run: Mapping[str, Any], question: Mapping[
     return bool((question.get("metrics") or {}).get("retrieval_recall_at_k"))
 
 
+def _the_question_names_its_sources(run: Mapping[str, Any], question: Mapping[str, Any]) -> bool:
+    """A question about the corpus as a whole carries the documents it was
+    drawn from, not every source that answers it, so a recall against them
+    measures the list and not the retrieval. A question with no scope is a
+    local one: every question written before scopes existed was."""
+    return question.get("scope", "local") != "global"
+
+
 REACHED_THE_GENERATOR = Precondition(
     "reached_the_generator",
     "the run reached the generator", _the_run_reached_the_generator)
 ANSWERABLE = Precondition(
     "answerable",
     "the question is one the corpus covers", _the_question_is_answerable)
+BOUNDED_BY_ITS_SOURCES = Precondition(
+    "bounded_by_its_sources",
+    "the question names every source that answers it", _the_question_names_its_sources)
 RETRIEVED_SOMETHING_RELEVANT = Precondition(
     "retrieved_something_relevant",
     "retrieval found at least one source the question needs", _something_relevant_was_retrieved)
@@ -125,21 +136,21 @@ DEFINITIONS: tuple[MetricDefinition, ...] = (
     ),
     MetricDefinition(
         name="retrieval_recall_at_k",
-        requires=(ANSWERABLE,),
-        over="answerable questions",
+        requires=(ANSWERABLE, BOUNDED_BY_ITS_SOURCES),
+        over="answerable questions that name every source answering them",
         aggregated_by="mean",
         says="the share of the sources a question needs that the final context holds",
     ),
     MetricDefinition(
         name="retrieval_precision_at_k",
-        requires=(ANSWERABLE,),
+        requires=(ANSWERABLE, BOUNDED_BY_ITS_SOURCES),
         over="answerable questions",
         aggregated_by="mean",
         says="the share of the final context that a question actually needed",
     ),
     MetricDefinition(
         name="retrieval_average_precision",
-        requires=(ANSWERABLE,),
+        requires=(ANSWERABLE, BOUNDED_BY_ITS_SOURCES),
         over="answerable questions",
         aggregated_by="mean",
         says="the same share, counted so that a needed source ranked first is worth "
@@ -147,7 +158,7 @@ DEFINITIONS: tuple[MetricDefinition, ...] = (
     ),
     MetricDefinition(
         name="pre_rerank_recall_at_k",
-        requires=(ANSWERABLE,),
+        requires=(ANSWERABLE, BOUNDED_BY_ITS_SOURCES),
         over="answerable questions where the candidate list before reranking was reported",
         aggregated_by="mean",
         says="the share of the sources a question needs that retrieval found before "
@@ -176,7 +187,8 @@ DEFINITIONS: tuple[MetricDefinition, ...] = (
     ),
     MetricDefinition(
         name="grounded_in_correct_source",
-        requires=(REACHED_THE_GENERATOR, ANSWERABLE, RETRIEVED_SOMETHING_RELEVANT),
+        requires=(REACHED_THE_GENERATOR, ANSWERABLE, BOUNDED_BY_ITS_SOURCES,
+                  RETRIEVED_SOMETHING_RELEVANT),
         over="answerable questions where a retrieved source matches the ground truth",
         aggregated_by="mean",
         says="how much of the answer is carried by the source the question names, "
@@ -184,7 +196,8 @@ DEFINITIONS: tuple[MetricDefinition, ...] = (
     ),
     MetricDefinition(
         name="citation_number_coverage",
-        requires=(REACHED_THE_GENERATOR, ANSWERABLE, RETRIEVED_SOMETHING_RELEVANT),
+        requires=(REACHED_THE_GENERATOR, ANSWERABLE, BOUNDED_BY_ITS_SOURCES,
+                  RETRIEVED_SOMETHING_RELEVANT),
         over="answerable questions whose matching sources carry a structural number",
         aggregated_by="mean",
         says="the share of those numbers that occur in the answer text",

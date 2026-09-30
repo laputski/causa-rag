@@ -329,6 +329,7 @@ def _parse_result(data: dict[str, Any], stem: str = "") -> ExperimentResult | No
         r.stopped = data.get("stopped", False)
         r.generator_model = data.get("generator_model", "")
         r.coverage_check = data.get("coverage_check") or {}
+        r.judge = data.get("judge") or {}
         # What ran, and what the corpus was built from. Both were written by
         # the run and dropped here, which is the failure the catalogue calls
         # "the read path loses data" happening to the two fields added to
@@ -687,7 +688,8 @@ def _attach_funnel(question_results: list[dict[str, Any]]) -> None:
     for qr in question_results:
         metrics = qr.get("metrics") or {}
         answerability = _display_answerability(qr, metrics)
-        qr["funnel"] = diagnose_question(answerability, metrics, metrics.get("pre_rerank_recall_at_k")).to_dict()
+        qr["funnel"] = diagnose_question(answerability, metrics, metrics.get("pre_rerank_recall_at_k"),
+                                         scope=qr.get("scope") or "local").to_dict()
 
 
 class _CompositeEvaluator:
@@ -726,20 +728,8 @@ class _CompositeEvaluator:
         return resolve_answerability(question, self._ref_resolver)
 
     def evaluate(self, question: dict[str, Any], answer: Any) -> dict[str, float]:
-        from core.citation import citation_number_coverage
         from core.eval.answerability import resolve_answerability
-        from core.eval.retrieval_metrics import (
-            average_precision,
-            extracted_refs,
-            precision_at_k,
-            recall_at_k,
-        )
-        from core.eval.semantic_metrics import (
-            answer_relevance,
-            answer_similarity,
-            context_support,
-            grounded_in_correct_source,
-        )
+        from core.eval.retrieval_metrics import extracted_refs
 
         article_refs = question.get("article_refs") or []
         answerability = resolve_answerability(question, self._ref_resolver)
@@ -769,8 +759,31 @@ class _CompositeEvaluator:
         if answerability != "answerable":
             return metrics
 
+        # A question about the corpus as a whole names the documents it was
+        # drawn from and not every source that answers it, so a recall against
+        # those references measures the list and not the retrieval. The six
+        # metrics that score against the references are left out for it; the
+        # declaration of each says so (core/eval/metric_definitions.py).
+        bounded = question.get("scope", "local") != "global"
+
         source_refs = [sr.model_dump() for sr in answer.source_refs]
         retrieved = extracted_refs(source_refs)
+        if bounded:
+            self._score_retrieval(metrics, article_refs, retrieved, answer)
+
+        if retrieval_only:
+            return metrics
+        self._score_answer(metrics, question, answer, answer_text, source_refs, article_refs, bounded)
+        return metrics
+
+    def _score_retrieval(self, metrics: dict[str, float], article_refs: list[str],
+                         retrieved: list[str], answer: Any) -> None:
+        from core.eval.retrieval_metrics import (
+            average_precision,
+            extracted_refs,
+            precision_at_k,
+            recall_at_k,
+        )
         metrics["retrieval_recall_at_k"] = recall_at_k(article_refs, retrieved, k=self._top_k)
         metrics["retrieval_precision_at_k"] = precision_at_k(article_refs, retrieved, k=self._top_k)
         # Ranking-aware precision (deterministic counterpart to deepeval's
@@ -787,9 +800,16 @@ class _CompositeEvaluator:
             pre_rerank_retrieved = extracted_refs([sr.model_dump() for sr in pre_rerank_refs])
             metrics["pre_rerank_recall_at_k"] = recall_at_k(article_refs, pre_rerank_retrieved, k=self._top_k)
 
-        if retrieval_only:
-            return metrics
-
+    def _score_answer(self, metrics: dict[str, float], question: dict[str, Any], answer: Any,
+                      answer_text: str, source_refs: list[dict[str, Any]],
+                      article_refs: list[str], bounded: bool) -> None:
+        from core.citation import citation_number_coverage
+        from core.eval.semantic_metrics import (
+            answer_relevance,
+            answer_similarity,
+            context_support,
+            grounded_in_correct_source,
+        )
         reference = question.get("ground_truth") or question.get("reference_answer", "")
         if reference:
             metrics["answer_similarity"] = answer_similarity(answer_text, reference, self._embedder)
@@ -808,6 +828,8 @@ class _CompositeEvaluator:
         # grounded_in_correct_source returns None (not 0.0) when no
         # retrieved chunk matches article_refs — omit the key rather than
         # record a misleading zero (core/eval/semantic_metrics.py docstring).
+        if not bounded:
+            return
         grounded = grounded_in_correct_source(answer_text, source_refs, article_refs, self._embedder)
         if grounded is not None:
             metrics["grounded_in_correct_source"] = grounded
@@ -823,8 +845,6 @@ class _CompositeEvaluator:
         coverage = citation_number_coverage(answer_text, answer.source_refs, article_refs)
         if coverage is not None:
             metrics["citation_number_coverage"] = coverage
-
-        return metrics
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
@@ -1399,7 +1419,8 @@ async def _resample_flip_verdicts(
                     if pre_refs:
                         pre_retrieved = extracted_refs([sr.model_dump() for sr in pre_refs])
                         pre_rerank_recall = recall_at_k(q.get("article_refs") or [], pre_retrieved, k=after.config.top_k)
-                    verdict = diagnose_question(answerability, metrics, pre_rerank_recall)
+                    verdict = diagnose_question(answerability, metrics, pre_rerank_recall,
+                                                scope=q.get("scope") or "local")
                     samples.append(verdict.layer == "ok")
                 except Exception:
                     # A hard failure to even answer counts as "not ok" for this
@@ -1878,7 +1899,7 @@ def _diagnose_root_causes(
         try:
             verdict = diagnose_question(
                 qr.answerability or "answerable", qr.metrics,
-                qr.metrics.get("pre_rerank_recall_at_k"),
+                qr.metrics.get("pre_rerank_recall_at_k"), scope=qr.scope,
             )
             # Only the `retrieval` verdict is ambiguous about cause. `rerank`
             # already names one, `generation` is a different layer entirely,

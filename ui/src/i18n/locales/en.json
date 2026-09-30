@@ -2175,6 +2175,7 @@
       "keyword": "keyword",
       "semantic": "semantic",
       "reached_the_generator": "the run reached the generator",
+      "bounded_by_its_sources": "the question names every source that answers it",
       "answerable": "the question is one the corpus covers",
       "retrieved_something_relevant": "retrieval found at least one source the question needs",
       "no_resolver_configured": "no resolver was configured",

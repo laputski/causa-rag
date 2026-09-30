@@ -295,6 +295,15 @@ class QuestionResult:
     # because establishing the cause needs a widened re-query against the
     # index and a ref resolver, neither of which core/ may reach for itself.
     root_cause: dict[str, Any] | None = None
+    # "local" or "global", copied from the question's row, where an absent
+    # field means local. A global question asks about the corpus as a whole,
+    # and the metrics scored against its references are left out for it
+    # (core/eval/metric_definitions.py#BOUNDED_BY_ITS_SOURCES).
+    scope: str = "local"
+    # One verdict per assertion the question's row carries: the statement,
+    # whether the judge found it stated in the answer, and nothing when the
+    # judge gave no verdict. Empty for a question with no assertions.
+    assertion_verdicts: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -342,6 +351,11 @@ class ExperimentResult:
     # empty dict means a run stored before this field existed, which the
     # detector treats as "nothing to say" rather than as a problem.
     coverage_check: dict[str, Any] = field(default_factory=dict)
+    # Who checked the answers against their assertions: the model, where it
+    # was served, and the reason when nobody did. Part of the measurement and
+    # not of the system measured, so it lives here and not on the
+    # configuration, whose hash names the system.
+    judge: dict[str, Any] = field(default_factory=dict)
     # What actually ran, as opposed to what the configuration asked for. The
     # two can still differ, and the reason is no longer that a field is
     # ignored: `config.embedder` is applied now, and a run naming a model the
@@ -383,6 +397,7 @@ class ExperimentResult:
             "stopped": self.stopped,
             "generator_model": self.generator_model,
             "coverage_check": self.coverage_check,
+            "judge": self.judge,
             "applied": self.applied,
             "corpus_manifest": self.corpus_manifest,
             "unavailable_components": self.unavailable_components,
@@ -711,6 +726,7 @@ class ExperimentRunner:
                 sparse_source_refs=[sr.model_dump() for sr in getattr(answer, 'sparse_source_refs', []) or []],
                 graph_source_refs=[sr.model_dump() for sr in getattr(answer, 'graph_source_refs', []) or []],
                 expected_refs=list(q.get('article_refs') or []),
+                scope=q.get("scope") or "local",
                 computed_citations=answer.computed_citations,
                 stage_trace=answer.stage_trace.model_dump() if answer.stage_trace else None,
             )

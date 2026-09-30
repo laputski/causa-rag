@@ -41,6 +41,7 @@ def _written() -> ExperimentResult:
     result.prompt_version = 3
     result.generator_model = "qwen3:8b"
     result.coverage_check = {"checked": True, "reason": ""}
+    result.judge = {"model": "qwen3:32b", "provider": "ollama", "reason": ""}
     result.unavailable_components = ["reranker:cross_encoder"]
     result.applied = {"query_embedder_id": "bge_m3", "index_embedder_id": "bge_m3"}
     result.corpus_manifest = {"embedder_id": "bge_m3", "documents_digest": "a" * 64,
@@ -109,7 +110,8 @@ def _every_question_field_set() -> QuestionResult:
         dense_source_refs=[ref], sparse_source_refs=[ref], graph_source_refs=[ref],
         expected_refs=["d1"], computed_citations=["1"],
         stage_trace={"total_ms": 1.0}, error="e", answerability="answerable",
-        root_cause={"cause": "retrieval"},
+        root_cause={"cause": "retrieval"}, scope="global",
+        assertion_verdicts=[{"statement": "s", "stated": True}],
     )
 
 
