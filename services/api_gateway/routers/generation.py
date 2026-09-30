@@ -112,6 +112,65 @@ _BUILTIN_TEMPLATES: dict[str, str] = {
     ),
 }
 
+# A question about the corpus as a whole, drawn from fragments of different
+# documents on a related topic, with one assertion per fragment. Measured
+# before it was written, on the proving ground's corpora (plan, phase 0): with
+# whole random documents the model wrote empty questions about what the
+# handbook covers and assertions about the documents themselves; with related
+# sections and this demand for a concrete fact, all 49 numeric assertions of
+# 72 checked against their source were right, and about 8 questions in 20
+# still needed a person's edit. A draft, and never a finished question.
+_BUILTIN_TEMPLATES["global"] = (
+    "Тебе даны {k} фрагментов из разных разделов одного справочника на близкую тему.\n"
+    "Составь ОДИН вопрос, на который нельзя ответить по одному фрагменту: ответ должен "
+    "свести вместе конкретные сведения из всех фрагментов (сроки, числа, ответственных, "
+    "условия). Не спрашивай о том, что охватывает справочник или о чём его разделы.\n\n"
+    "Напиши эталонный ответ и по одному утверждению на каждый фрагмент. Утверждение есть "
+    "одно конкретное проверяемое сведение из этого фрагмента: число, срок, лицо или "
+    "условие, переданное точно. Утверждение не должно говорить о самом фрагменте, "
+    "разделе или документе. Не добавляй фактов, которых нет во фрагментах.\n\n"
+    "{chunks_text_joined}\n\n"
+    "Верни только JSON:\n"
+    '{"question": "...", "reference_answer": "...", '
+    '"assertions": [{"fragment": <номер фрагмента>, "statement": "..."}]}'
+)
+
+#: The same request in English, for a realm whose corpus is English: the
+#: built-in templates are Russian by decision (above), and a realm in another
+#: language uses a preset. This is the text such a preset takes.
+GLOBAL_TEMPLATE_EN = (
+    "You are given {k} fragments from different sections of one handbook on a related "
+    "topic.\nWrite ONE question that no single fragment can answer: the answer must bring "
+    "together concrete facts from all fragments (periods, numbers, responsible people, "
+    "conditions). Do not ask what the handbook covers or what its sections are about.\n\n"
+    "Write a reference answer and one assertion per fragment. An assertion is one concrete "
+    "checkable fact from that fragment: a number, a period, a person or a condition, stated "
+    "exactly. An assertion must not talk about the fragment, section or document itself. "
+    "Add no fact the fragments do not contain.\n\n"
+    "{chunks_text_joined}\n\n"
+    "Return JSON only:\n"
+    '{"question": "...", "reference_answer": "...", '
+    '"assertions": [{"fragment": <fragment number>, "statement": "..."}]}'
+)
+
+#: Appended to a local template when the request asks for assertions. Opt-in,
+#: because the built-in local templates were never measured with it.
+_LOCAL_ASSERTIONS_ADDENDUM = (
+    "\n\nДобавь в тот же JSON ключ \"assertions\": список из одного-трёх коротких "
+    "утверждений, каждое из которых верный ответ обязан содержать: одно конкретное "
+    "сведение из текста (число, срок, лицо, условие), переданное точно."
+)
+
+#: How many fragments, from how many different documents, a global question
+#: draws on, and how large a random pool the neighbours are chosen from. The
+#: pool bounds the cost: every fragment in it is embedded once per request.
+_GLOBAL_FRAGMENTS = 4
+_GLOBAL_POOL = 300
+#: Two fragments this close are the same text with different names (the
+#: proving ground's model cards), and four of them make a question about a
+#: template.
+_NEAR_DUPLICATE = 0.95
+
 _QUESTION_TYPE_HINTS = {
     "closed": "Вопрос должен предполагать ответ да/нет с обоснованием.",
     "open": "Вопрос должен требовать развёрнутого ответа, не предполагающего простого да/нет.",
@@ -242,6 +301,53 @@ def _sample_ranges(chunks: list[Any], n: int, rng: Random, size: tuple[int, int]
     return results
 
 
+def _document_of(chunk: Any) -> str:
+    return str(chunk.metadata.get("source_code") or chunk.doc_id)
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
+    na = sum(x * x for x in a) ** 0.5
+    nb = sum(y * y for y in b) ** 0.5
+    return dot / (na * nb) if na and nb else 0.0
+
+
+def _sample_global(chunks: list[Any], n: int, rng: Random, embed: Any,
+                   k: int = _GLOBAL_FRAGMENTS, pool_size: int = _GLOBAL_POOL) -> list[list[Any]]:
+    """Groups of `k` fragments from `k` different documents, each group the
+    nearest neighbours of a random seed. Seeds are drawn without repetition,
+    so two questions are not written from one group; a group that cannot be
+    filled from enough different documents is not returned, and the caller
+    counts the shortfall instead of padding it with single fragments."""
+    pool = rng.sample(chunks, min(pool_size, len(chunks)))
+    if len({_document_of(c) for c in pool}) < k:
+        return []
+    vectors = embed([c.text for c in pool])
+    seeds = rng.sample(range(len(pool)), len(pool))
+    groups: list[list[Any]] = []
+    seen: set[frozenset[str]] = set()
+    for seed in seeds:
+        if len(groups) == n:
+            break
+        ranked = sorted(range(len(pool)), key=lambda j: -_cosine(vectors[seed], vectors[j]))
+        chosen = [seed]
+        documents = {_document_of(pool[seed])}
+        for j in ranked:
+            if len(chosen) == k:
+                break
+            if _document_of(pool[j]) in documents:
+                continue
+            if any(_cosine(vectors[j], vectors[m]) > _NEAR_DUPLICATE for m in chosen):
+                continue
+            chosen.append(j)
+            documents.add(_document_of(pool[j]))
+        key = frozenset(pool[j].chunk_id for j in chosen)
+        if len(chosen) == k and key not in seen:
+            seen.add(key)
+            groups.append([pool[j] for j in chosen])
+    return groups
+
+
 def _sample_chunk_groups(chunks: list[Any], question_type: str, n: int, rng: Random | None = None) -> list[list[Any]]:
     rng = rng or Random()
     if question_type == "comparative":
@@ -299,7 +405,14 @@ def _render_prompt(template: str, question_type: str, group: list[Any]) -> str:
         "{question_type}": question_type,
         "{question_type_hint}": _QUESTION_TYPE_HINTS.get(question_type, ""),
     }
-    if len(group) == 1:
+    if question_type == "global":
+        # Numbered, because each assertion names the fragment it rests on,
+        # and whatever the group's length: a group of two would otherwise be
+        # offered the placeholders of a comparison within one document.
+        substitutions["{k}"] = str(len(group))
+        substitutions["{chunks_text_joined}"] = "\n\n".join(
+            f"[{i}]\n{c.text}" for i, c in enumerate(group, start=1))
+    elif len(group) == 1:
         substitutions["{chunk_text}"] = group[0].text
     elif len(group) == 2:
         substitutions["{chunk_text_a}"] = group[0].text
@@ -385,9 +498,14 @@ class GenerateQuestionsRequest(BaseModel):
     )
     strategy: str = "structure_aware"
     embedder: str = "bge_m3"
+    # Ask a local question's template for assertions too. Opt-in: the local
+    # templates were measured without it. A global question always carries
+    # them, since checking its answer is what they are for.
+    with_assertions: bool = False
 
 
-def _resolve_template(preset: dict[str, Any] | None, group: list[Any]) -> str:
+def _resolve_template(preset: dict[str, Any] | None, group: list[Any],
+                      question_type: str = "") -> str:
     """The chosen preset's template if one was picked; otherwise a built-in,
     domain-neutral template selected by the group's own chunk-shape (single/
     pair/range) — same shape dispatch _sample_chunk_groups already uses to
@@ -395,6 +513,11 @@ def _resolve_template(preset: dict[str, Any] | None, group: list[Any]) -> str:
     fallback template must offer."""
     if preset is not None:
         return preset["template"]
+    # By type before shape: a global group of two or three fragments from
+    # different documents would otherwise get the template for a comparison
+    # within one document, or for a run of consecutive fragments.
+    if question_type == "global":
+        return _BUILTIN_TEMPLATES["global"]
     if len(group) == 1:
         return _BUILTIN_TEMPLATES["single"]
     if len(group) == 2:
@@ -402,17 +525,58 @@ def _resolve_template(preset: dict[str, Any] | None, group: list[Any]) -> str:
     return _BUILTIN_TEMPLATES["range"]
 
 
-def _generate_one_sync(generator: Any, preset: dict[str, Any] | None, question_type: str, group: list[Any]) -> str:
+def _generate_one_sync(generator: Any, preset: dict[str, Any] | None, question_type: str,
+                       group: list[Any], with_assertions: bool = False) -> str:
     """The actual blocking HTTP call to Ollama — run via asyncio.to_thread so
     the event loop stays free to serve this same job's progress WebSocket
     while a batch (one blocking call per group) is in flight."""
-    prompt = _render_prompt(_resolve_template(preset, group), question_type, group)
+    prompt = _render_prompt(_resolve_template(preset, group, question_type), question_type, group)
+    if with_assertions and question_type != "global":
+        prompt += _LOCAL_ASSERTIONS_ADDENDUM
     return generator.generate(prompt, response_format="json", temperature=0.4)
+
+
+_MIXED_SCRIPT = re.compile(r"(?=\w*[a-zA-Z])(?=\w*[а-яА-ЯёЁ])\w+")
+
+
+def _mixed_script_words(texts: list[str]) -> list[str]:
+    """Words spelled partly in Latin and partly in Cyrillic letters.
+
+    Found live on the first drafts through this path: the model wrote
+    "Замena" and "Zамena" for «Замена» at the sampling temperature used here.
+    A person reading the draft may not see it, and a judge comparing the
+    assertion with an answer will not match it, so the draft says so."""
+    return sorted({w for t in texts for w in _MIXED_SCRIPT.findall(t)})
+
+
+def _statements(parsed: dict[str, Any], group: list[Any]) -> tuple[list[str], list[str]]:
+    """The assertions a reply carries, and for each the fragment it names.
+
+    A global reply lists objects naming a fragment; a local one may list plain
+    strings. Anything else is dropped, not guessed at."""
+    statements: list[str] = []
+    fragments: list[str] = []
+    for item in parsed.get("assertions") or []:
+        if isinstance(item, str) and item.strip():
+            statements.append(item.strip())
+            fragments.append("")
+        elif isinstance(item, dict) and str(item.get("statement") or "").strip():
+            statements.append(str(item["statement"]).strip())
+            index = item.get("fragment")
+            fragments.append(group[index - 1].chunk_id
+                             if isinstance(index, int) and 1 <= index <= len(group) else "")
+    return statements, fragments
+
+
+#: The window the generator is given, named so a prompt the server cut can be
+#: told from one it read whole (adapters/ollama_generator.py#prompt_was_cut).
+_GENERATION_NUM_CTX = 16384
 
 
 async def _run_generation_background(
     job_id: str, body: GenerateQuestionsRequest, preset: dict[str, Any] | None,
     groups: list[list[Any]], group_types: list[str],
+    shortfall: list[dict[str, Any]] | None = None,
 ) -> None:
     from adapters.ollama_generator import OllamaGenerator
 
@@ -424,7 +588,7 @@ async def _run_generation_background(
     # shared "ollama" generator (used by live /query traffic and controlled
     # by PUT /settings/model) — a one-off generation task picking its own
     # model has nothing to do with the platform's active chat model.
-    generator = OllamaGenerator(model=body.model)
+    generator = OllamaGenerator(model=body.model, num_ctx=_GENERATION_NUM_CTX)
 
     log.info(
         "generate_questions.start", realm_id=body.realm_id, corpus_id=body.corpus_id,
@@ -433,18 +597,30 @@ async def _run_generation_background(
     _emit({"type": "start", "total": len(groups)})
 
     drafts: list[dict[str, Any]] = []
-    failed: list[dict[str, Any]] = []
+    # Groups a type asked for and the corpus could not supply, reported and
+    # never padded with single fragments carrying the type's label.
+    failed: list[dict[str, Any]] = list(shortfall or [])
     now = datetime.now(UTC).isoformat()
     for i, (group, question_type) in enumerate(zip(groups, group_types, strict=True), start=1):
         chunk_ids = [c.chunk_id for c in group]
         try:
-            raw = await asyncio.to_thread(_generate_one_sync, generator, preset, question_type, group)
+            raw = await asyncio.to_thread(_generate_one_sync, generator, preset, question_type, group,
+                                          body.with_assertions)
         except Exception as e:
             log.warning("generate_questions.item_failed", index=i, total=len(groups), reason=str(e))
             failed.append({"reason": str(e), "chunk_ids": chunk_ids})
             _emit({"type": "progress", "processed": i, "total": len(groups), "generated": len(drafts), "failed": len(failed)})
             continue
-        parsed = _parse_llm_json(raw)
+        if getattr(generator, "prompt_was_cut", lambda: False)():
+            # The server read half the prompt, so the question was written
+            # about fragments it did not see in full.
+            failed.append({"reason": "prompt_cut", "chunk_ids": chunk_ids})
+            _emit({"type": "progress", "processed": i, "total": len(groups), "generated": len(drafts), "failed": len(failed)})
+            continue
+        is_global = question_type == "global"
+        parsed = _parse_llm_json(
+            raw, ("question", "reference_answer", "assertions") if is_global
+            else ("question", "reference_answer"))
         if parsed is None:
             # A preset replaces the built-in template wholesale, so one that
             # does not ask for the JSON object this parses back fails every
@@ -462,8 +638,14 @@ async def _run_generation_background(
             _emit({"type": "progress", "processed": i, "total": len(groups), "generated": len(drafts), "failed": len(failed)})
             continue
 
+        statements, fragments = _statements(parsed, group)
+        if is_global and not statements:
+            failed.append({"reason": "no_assertions", "chunk_ids": chunk_ids})
+            _emit({"type": "progress", "processed": i, "total": len(groups), "generated": len(drafts), "failed": len(failed)})
+            continue
+
         log.info("generate_questions.item_done", index=i, total=len(groups))
-        drafts.append({
+        draft: dict[str, Any] = {
             "question": parsed["question"],
             "reference_answer": _clean_reference_answer(parsed["reference_answer"]),
             "question_type": question_type,
@@ -476,7 +658,18 @@ async def _run_generation_background(
                 "preset_id": body.preset_id,
                 "generated_at": now,
             },
-        })
+        }
+        if is_global:
+            draft["scope"] = "global"
+        if statements:
+            draft["assertions"] = statements
+            # Which fragment each assertion rests on, for the person checking
+            # the draft; empty where the model named none.
+            draft["provenance"]["assertion_fragments"] = fragments
+        mixed = _mixed_script_words([draft["question"], draft["reference_answer"], *statements])
+        if mixed:
+            draft["provenance"]["mixed_script_words"] = mixed
+        drafts.append(draft)
         # processed/generated/total drives the frontend's "N of M questions
         # generated" progress display (found live: a bare elapsed-seconds
         # timer gave no sense of how much of a multi-minute batch was left).
@@ -537,14 +730,25 @@ async def generate_questions(body: GenerateQuestionsRequest) -> dict[str, Any]:
 
     groups: list[list[Any]] = []
     group_types: list[str] = []
+    shortfall: list[dict[str, Any]] = []
     for tc in body.type_counts:
-        type_groups = _sample_chunk_groups(chunks, tc.question_type, tc.n_questions)
+        if tc.question_type == "global":
+            from core.registry import registry
+            embedder = registry.resolve("embedder", body.embedder)
+            type_groups = _sample_global(chunks, tc.n_questions, Random(), embedder.embed)
+            missing = tc.n_questions - len(type_groups)
+            if missing:
+                shortfall.append({
+                    "reason": "not_enough_documents", "chunk_ids": [],
+                    "missing": missing, "question_type": "global"})
+        else:
+            type_groups = _sample_chunk_groups(chunks, tc.question_type, tc.n_questions)
         groups.extend(type_groups)
         group_types.extend([tc.question_type] * len(type_groups))
 
     job_id = str(uuid.uuid4())[:8]
     _progress[job_id] = []
-    asyncio.create_task(_run_generation_background(job_id, body, preset, groups, group_types))
+    asyncio.create_task(_run_generation_background(job_id, body, preset, groups, group_types, shortfall))
 
     return {"job_id": job_id, "status": "started", "n_groups": len(groups)}
 

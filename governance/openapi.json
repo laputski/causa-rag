@@ -6868,6 +6868,11 @@
             "type": "string",
             "title": "Embedder",
             "default": "bge_m3"
+          },
+          "with_assertions": {
+            "type": "boolean",
+            "title": "With Assertions",
+            "default": false
           }
         },
         "type": "object",
