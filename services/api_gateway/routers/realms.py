@@ -547,9 +547,14 @@ async def set_realm_resources(realm_id: str, resources: list[ResourceConfig]) ->
     stored = {r.get("type"): r for r in doc.get("resources") or []}
     box = secret_box()
     try:
+        # The fields read as secret by name are taken from what was sent as
+        # well as what was stored: a new resource has nothing stored, and a
+        # field named like a key would otherwise be stored in the clear on its
+        # first save and masked on every read after, which hides the leak.
         serialized = [
             for_storage(r.model_dump(), stored.get(r.type),
-                        _secret_fields(r.type, stored.get(r.type)), box)
+                        _secret_fields(r.type, {**(stored.get(r.type) or {}), **r.model_dump()}),
+                        box)
             for r in resources
         ]
     except SecretUnavailable as exc:

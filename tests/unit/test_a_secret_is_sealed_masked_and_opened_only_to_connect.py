@@ -166,3 +166,14 @@ def test_the_rules_hold_without_the_router() -> None:
     assert for_storage({}, stored, {"password"}, box) == stored
     assert "password" not in for_storage({"password": ""}, stored, {"password"}, box)
     assert box.open(for_storage({"password": "new"}, stored, {"password"}, box)["password"][SEALED]) == "new"
+
+
+def test_an_undeclared_field_named_like_a_key_is_sealed_on_its_first_save(store) -> None:
+    """Found by reading the fix itself: the name-based floor was read from the
+    stored resource alone, so a new one had none, and its key went into the
+    store in the clear while every read masked it."""
+    asyncio.run(R.set_realm_resources("acme", [
+        ResourceConfig(type="qdrant", host="q.cloud", port=6333, api_key="qk-live-1")]))
+    qdrant = next(r for r in store.realms[0]["resources"] if r["type"] == "qdrant")
+    assert "qk-live-1" not in str(store.realms)
+    assert SEALED in qdrant["api_key"]
