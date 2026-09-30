@@ -82,6 +82,7 @@ def _for_the_corpus(
     retriever: Any, corpus_id: str, realm_id: str | None = None,
     qdrant_cfg: dict[str, Any] | None = None,
     opensearch_cfg: dict[str, Any] | None = None,
+    neo4j_cfg: dict[str, Any] | None = None,
 ) -> Any:
     """The retriever, reading this run's corpus on this Realm's own instance.
 
@@ -94,7 +95,8 @@ def _for_the_corpus(
     if not hasattr(retriever, "for_corpus"):
         return retriever
     return retriever.for_corpus(
-        corpus_id, realm_id, {"qdrant": qdrant_cfg, "opensearch": opensearch_cfg})
+        corpus_id, realm_id,
+        {"qdrant": qdrant_cfg, "opensearch": opensearch_cfg, "neo4j": neo4j_cfg})
 
 
 def _fusing_as(retriever: Any, merge: str | None, alpha: float | None,
@@ -456,6 +458,7 @@ class ExperimentRunner:
         qdrant_cfg: dict[str, Any] | None = None, opensearch_cfg: dict[str, Any] | None = None,
         retrieval_pins: list[Any] | None = None,
         unavailable: list[str] | None = None,
+        neo4j_cfg: dict[str, Any] | None = None,
     ) -> Any:
         """Build the pipeline the config describes.
 
@@ -539,6 +542,7 @@ class ExperimentRunner:
         base = self._registry.resolve("pipeline", config.pipeline_id)
         retriever = _for_the_corpus(
             base._retriever, config.corpus_id, realm_id or None, qdrant_cfg, opensearch_cfg,
+            neo4j_cfg,
         )
         # The corpus first, so fusion and graph are chosen around halves that
         # already read the right one instead of undoing the binding.
@@ -639,6 +643,7 @@ class ExperimentRunner:
         # once by services/api_gateway/routers/experiments.py before run()
         # is even called, then threaded straight through to the pipeline.
         retrieval_pins: list[Any] | None = None,
+        neo4j_cfg: dict[str, Any] | None = None,
     ) -> ExperimentResult:
         bound = log.bind(config_hash=config.config_hash, experiment=config.name)
         bound.info("experiment.start", dataset=dataset.name, n_questions=len(dataset.questions))
@@ -654,6 +659,7 @@ class ExperimentRunner:
         unavailable: list[str] = []
         pipeline = self._build_pipeline(
             config, realm_id, qdrant_cfg, opensearch_cfg, retrieval_pins, unavailable,
+            neo4j_cfg=neo4j_cfg,
         )
         result = ExperimentResult(
             config=config,

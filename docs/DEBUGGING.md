@@ -629,3 +629,28 @@ judged from a half that answered nothing. The collection was rebuilt from the
 lexical index's fragments, which keeps every chunk id identical on both halves.
 **Guard:** `tests/unit/test_a_half_that_returned_nothing_is_named.py`, and the
 proving-ground pair for the absent half now asserts the new signal as well.
+
+---
+
+## 27. A graph run read another realm's graph
+
+**Symptom:** a graph run of one realm scored about what its hybrid run scored,
+and its contexts held fragments of another realm's corpus.
+
+**Found by:** tracing the graph half of that run, which is recorded now: 134
+documents, every one of them in the store the gateway had started with, which
+held another realm's graph, and none in the realm's own store.
+
+**Root cause:** a run binds its retriever to the realm by `for_corpus`, and the
+graph merge bound its base half and left the graph alone, on the reasoning
+that a graph has no corpus partitioning. That stopped being the whole story
+once each realm got its own graph container. The chat path had bound the graph
+by realm all along; only runs did not.
+
+**Fix:** the graph adapter implements `for_corpus` for the realm's own store,
+one retriever per store kept so a run does not open a driver it never closes,
+the graph merge rebinds both halves, and every place that builds a run's
+pipeline passes the realm's graph resource. The same run afterwards: 3 graph
+documents, all from the realm's own store.
+**Guard:** `tests/unit/test_a_graph_run_reads_its_realm_s_graph.py`, baited by
+leaving the graph half alone.

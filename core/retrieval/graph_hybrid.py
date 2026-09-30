@@ -37,19 +37,23 @@ class GraphHybridRetriever:
         realm_id: str | None = None,
         resources: dict[str, dict[str, Any] | None] | None = None,
     ) -> Any:
-        """A copy of this whose base half reads `corpus_id`.
+        """A copy of this whose base half reads `corpus_id` and whose graph
+        half reads the Realm's own graph store.
 
-        See `core.interfaces.BoundToACorpus`. The graph is left alone: it has
-        no corpus partitioning at all, one graph regardless, so there is
-        nothing here to bind. How far it walks and how much say it gets are
-        carried, and chosen by `with_graph` below.
+        See `core.interfaces.BoundToACorpus`. The graph has no corpus
+        partitioning, but each Realm has its own container, so the graph half
+        is bound by Realm. It used to be left alone, which read another
+        Realm's graph (found live). How far it walks and how much say it gets
+        are carried, and chosen by `with_graph` below.
         """
         base = (self._base.for_corpus(corpus_id, realm_id, resources)
                 if hasattr(self._base, "for_corpus") else self._base)
-        if base is self._base:
+        graph = (self._graph.for_corpus(corpus_id, realm_id, resources)
+                 if hasattr(self._graph, "for_corpus") else self._graph)
+        if base is self._base and graph is self._graph:
             return self
         return type(self)(
-            graph_retriever=self._graph, base_retriever=base,
+            graph_retriever=graph, base_retriever=base,
             graph_weight=self._graph_weight, hops=self._hops,
         )
 

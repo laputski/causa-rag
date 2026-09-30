@@ -1512,12 +1512,14 @@ async def diagnose_retrieval_miss_endpoint(
         # not the gateway's own env-var instance — otherwise a miss-
         # diagnosis on a non-default-Realm run would query the wrong corpus
         # entirely and its "miss" verdict would be meaningless.
-        qdrant_cfg = opensearch_cfg = None
+        qdrant_cfg = opensearch_cfg = neo4j_cfg = None
         if result.realm_id and result.config.pipeline_source != "http":
             from services.api_gateway.routers.corpus import _get_realm_resource
             qdrant_cfg = await _get_realm_resource(result.realm_id, "qdrant")
             opensearch_cfg = await _get_realm_resource(result.realm_id, "opensearch")
-        pipeline = runner._build_pipeline(result.config, result.realm_id, qdrant_cfg, opensearch_cfg)
+            neo4j_cfg = await _get_realm_resource(result.realm_id, "neo4j")
+        pipeline = runner._build_pipeline(result.config, result.realm_id, qdrant_cfg, opensearch_cfg,
+                                          neo4j_cfg=neo4j_cfg)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Could not rebuild pipeline: {e}") from e
 
@@ -1556,19 +1558,21 @@ async def _resample_flip_verdicts(
         from core.models import QueryRequest
 
         runner = ExperimentRunner(registry=registry)
-        qdrant_cfg = opensearch_cfg = None
+        qdrant_cfg = opensearch_cfg = neo4j_cfg = None
         retrieval_pins: list[Any] = []
         if after.realm_id and after.config.pipeline_source != "http":
             from services.api_gateway.routers.corpus import _get_realm_resource
             qdrant_cfg = await _get_realm_resource(after.realm_id, "qdrant")
             opensearch_cfg = await _get_realm_resource(after.realm_id, "opensearch")
+            neo4j_cfg = await _get_realm_resource(after.realm_id, "neo4j")
             # Mirrors the run being resampled. Resampling exists to
             # tell a real flip from generation noise, so it has to retrieve
             # under the same conditions the run itself used; loading pins here
             # for a run that had them off would compare two different systems.
             if after.config.retrieval_pins_enabled:
                 retrieval_pins = await _load_active_pins(after.realm_id, after.config.corpus_id)
-        pipeline = runner._build_pipeline(after.config, after.realm_id, qdrant_cfg, opensearch_cfg, retrieval_pins)
+        pipeline = runner._build_pipeline(after.config, after.realm_id, qdrant_cfg, opensearch_cfg,
+                                          retrieval_pins, neo4j_cfg=neo4j_cfg)
 
         dataset = await _load_dataset(after.dataset_name, external_rag_id=after.config.external_rag_id)
         dataset_by_id = {q.get("id"): q for q in dataset.questions}
@@ -2186,6 +2190,7 @@ async def _run_experiment_background(
     realm_id: str = "",
     qdrant_cfg: dict[str, Any] | None = None, opensearch_cfg: dict[str, Any] | None = None,
     retrieval_pins: list[Any] | None = None, ref_resolver: Any = None,
+    neo4j_cfg: dict[str, Any] | None = None,
 ) -> None:
     """Runs the (potentially long, N-question) experiment
     off the request/response cycle, so create_experiment can return run_id
@@ -2208,7 +2213,7 @@ async def _run_experiment_background(
             runner.run, cfg, dataset, evaluator=evaluator, on_progress=_on_progress,
             should_stop=lambda: run_id in _stop_requested,
             realm_id=realm_id, qdrant_cfg=qdrant_cfg, opensearch_cfg=opensearch_cfg,
-            retrieval_pins=retrieval_pins,
+            retrieval_pins=retrieval_pins, neo4j_cfg=neo4j_cfg,
         )
         # Found live: POST /{run_id}/stop kept accepting stop requests (and
         # replying {"status": "stopping"}) for a run whose question loop had
@@ -2257,8 +2262,8 @@ async def _run_experiment_background(
             expected_refs = _expected_refs_index(dataset)
             try:
                 diag_pipeline = await asyncio.to_thread(
-                    runner._build_pipeline, cfg, realm_id, qdrant_cfg, opensearch_cfg, retrieval_pins,
-                )
+                    lambda: runner._build_pipeline(cfg, realm_id, qdrant_cfg, opensearch_cfg,
+                                                   retrieval_pins, neo4j_cfg=neo4j_cfg))
             except Exception:
                 diag_pipeline = None
             await asyncio.to_thread(
@@ -2343,6 +2348,7 @@ async def create_experiment(body: NewExperimentRequest) -> dict[str, Any]:
     # for the pre-Realm/backward-compat "" realm_id case.
     _qdrant_cfg = None
     _opensearch_cfg = None
+    _neo4j_cfg = None
     # The pin lookup is opt-in and OFF by default. A run that did
     # not ask for the overlay never pays the store round-trip, so "disabled"
     # costs nothing rather than loading pins and ignoring them.
@@ -2355,6 +2361,9 @@ async def create_experiment(body: NewExperimentRequest) -> dict[str, Any]:
         from services.api_gateway.routers.corpus import _get_realm_resource
         _qdrant_cfg = await _get_realm_resource(body.realm_id, "qdrant")
         _opensearch_cfg = await _get_realm_resource(body.realm_id, "opensearch")
+        # The Realm's own graph store: without it a graph run took its graph
+        # half from the store the gateway started with (found live).
+        _neo4j_cfg = await _get_realm_resource(body.realm_id, "neo4j")
         if cfg.retrieval_pins_enabled:
             _retrieval_pins = await _load_active_pins(body.realm_id, cfg.corpus_id)
     try:
@@ -2391,7 +2400,7 @@ async def create_experiment(body: NewExperimentRequest) -> dict[str, Any]:
     asyncio.create_task(_run_experiment_background(
         run_id, cfg, dataset, evaluator, runner, realm_id=body.realm_id,
         qdrant_cfg=_qdrant_cfg, opensearch_cfg=_opensearch_cfg,
-        retrieval_pins=_retrieval_pins, ref_resolver=ref_resolver,
+        retrieval_pins=_retrieval_pins, ref_resolver=ref_resolver, neo4j_cfg=_neo4j_cfg,
     ))
 
     return {"run_id": run_id, "config_hash": cfg.config_hash, "status": "running"}

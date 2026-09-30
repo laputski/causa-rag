@@ -30,6 +30,11 @@ class GraphUnavailable(RuntimeError):
     """Raised when the Neo4j driver or server is not reachable."""
 
 
+#: The graph stores runs have been bound to, one retriever each, so a driver is
+#: opened once per store and not once per run.
+_BOUND: dict[tuple[str, str], Neo4jGraphRetriever] = {}
+
+
 class Neo4jGraphRetriever:
     """Production GraphRetriever over Neo4j."""
 
@@ -53,6 +58,32 @@ class Neo4jGraphRetriever:
         # watching. Callers that ask a yes/no question pass their own bound.
         self._connection_timeout = connection_timeout
         self._driver: Any | None = None
+
+    def for_corpus(
+        self,
+        corpus_id: str,
+        realm_id: str | None = None,
+        resources: dict[str, dict[str, Any] | None] | None = None,
+    ) -> Any:
+        """A copy of this reading the Realm's own graph store. See
+        `core.interfaces.BoundToACorpus`.
+
+        The graph has no corpus partitioning, and a Realm's own container is
+        what isolates it. Found live: a Realm's graph run took its graph half
+        from the store the gateway started with, which held another Realm's
+        graph, and 134 documents of that other corpus entered its contexts.
+        One instance per store, kept, so a run does not open a driver it
+        never closes."""
+        cfg = (resources or {}).get("neo4j") or {}
+        uri = cfg.get("uri")
+        if not uri or uri == self._uri:
+            return self
+        key = (str(uri), str(cfg.get("user") or self._user))
+        found = _BOUND.get(key)
+        if found is None:
+            found = Neo4jGraphRetriever(uri=uri, user=cfg.get("user"), password=cfg.get("password"))
+            _BOUND[key] = found
+        return found
 
     @staticmethod
     def is_available() -> bool:
