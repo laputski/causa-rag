@@ -119,3 +119,7 @@ prompts/*.json
 !prompts/demo_prompt_v1.json
 
 packs.local/
+
+# Compose overlays for realms that exist on one machine only; a realm name in
+# the repository is a fact about somebody's data.
+deploy/compose/*.local.yml
