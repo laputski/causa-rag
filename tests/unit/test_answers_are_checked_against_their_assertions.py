@@ -267,3 +267,33 @@ def test_a_judge_that_cannot_be_had_is_named_with_why(monkeypatch, tags, gap) ->
     assert isinstance(judge, E._UnavailableJudge)
     assert judge.record()["gap"] == gap
     assert [v["stated"] for v in judge.verdicts("a", ["x"])] == [None]
+
+
+# ── Judging after the run ─────────────────────────────────────────────────────
+
+def test_a_deferred_judge_asks_nothing_until_every_answer_exists() -> None:
+    """Measured: the judge alone answered in under a second a statement, and
+    in nine to ten when the generator had run just before it, because the
+    server keeps one model loaded and reloads it on each switch."""
+    from core.experiment.config import ComponentRef, ExperimentConfig
+    from core.experiment.runner import ExperimentResult, QuestionResult
+
+    judge, model = _judge(['{"stated": true}', '{"stated": false}', '{"stated": true}', '{"stated": true}'])
+    ev = E._CompositeEvaluator(embedder=_Embedder(), top_k=5, judge=judge, defer_judging=True)
+    result = ExperimentResult(config=ExperimentConfig(
+        name="r", chunking_strategy=ComponentRef(kind="chunker", component_id="fixed"),
+        embedder=ComponentRef(kind="embedder", component_id="bge_m3"),
+        generator=ComponentRef(kind="generator", component_id="ollama")))
+    for qid in ("q1", "q2"):
+        metrics, extras = ev.evaluate_in_full(_question(id=qid), _answer())
+        assert "assertion_coverage" not in metrics
+        result.question_results.append(QuestionResult(
+            question_id=qid, question="?", reference_answer="r", generated_answer="a",
+            metrics=metrics, assertion_verdicts=extras["assertion_verdicts"]))
+    assert model.prompts == []
+
+    ev.judge_pending(result)
+    assert len(model.prompts) == 4
+    assert [qr.metrics["assertion_coverage"] for qr in result.question_results] == [0.5, 1.0]
+    assert result.aggregate_metrics["assertion_coverage"] == 0.75
+    assert [v["stated"] for v in result.question_results[0].assertion_verdicts] == [True, False]

@@ -40,7 +40,7 @@
       "description": "Answers from the given context only, citing a section for every statement.",
       "version": 1,
       "is_active": true,
-      "template": "You answer questions about an organisation's internal handbook using ONLY the context below. When the context does not contain the answer, say so instead of filling the gap.\n\nSupport every statement with a reference to the context entry it came from, written as (Fragment N), N being that entry's number in the list below. Keep statements drawn from different documents in separate sentences.\n\nContext:\n{context}\n\nQuestion: {question}"
+      "template": "You answer questions about an organisation's internal handbook using ONLY the context below. When the context does not contain the answer, say so instead of filling the gap.\n\nSupport every statement with a reference to the context entry it came from, written as (Fragment N), N being that entry's number in the list below. Keep statements drawn from different documents in separate sentences.\n\nContext:\n{context}\n\nQuestion: {query}"
     }
   ],
   "generation_presets": [

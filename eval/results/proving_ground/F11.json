@@ -1,6 +1,6 @@
 {
   "failure_id": "F11",
-  "recorded_at": "2026-09-09T04:10:31.863408+00:00",
+  "recorded_at": "2026-09-30T14:05:05.268961+00:00",
   "reproduced": true,
   "claim": "loaded by one model and questioned by another: the load record names the cause",
   "measured": {

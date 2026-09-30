@@ -79,7 +79,7 @@ _PROMPT_TEMPLATE = (
     "Support every statement with a reference to the context entry it came from, "
     "written as (Fragment N), N being that entry's number in the list below.\n\n"
     "Context:\n{context}\n\n"
-    "Question: {question}"
+    "Question: {query}"
 )
 
 

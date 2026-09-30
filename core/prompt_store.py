@@ -51,7 +51,13 @@ class PromptTemplate:
         # documents: a model given a Cyrillic label sometimes answered with
         # "Фragment", one script's first letter on the other's word.
         context = "\n\n".join(f"Fragment {i + 1}:\n{c}" for i, c in enumerate(context_chunks))
-        return self.template.replace("{context}", context).replace("{query}", query)
+        # `{query}` is the documented placeholder, and `{question}` is filled
+        # too. Found live: both seeded realms wrote `{question}`, which nothing
+        # replaced, so every answer in them was generated from a prompt whose
+        # question read "Question: {question}" and the model replied that no
+        # question had been asked. A user's template may say it either way.
+        return (self.template.replace("{context}", context)
+                .replace("{query}", query).replace("{question}", query))
 
     def to_dict(self) -> dict[str, Any]:
         return {

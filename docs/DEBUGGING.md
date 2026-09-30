@@ -654,3 +654,28 @@ pipeline passes the realm's graph resource. The same run afterwards: 3 graph
 documents, all from the realm's own store.
 **Guard:** `tests/unit/test_a_graph_run_reads_its_realm_s_graph.py`, baited by
 leaving the graph half alone.
+
+---
+
+## 28. Two seeded realms answered without ever seeing the question
+
+**Symptom:** a run of six questions on the proving ground, with generation,
+returned answers such as "your question was not stated, please clarify", and
+the findings said a third of the answers were empty and the refusals wrong.
+
+**Found by:** timing the assertion judge on a real run, whose share of
+statements answered came back zero for a reason that had nothing to do with
+the judge. **Root cause:** a prompt template's documented placeholder is
+`{query}`, and the substitution filled `{context}` and `{query}` only. Both seed
+tools wrote `Question: {question}`, so in the demo realm and on the proving
+ground the model was shown the literal placeholder in place of the question,
+for every generation since those seeds existed. A realm's active prompt
+written by hand, with `{context}` and no question at all, had gone in as well:
+the check for both placeholders ran on generated prompt drafts only.
+
+**Fix:** the substitution fills `{question}` as well as `{query}`, the seeds
+write `{query}`, creating a prompt without the context or the question is
+refused, and this installation's stored prompts were corrected.
+**Guard:** `tests/unit/test_the_question_reaches_the_prompt.py`. Its refusal
+case, run once with the check disabled to see it fail, wrote a real prompt
+into the running installation; it now fails on any touch of the store.

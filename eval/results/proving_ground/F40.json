@@ -1,13 +1,14 @@
 {
   "failure_id": "F40",
-  "recorded_at": "2026-09-09T04:10:49.137452+00:00",
+  "recorded_at": "2026-09-30T14:05:23.860198+00:00",
   "reproduced": true,
   "claim": "a lexical index that was never built leaves one half supplying everything",
   "measured": {
     "single_half_healthy": "278/950",
     "single_half_missing": "950/950",
     "signals": [
-      "detector:bm25_dominance"
+      "detector:bm25_dominance",
+      "detector:half_returned_nothing"
     ]
   }
 }

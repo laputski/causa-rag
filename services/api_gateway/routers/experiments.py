@@ -842,7 +842,7 @@ class _CompositeEvaluator:
     """
 
     def __init__(self, embedder: Any, top_k: int, ref_resolver: Any = None,
-                 judge: Any = None) -> None:
+                 judge: Any = None, defer_judging: bool = False) -> None:
         self._embedder = embedder
         self._top_k = top_k
         # Checks answers against the assertions their questions carry. None
@@ -850,6 +850,13 @@ class _CompositeEvaluator:
         # not be reached, and on purpose for the resampling of flipped
         # questions, which reads only the funnel verdict.
         self._judge = judge
+        # Judging after every answer is generated and not beside each one.
+        # Measured on one Ollama: the judge alone took 0.5 to 0.9 seconds a
+        # statement, and 9 to 10 seconds when the generator had run just
+        # before it, because the server keeps one model loaded and reloads on
+        # every switch. Six statements cost 60 seconds interleaved.
+        self._defer = defer_judging
+        self._pending: list[tuple[str, str, list[str]]] = []
         # Coverage is resolved against what is INDEXED, via a
         # core/eval/ref_resolution.py RefResolver, not against a hardcoded
         # corpus path on the platform's own disk (see that module's
@@ -878,12 +885,41 @@ class _CompositeEvaluator:
             # Recorded as statements nobody judged, so the run can say how
             # many went unchecked instead of looking like a run without any.
             verdicts = [{"statement": a, "stated": None} for a in assertions]
+        elif self._defer:
+            # Judged by `judge_pending` once every answer exists; until then
+            # the statements stand unjudged and the question has no share.
+            self._pending.append((str(question.get("id", question.get("question", "")[:20])),
+                                  answer.text or "", assertions))
+            return metrics, {"assertion_verdicts": [{"statement": a, "stated": None} for a in assertions]}
         else:
             verdicts = self._judge.verdicts(answer.text or "", assertions)
         value = coverage(verdicts)
         if value is not None:
             metrics["assertion_coverage"] = value
         return metrics, {"assertion_verdicts": verdicts}
+
+    def judge_pending(self, result: Any) -> None:
+        """Judge every statement deferred during the run, in one pass, and put
+        the verdicts and the share back on the questions and the run."""
+        from core.eval.assertions import coverage
+
+        if self._judge is None or not self._pending:
+            return
+        by_id = {qr.question_id: qr for qr in result.question_results}
+        for question_id, answer_text, assertions in self._pending:
+            qr = by_id.get(question_id)
+            if qr is None:
+                continue
+            verdicts = self._judge.verdicts(answer_text, assertions)
+            qr.assertion_verdicts = verdicts
+            value = coverage(verdicts)
+            if value is not None:
+                qr.metrics["assertion_coverage"] = value
+        self._pending = []
+        shares = [qr.metrics["assertion_coverage"] for qr in result.question_results
+                  if "assertion_coverage" in qr.metrics]
+        if shares:
+            result.aggregate_metrics["assertion_coverage"] = sum(shares) / len(shares)
 
     def judge_record(self) -> dict[str, Any]:
         """What the run records about who judged, read after it finished."""
@@ -2233,6 +2269,11 @@ async def _run_experiment_background(
         # went to the database at read time would answer differently every
         # time the corpus was reloaded, about a run that had already happened.
         result.corpus_manifest = await _corpus_manifest(realm_id, cfg.corpus_id)
+        # The statements deferred during the run are judged now, with the
+        # generator done and one model to load.
+        judge_pending = getattr(evaluator, "judge_pending", None)
+        if judge_pending is not None:
+            await asyncio.to_thread(judge_pending, result)
         # Who checked the answers against their assertions, and at what cost.
         record_judge = getattr(evaluator, "judge_record", None)
         if record_judge is not None:
@@ -2386,7 +2427,7 @@ async def create_experiment(body: NewExperimentRequest) -> dict[str, Any]:
     if any(q.get("assertions") for q in (getattr(dataset, "questions", None) or [])):
         judge = await _resolve_judge(body.realm_id)
     evaluator = _CompositeEvaluator(embedder=embedder, top_k=cfg.top_k, ref_resolver=ref_resolver,
-                                    judge=judge)
+                                    judge=judge, defer_judging=True)
 
     import datetime
     _running.add(run_id)

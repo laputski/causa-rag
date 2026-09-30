@@ -81,8 +81,27 @@ async def get_prompt(prompt_id: str) -> dict[str, Any]:
     return t.to_dict()
 
 
+def _require_placeholders(template: str) -> None:
+    """A template must show the model the context and the question.
+
+    Found live: a realm's active prompt had `{context}` and no question at
+    all, and every answer in that realm was generated without the question
+    it answered. The generator of prompt drafts checked for both; a prompt
+    written by hand went in unchecked."""
+    missing = [name for name, present in (
+        ("{context}", "{context}" in template),
+        ("{query}", "{query}" in template or "{question}" in template),
+    ) if not present]
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"The template has no {' and no '.join(missing)}; without it the model never "
+                   "sees what it has to answer.")
+
+
 @router.post("", status_code=201)
 async def create_prompt(body: PromptCreateRequest) -> dict[str, Any]:
+    _require_placeholders(body.template)
     # Version is Realm-scoped, computed from Mongo (where realm_id lives) —
     # not from prompt_store.list(), which is a shared, Realm-agnostic file
     # store (see the design notes "Prompts scoping"). Found live: a Realm's

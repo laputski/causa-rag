@@ -68,7 +68,7 @@ _PROMPT_TEMPLATE = (
     "below. Keep statements drawn from different documents in separate "
     "sentences.\n\n"
     "Context:\n{context}\n\n"
-    "Question: {question}"
+    "Question: {query}"
 )
 
 # A generation preset replaces the built-in template wholesale, so it has to
