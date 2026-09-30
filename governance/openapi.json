@@ -1039,6 +1039,67 @@
         }
       }
     },
+    "/datasets/{dataset_id}/profile": {
+      "get": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Dataset Profile",
+        "description": "What the set is made of: questions by scope, type and answerability,\ndistinct references, how many carry assertions (core/eval/composition.py).\nRead before a run, so a set too uniform to expose a defect shows it.",
+        "operationId": "dataset_profile_datasets__dataset_id__profile_get",
+        "parameters": [
+          {
+            "name": "dataset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Id"
+            }
+          },
+          {
+            "name": "realm_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Realm Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Dataset Profile Datasets  Dataset Id  Profile Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/datasets/{dataset_id}/questions/{question_id}": {
       "put": {
         "tags": [

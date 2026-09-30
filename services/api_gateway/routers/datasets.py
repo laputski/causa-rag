@@ -289,6 +289,17 @@ async def add_questions_batch(
     return _dataset_detail(doc)
 
 
+@router.get("/{dataset_id}/profile")
+async def dataset_profile(dataset_id: str, realm_id: str | None = None) -> dict[str, Any]:
+    """What the set is made of: questions by scope, type and answerability,
+    distinct references, how many carry assertions (core/eval/composition.py).
+    Read before a run, so a set too uniform to expose a defect shows it."""
+    from core.eval.composition import profile
+
+    doc = await _get_dataset_or_404(dataset_id, realm_id)
+    return {"dataset_id": dataset_id, **profile(doc.get("questions") or [])}
+
+
 @router.put("/{dataset_id}/questions/{question_id}")
 async def update_question(
     dataset_id: str, question_id: str, body: QuestionWriteRequest, realm_id: str | None = None,
