@@ -1,6 +1,6 @@
 {
   "failure_id": "F20",
-  "recorded_at": "2026-10-03T10:12:36.056991+00:00",
+  "recorded_at": "2026-10-03T19:55:18.083177+00:00",
   "reproduced": true,
   "claim": "a filter naming a document nobody loaded empties both halves, and an empty result is what an unanswerable question looks like",
   "measured": {

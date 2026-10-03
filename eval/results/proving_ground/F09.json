@@ -1,6 +1,6 @@
 {
   "failure_id": "F09",
-  "recorded_at": "2026-10-03T10:29:26.606108+00:00",
+  "recorded_at": "2026-10-03T20:09:46.982078+00:00",
   "reproduced": true,
   "claim": "one corpus id over two different sets of documents, and the runs say so",
   "measured": {

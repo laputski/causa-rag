@@ -1,6 +1,6 @@
 {
   "failure_id": "F44",
-  "recorded_at": "2026-10-03T10:08:27.963361+00:00",
+  "recorded_at": "2026-10-03T19:52:53.727100+00:00",
   "reproduced": true,
   "claim": "a run named a segmentation its index was not built with, and retrieved exactly what the run naming the right one retrieved",
   "measured": {

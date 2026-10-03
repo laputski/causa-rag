@@ -1,6 +1,6 @@
 {
   "failure_id": "F27",
-  "recorded_at": "2026-10-03T10:30:57.191343+00:00",
+  "recorded_at": "2026-10-03T20:11:11.416790+00:00",
   "reproduced": true,
   "claim": "a real run whose reranker ran and reported no time",
   "measured": {

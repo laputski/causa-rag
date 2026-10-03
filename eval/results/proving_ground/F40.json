@@ -1,6 +1,6 @@
 {
   "failure_id": "F40",
-  "recorded_at": "2026-10-03T10:26:55.645846+00:00",
+  "recorded_at": "2026-10-03T20:05:58.023636+00:00",
   "reproduced": true,
   "claim": "a lexical index that was never built leaves one half supplying everything",
   "measured": {
