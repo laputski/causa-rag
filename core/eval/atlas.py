@@ -590,7 +590,16 @@ FAILURES: tuple[FailureMode, ...] = (
                       # exactly the two carrying `multi_reformulation`.
                       ("B1", ("identity", "key_extraction")),
                       ),
-        signals=(Signal("detector", "bm25_dominance"),),
+        # The second signal is what the first cannot say: which questions
+        # paid for it. A source one half had in its own list and the merged
+        # list did not carry is the loss itself, seen per question, where the
+        # first reads the shares of a whole run. The third counts those
+        # questions across the run, because the per-question verdict is
+        # hidden whenever an earlier one applies: on the run this was found
+        # on, twenty-five of fifty questions lost their source in the merge
+        # and not one was named for it.
+        signals=(Signal("detector", "bm25_dominance"), Signal("funnel", "fusion"),
+                 Signal("detector", "merge_lost_what_a_half_found")),
         bait="tests/unit/test_atlas_baits.py::test_bait[F21]",
     ),
     FailureMode(
@@ -640,7 +649,11 @@ FAILURES: tuple[FailureMode, ...] = (
         # A check reads the run history now: every rank-fusion run on one
         # question set carrying the same constant is a constant nobody has
         # measured here, whatever the paper it came from says.
-        signals=(Signal("detector", "fusion_constant_never_varied"),),
+        # A constant nobody measured is a claim about the search; a source a
+        # half found and the merge lost is what an unsuitable one costs, and
+        # it is visible on the question that lost it.
+        signals=(Signal("detector", "fusion_constant_never_varied"), Signal("funnel", "fusion"),
+                 Signal("detector", "merge_lost_what_a_half_found")),
         bait="tests/unit/test_atlas_baits.py::test_bait[F22]",
     ),
     FailureMode(
@@ -1024,6 +1037,40 @@ FAILURES: tuple[FailureMode, ...] = (
         # the run wants, or by recording what was really read.
         signals=(Signal("detector", "named_and_indexed_segmentation_differ"),),
         bait="tests/unit/test_atlas_baits.py::test_bait[F44]",
+    ),
+    FailureMode(
+        id="F45",
+        atlas_rows=(),
+        title="The answer leaves out part of what the question needs",
+        stage_origin="generation",
+        stage_visible="generation",
+        severity=Severity(3, 2, 2),
+        origin="mechanism",
+        detection="detector",
+        instrument="faulty_rag",
+        applies_when=(),
+        # Every measure the platform had of an answer compares it with one
+        # reference text or with the fragments it was given, and both forgive
+        # an answer that says one true thing and stops. A question about the
+        # corpus as a whole has several things to say, drawn from several
+        # documents, and the retrieval metrics are not computed for it at all,
+        # so an answer that covers a quarter of them scored like one that
+        # covers all of them.
+        #
+        # What tells them apart is a list of the statements a right answer has
+        # to make, checked one by one. The check is made by a model, and its
+        # own errors are known in both directions (`core/eval/assertions.py`),
+        # so this says the share fell, and never that a given statement is
+        # missing beyond doubt.
+        #
+        # Staged twice. On nine questions that each name their instruments the
+        # honest half scored 0.78, 0.78 and 0.89 over three runs and the half
+        # that stops after one sentence 0.59 twice: a gap wider than the
+        # honest half's own scatter and not by much, because an honest answer
+        # there is often one sentence too. With four questions added whose
+        # answer is wider than one context, 0.62 against 0.41.
+        signals=(Signal("metric", "assertion_coverage"),),
+        bait="tests/unit/test_atlas_baits.py::test_bait[F45]",
     ),
     FailureMode(
         id="F41",

@@ -25,6 +25,7 @@ import asyncio
 import json
 import re
 import uuid
+from collections import Counter
 from datetime import UTC, datetime
 from random import Random
 from typing import Any
@@ -302,7 +303,15 @@ def _sample_ranges(chunks: list[Any], n: int, rng: Random, size: tuple[int, int]
 
 
 def _document_of(chunk: Any) -> str:
-    return str(chunk.metadata.get("source_code") or chunk.doc_id)
+    """The document a fragment was cut from: the unit that was loaded.
+
+    The loaded document first, and a source code only for a fragment that
+    carries no document of its own. It was the other way round, and found
+    live to be wrong: in one corpus every fragment carries the corpus's own
+    code, the forty documents differ by `doc_id`, and the sampler saw one
+    document and wrote no question about the corpus as a whole.
+    """
+    return str(chunk.doc_id or chunk.metadata.get("source_code") or "")
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
@@ -536,17 +545,51 @@ def _generate_one_sync(generator: Any, preset: dict[str, Any] | None, question_t
     return generator.generate(prompt, response_format="json", temperature=0.4)
 
 
-_MIXED_SCRIPT = re.compile(r"(?=\w*[a-zA-Z])(?=\w*[а-яА-ЯёЁ])\w+")
+_WORD = re.compile(r"\w+")
 
 
-def _mixed_script_words(texts: list[str]) -> list[str]:
-    """Words spelled partly in Latin and partly in Cyrillic letters.
+def _scripts(word: str) -> set[str]:
+    """The writing systems a word's letters belong to, by their Unicode names."""
+    import unicodedata
+    found = set()
+    for ch in word:
+        if ch.isalpha():
+            found.add(unicodedata.name(ch, "UNKNOWN").split(" ")[0])
+    return found
+
+
+def _mixed_script_words(texts: list[str], sources: list[str] | None = None) -> list[str]:
+    """Words a reviewer may not see are wrong: spelled in two writing systems
+    at once, or written in one the fragments never use.
 
     Found live on the first drafts through this path: the model wrote
     "Замena" and "Zамena" for «Замена» at the sampling temperature used here.
     A person reading the draft may not see it, and a judge comparing the
-    assertion with an answer will not match it, so the draft says so."""
-    return sorted({w for t in texts for w in _MIXED_SCRIPT.findall(t)})
+    assertion with an answer will not match it, so the draft says so.
+
+    The check knew two alphabets at first. Found live on the English drafts:
+    "an工程师 authorised" and "service报告", which mix neither of them. So a
+    word is judged by the writing systems of its own letters, whatever they
+    are, and a word wholly in a system the fragments do not contain is
+    pointed out as well. A code written whole in the fragments' second
+    alphabet is the corpus's own and is left alone.
+    """
+    words = [word for text in texts for word in _WORD.findall(text)]
+    known: set[str] = set()
+    for source in sources or []:
+        for word in _WORD.findall(source):
+            known |= _scripts(word)
+    # The draft's own language counts as known too: a question in one
+    # language about a corpus in another is a thing people ask for.
+    written_in = Counter(script for word in words for script in _scripts(word))
+    if written_in:
+        known.add(written_in.most_common(1)[0][0])
+    flagged = set()
+    for word in words:
+        scripts = _scripts(word)
+        if len(scripts) > 1 or (sources and scripts and not scripts & known):
+            flagged.add(word)
+    return sorted(flagged)
 
 
 def _statements(parsed: dict[str, Any], group: list[Any]) -> tuple[list[str], list[str]]:
@@ -666,7 +709,8 @@ async def _run_generation_background(
             # Which fragment each assertion rests on, for the person checking
             # the draft; empty where the model named none.
             draft["provenance"]["assertion_fragments"] = fragments
-        mixed = _mixed_script_words([draft["question"], draft["reference_answer"], *statements])
+        mixed = _mixed_script_words([draft["question"], draft["reference_answer"], *statements],
+                                    sources=[c.text for c in group])
         if mixed:
             draft["provenance"]["mixed_script_words"] = mixed
         drafts.append(draft)

@@ -262,3 +262,38 @@ def test_display_answerability_falls_back_to_metric_key_guess_for_historical_run
     assert _display_answerability({}, answerable_metrics) == "answerable"
     non_answerable_metrics = {"correct_refusal": 0.0}
     assert _display_answerability({}, non_answerable_metrics) == "not_applicable"
+
+
+# ── What the merge did with a source a half had found ─────────────────────────
+
+def _ref(article: str, chunk: str = "") -> SourceRef:
+    return SourceRef(doc_id="d", chunk_id=chunk or f"c{article}", chunk_text="context",
+                     source_code="SRC001", article_no=article)
+
+
+_NEEDS_44 = {"question": "What may a team decide?", "article_refs": ["SRC001/44"], "ground_truth": "ref"}
+
+
+def test_a_source_a_half_found_and_the_merged_list_lacks_scores_zero() -> None:
+    answer = Answer(text="An answer.", source_refs=[_ref("47")],
+                    dense_source_refs=[_ref("44"), _ref("47")], sparse_source_refs=[_ref("47")])
+    assert _evaluator().evaluate(_NEEDS_44, answer)["kept_through_fusion"] == 0.0
+
+
+def test_a_source_a_half_found_and_the_merge_kept_scores_one() -> None:
+    answer = Answer(text="An answer.", source_refs=[_ref("44")],
+                    dense_source_refs=[_ref("44")], sparse_source_refs=[_ref("47")])
+    assert _evaluator().evaluate(_NEEDS_44, answer)["kept_through_fusion"] == 1.0
+
+
+def test_a_source_no_half_found_says_nothing_about_the_merge() -> None:
+    """The merge cannot lose what it was never given, and a zero here would
+    blame it for a half's miss."""
+    answer = Answer(text="An answer.", source_refs=[_ref("47")],
+                    dense_source_refs=[_ref("47")], sparse_source_refs=[_ref("47")])
+    assert "kept_through_fusion" not in _evaluator().evaluate(_NEEDS_44, answer)
+
+
+def test_a_run_that_recorded_no_halves_says_nothing_about_the_merge() -> None:
+    answer = Answer(text="An answer.", source_refs=[_ref("47")])
+    assert "kept_through_fusion" not in _evaluator().evaluate(_NEEDS_44, answer)

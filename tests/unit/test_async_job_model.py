@@ -282,3 +282,41 @@ def test_list_experiments_reflects_stopped_run(monkeypatch, tmp_path):
     assert by_id["stoppedrun1"].n_questions == 6  # actual answered count, not the planned 30
     assert by_id["finishedrun1"].stopped is False
     assert by_id["finishedrun1"].n_questions == 3
+
+
+def test_a_run_being_judged_and_stored_is_still_there(monkeypatch):
+    """Found live: a run answered 404 between its last question and its
+    being stored. It leaves the running set when the question loop ends, so a
+    stop arriving later is refused, and it was nowhere else until the store
+    had it. Judging every statement after the answers made that window tens
+    of seconds, and a client polling the run concluded it had never existed."""
+    run_id = "bgtest_finishing"
+    seen = {}
+
+    async def _no_such_run(_):
+        return None
+
+    async def _no_summaries():
+        return {}
+
+    async def _save_and_look(result):
+        monkeypatch.setattr(exp_module, "_get_one_result", _no_such_run)
+        monkeypatch.setattr(exp_module, "_get_summaries", _no_summaries)
+        seen["page"] = await exp_module.get_experiment(run_id)
+        seen["listed"] = [i.run_id for i in await exp_module.list_experiments() if i.status == "running"]
+        with pytest.raises(Exception) as refused:
+            await exp_module.stop_experiment(run_id)
+        seen["stop"] = getattr(refused.value, "status_code", None)
+
+    monkeypatch.setattr(exp_module, "_save", _save_and_look)
+    exp_module._progress[run_id] = []
+    exp_module._running.add(run_id)
+    exp_module._running_meta[run_id] = {"name": "n", "realm_id": "", "dataset_name": "d"}
+
+    asyncio.run(exp_module._run_experiment_background(
+        run_id, _cfg(), make_stub_dataset(n=2), None, _make_runner()))
+
+    assert seen["page"]["status"] == "running" and seen["page"]["finishing"] is True
+    assert run_id in seen["listed"]
+    assert seen["stop"] == 404, "a stop the question loop can no longer honour must still be refused"
+    assert run_id not in exp_module._finishing, "the run is stored and must stop being reported as running"

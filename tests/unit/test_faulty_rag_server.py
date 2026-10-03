@@ -339,3 +339,24 @@ def test_never_refusing_replaces_the_generator_s_own_refusal() -> None:
     out = _apply("F19_never_refuses", real)
     assert out["answer"] != real["answer"]
     assert not faulty._reads_as_refusal(out["answer"])
+
+
+def test_the_mode_that_stops_short_keeps_the_first_sentence_and_the_sources() -> None:
+    """The sentence it keeps is the honest one, so nothing comparing the
+    answer with its context objects; what the pair measures is what is gone."""
+    response = {"answer": "The filter is replaced every 6 months. The lamp lasts 2000 hours! "
+                          "Calibration is yearly.",
+                "sources": [{"chunk_id": "c1"}]}
+    cut = faulty._stops_after_one_sentence(response, None)
+    assert cut["answer"] == "The filter is replaced every 6 months."
+    assert cut["sources"] == response["sources"]
+
+
+def test_the_mode_that_stops_short_leaves_a_refusal_whole() -> None:
+    """Cutting a refusal would stage a second failure: a refusal the platform
+    no longer reads as one."""
+    from core.eval.detectors import NOT_FOUND_RE
+
+    refusal = "В предоставленных документах информация по данному вопросу отсутствует. Уточните вопрос."
+    assert NOT_FOUND_RE.search(refusal), "the fixture is not a refusal the platform recognises"
+    assert faulty._stops_after_one_sentence({"answer": refusal}, None)["answer"] == refusal

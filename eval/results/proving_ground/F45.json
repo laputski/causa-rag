@@ -1,0 +1,16 @@
+{
+  "failure_id": "F45",
+  "recorded_at": "2026-10-03T08:55:20.144358+00:00",
+  "reproduced": true,
+  "claim": "an external system that answers with one sentence loses the share of statements its honest half makes",
+  "measured": {
+    "coverage_honest": 0.615,
+    "coverage_short": 0.41,
+    "questions": 13,
+    "judge": "qwen3:32b",
+    "mean_answer_chars_honest": 163,
+    "mean_answer_chars_short": 107,
+    "signals": [],
+    "signals_on_the_control": []
+  }
+}

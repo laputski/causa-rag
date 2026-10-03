@@ -165,6 +165,14 @@ DEFINITIONS: tuple[MetricDefinition, ...] = (
              "the reranker chose among them",
     ),
     MetricDefinition(
+        name="kept_through_fusion",
+        requires=(ANSWERABLE, BOUNDED_BY_ITS_SOURCES),
+        over="answerable questions whose needed source at least one half of the retrieval "
+             "found, in runs that recorded each half's own list",
+        aggregated_by="mean",
+        says="the share of the sources a half had found that the merged list still carried",
+    ),
+    MetricDefinition(
         name="answer_similarity",
         requires=(REACHED_THE_GENERATOR, ANSWERABLE),
         over="answerable questions",

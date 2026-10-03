@@ -449,8 +449,42 @@ def detect_incorrect_refusals(run: dict[str, Any]) -> DiagnosticItem | None:
     return None
 
 
+def detect_merge_lost_what_a_half_found(run: dict[str, Any]) -> DiagnosticItem | None:
+    """Sources a half of the retrieval had in its own list and the merged
+    list did not carry, across the run.
+
+    Said about the run because the per-question verdict cannot always say it.
+    Found live: of fifty questions, twenty-five lost their source in the
+    merge, and thirty-six were already named for an answer that resembles the
+    right one without its source, which is checked first and holds for them
+    as well. The cause on the retrieval side reached no screen.
+
+    A quarter of the sources the halves found, and at least three questions.
+    One source falling below the cut is what ranking does; measured on a
+    healthy two-half run, none of seventeen was lost.
+    """
+    scored = [q for q in run.get("question_results") or []
+              if "kept_through_fusion" in (q.get("metrics") or {})]
+    lost = [q for q in scored if q["metrics"]["kept_through_fusion"] < 0.5]
+    if len(lost) < 3 or len(lost) / len(scored) < 0.25:
+        return None
+    return DiagnosticItem(
+        id="merge_lost_what_a_half_found",
+        severity="warn",
+        title="The merge loses sources its halves find",
+        detail=(
+            f"On {len(lost)} of {len(scored)} questions whose needed source one half of the "
+            "retrieval had in its own list, the merged list did not carry it."
+        ),
+        action="Open a question that lost its source and compare its rank in each half with the "
+               "merged list, then widen the merged window or change how the halves are weighed.",
+        params={"lost": len(lost), "found_by_a_half": len(scored)},
+    )
+
+
 _LAYER_LABELS = {
     "retrieval": "retrieval",
+    "fusion": "fusion",
     "rerank": "rerank",
     "generation": "generation",
     "suspected_ungrounded_answer": "suspected ungrounded answer",
@@ -1139,6 +1173,7 @@ def run_detectors(run: dict[str, Any]) -> list[DiagnosticItem]:
         None if retrieval_only else detect_empty_answers(answers),
         detect_incorrect_refusals(run),
         detect_layer_bottleneck(run),
+        detect_merge_lost_what_a_half_found(run),
         detect_unverified_coverage(run),
         detect_assertions_not_judged(run),
         half_empty,

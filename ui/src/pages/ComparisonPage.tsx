@@ -52,6 +52,7 @@ const FUNNEL_LAYER_LABEL: Record<string, string> = {
   not_applicable: 'runPage.funnel.notApplicable',
   suspected_ungrounded_answer: 'runPage.funnel.suspectedUngrounded',
   retrieval: 'runPage.funnel.layerRetrieval',
+  fusion: 'runPage.funnel.layerFusion',
   rerank: 'runPage.funnel.layerRerank',
   generation: 'runPage.funnel.layerGeneration',
   ok: 'runPage.funnel.ok',

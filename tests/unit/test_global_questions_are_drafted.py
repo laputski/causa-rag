@@ -70,6 +70,29 @@ def test_a_corpus_with_too_few_documents_yields_no_group() -> None:
     assert G._sample_global(chunks, 3, Random(0), lambda t: [[1.0] for _ in t], k=4) == []
 
 
+def test_a_code_shared_by_the_whole_corpus_does_not_make_it_one_document() -> None:
+    """Found live: a corpus whose every fragment carries one `source_code`,
+    the corpus's own, with the document told apart by `doc_id`. The sampler
+    asked the code first, saw one document where there were forty, and
+    returned no group at all."""
+    chunks = []
+    for i in range(6):
+        chunk = _chunk(f"d{i}", 0, f"alpha {i}")
+        chunk.metadata = {"source_code": "the-corpus", "article_no": f"{i:02d}"}
+        chunks.append(chunk)
+    groups = G._sample_global(chunks, 2, Random(1), _close_but_distinct, k=4)
+    assert groups and all(len({c.doc_id for c in g}) == 4 for g in groups)
+
+
+def test_fragments_with_no_document_of_their_own_fall_back_to_the_code() -> None:
+    chunks = []
+    for i in range(6):
+        chunk = _chunk("", i, f"alpha {i}")
+        chunk.metadata = {"source_code": f"code-{i}"}
+        chunks.append(chunk)
+    assert G._sample_global(chunks, 1, Random(1), _close_but_distinct, k=4)
+
+
 # ── The template a group gets ─────────────────────────────────────────────────
 
 def test_a_global_group_of_two_gets_the_global_template_numbered() -> None:
@@ -188,3 +211,22 @@ def test_the_draft_carries_the_words_for_the_reviewer(client) -> None:
                        ensure_ascii=False)
     done = _run(client, reply, _corpus(), [{"question_type": "global", "n_questions": 1}])
     assert done["drafts"][0]["provenance"]["mixed_script_words"] == ["Замena"]
+
+
+def test_a_word_from_a_third_script_inside_a_word_is_pointed_out() -> None:
+    """Found live on the English drafts: "an工程师 authorised" and
+    "service报告", from a model trained on more than one language. The check
+    knew two alphabets and saw neither."""
+    assert G._mixed_script_words(["Servicing requires an工程师 authorised to level 2"]) == ["an工程师"]
+
+
+def test_a_word_in_a_script_the_fragments_never_use_is_pointed_out() -> None:
+    statements = ["The service 报告 is due within 3 working days."]
+    assert G._mixed_script_words(statements, sources=["The service report for the ВС-510 is due."]) == ["报告"]
+
+
+def test_a_code_in_the_fragments_own_second_alphabet_is_left_alone() -> None:
+    """A model's code is written in Cyrillic in an English corpus, whole, and
+    the fragments carry it that way."""
+    statements = ["The service report for the ВС-510 is due within 3 working days."]
+    assert G._mixed_script_words(statements, sources=["Servicing the ВС-510 requires level 2."]) == []

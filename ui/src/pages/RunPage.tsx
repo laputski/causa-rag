@@ -52,6 +52,7 @@ const FUNNEL_BADGE: Record<string, { label: string; cls: string }> = {
   not_applicable: { label: 'runPage.funnel.notApplicable', cls: 'badge-info' },
   suspected_ungrounded_answer: { label: 'runPage.funnel.suspectedUngrounded', cls: 'badge-danger' },
   retrieval: { label: 'runPage.funnel.layerRetrieval', cls: 'badge-danger' },
+  fusion: { label: 'runPage.funnel.layerFusion', cls: 'badge-danger' },
   rerank: { label: 'runPage.funnel.layerRerank', cls: 'badge-danger' },
   generation: { label: 'runPage.funnel.layerGeneration', cls: 'badge-warn' },
   ok: { label: 'runPage.funnel.ok', cls: 'badge-success' },

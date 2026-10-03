@@ -61,6 +61,11 @@ export const METRIC_META: Record<string, MetricMeta> = {
     get hint() { return i18n.t('metricMeta.preRerankRecallAtK.hint') },
     noiseThreshold: 0.05,
   },
+  kept_through_fusion: {
+    label: 'Kept Through Fusion',
+    get hint() { return i18n.t('metricMeta.keptThroughFusion.hint') },
+    noiseThreshold: 0.05,
+  },
   retrieval_average_precision: {
     label: 'Average Precision',
     get hint() { return i18n.t('metricMeta.retrievalAveragePrecision.hint') },

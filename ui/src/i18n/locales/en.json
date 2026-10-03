@@ -75,7 +75,8 @@
       "F41": "The guard against a runaway link step leaves a graph with no edges at all",
       "F42": "Fragments carry a heading and no body",
       "F43": "The index holds nothing and every metric reports a total failure",
-      "F44": "The segmentation a run declares is not the one its index was built with"
+      "F44": "The segmentation a run declares is not the one its index was built with",
+      "F45": "The answer leaves out part of what the question needs"
     },
     "gapDetail": "Nothing is known about failures peculiar to them. That is a gap in the catalogue, not a clean bill of health.",
     "gapTitle": "Some coordinates of this point are spoken about by no entry",
@@ -1579,6 +1580,9 @@
     "groundedInCorrectSource": {
       "hint": "Cosine similarity between the answer and specifically the chunk(s) matching the golden article_refs — not the maximum across all chunks, unlike Context Support. Absent if the required article wasn't retrieved."
     },
+    "keptThroughFusion": {
+      "hint": "Share of the sources one half of the retrieval had found that the merged list still carried. Present only when a run recorded each half's own list and a half found the source. A low value says the merge loses what the halves find."
+    },
     "legacyJaccard": {
       "hint": "The old Jaccard metric — not comparable with newer runs."
     },
@@ -2081,6 +2085,7 @@
     "finding": {
       "half_returned_nothing": "One half of the retrieval returned nothing on every question",
       "assertions_not_judged": "Some answers were not checked against their assertions",
+      "merge_lost_what_a_half_found": "The merge loses sources its halves find",
       "stub_embedder": "Looks like a stub embedder",
       "embedder_unverified": "The embedder could not be checked",
       "duplicates": "Duplicates in the context",
@@ -2105,6 +2110,7 @@
       "half_returned_nothing": "Check that the index this half reads exists and holds the corpus, then re-run; until then, read the run as a single-source one.",
       "assertions_not_judged": "Make the judge reachable and re-run, or read the share as covering only the questions that have it.",
       "embedder_unverified": "Read the run's recall against its reference sources: a corpus indexed by a stub model retrieves at chance.",
+      "merge_lost_what_a_half_found": "Open a question that lost its source and compare its rank in each half with the merged list, then widen the merged window or change how the halves are weighed.",
       "stub_embedder": "Re-index the corpus with the real embedding model switched on.",
       "duplicates": "Check that chunk_id is deterministic, then drop the collection and re-index.",
       "header_only": "Raise min_chars, or switch to sentence or paragraph chunking.",
@@ -2152,6 +2158,7 @@
     "findingDetail": {
       "half_returned_nothing": "The {{half}} half returned no fragment on any of {{questions}} questions, so the other half supplied every context while the configuration still says the pipeline merges two.",
       "assertions_not_judged": "{{unjudged}} of {{carrying}} questions carrying assertions have no verdict on all of them ({{reason}}{{note}}), so the share of assertions answered is averaged over the questions the judge happened to reach.",
+      "merge_lost_what_a_half_found": "On {{lost}} of {{found_by_a_half}} questions whose needed source one half of the retrieval had in its own list, the merged list did not carry it.",
       "stub_embedder": {
         "by_the_load_record": "The load record for this corpus says its vectors were produced by the stub, which hashes text into a vector of the right width and no meaning (loaded {{loaded_at}}). Every similarity in this run is between a real query vector and a hash.",
         "by_the_scores": "{{at_the_floor}}/{{chunks}} chunks have a dense score at the floor while the sparse side reports real values, so the corpus was probably indexed with random vectors."
@@ -2301,6 +2308,7 @@
       "title": "Feedback"
     },
     "funnel": {
+      "layerFusion": "layer: fusion",
       "layerGeneration": "layer: generation",
       "layerRerank": "layer: rerank",
       "layerRetrieval": "layer: retrieval",

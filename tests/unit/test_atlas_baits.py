@@ -374,7 +374,35 @@ def bait_F21_incomparable_scales() -> set[str]:
     for qr in run["question_results"]:
         for ref in qr["source_refs"]:
             ref["dense_score"], ref["sparse_score"] = 0.7, 0.0
-    return _detector_ids(run)
+    return _detector_ids(run) | _a_source_the_merge_lost()
+
+
+def _a_source_the_merge_lost() -> set[str]:
+    """One question whose needed source the keyword half had and the merged
+    list did not, scored as a run scores it and then diagnosed. The control
+    is the same question with the source kept, which must not be blamed on
+    the merge."""
+    from core.eval.stages import stages_of
+
+    gold = {"chunk_id": "g", "source_code": "handbook", "article_no": "40"}
+    other = {"chunk_id": "o", "source_code": "handbook", "article_no": "41"}
+
+    def verdict(merged: list[dict[str, Any]]) -> str:
+        staged = stages_of({"expected_refs": ["handbook/40"], "sparse_source_refs": [gold, other],
+                            "dense_source_refs": [other], "source_refs": merged})
+        recall = 1.0 if staged["lost_at"] is None else 0.0
+        return diagnose_question("answerable", {
+            "retrieval_recall_at_k": recall, "answer_similarity": 0.8 if recall else 0.2,
+            "kept_through_fusion": 0.0 if staged["lost_at"] == "fusion" else 1.0}).layer
+
+    assert verdict([gold, other]) != "fusion", "a merge that kept the source is blamed for losing it"
+
+    # And across a run: most of the sources the halves found are gone.
+    run = clean_run()
+    for position, qr in enumerate(run["question_results"]):
+        qr["metrics"]["kept_through_fusion"] = 0.0 if position % 2 == 0 else 1.0
+    assert "detector:merge_lost_what_a_half_found" not in _detector_ids(clean_run())
+    return {f"funnel:{verdict([other])}"} | (_detector_ids(run) & {"detector:merge_lost_what_a_half_found"})
 
 
 def bait_F40_one_half_is_absent() -> set[str]:
@@ -579,7 +607,7 @@ def bait_F22_the_fusion_constant_was_never_varied() -> set[str]:
         "dataset_name": "handbook.v1.jsonl", "runs_before": 0,
         "configurations_before": 0, "fusion_constants_tried": [60], "merge_strategy": "rrf",
     }
-    return _detector_ids(run)
+    return _detector_ids(run) | _a_source_the_merge_lost()
 
 
 def bait_F36_a_difference_the_questions_cannot_see() -> set[str]:
@@ -664,6 +692,23 @@ def bait_F43_an_index_holding_nothing() -> set[str]:
     return _health_ids([])
 
 
+def bait_F45_the_answer_stops_after_one_statement() -> set[str]:
+    """A question needs three statements and the answer makes one.
+
+    From the judge's own replies, as the run receives them: three sayings
+    that the statement is made, then one of them and two that it is not.
+    """
+    from core.eval.assertions import coverage, parse_verdict
+
+    def share(replies: list[str]) -> float | None:
+        return coverage([{"stated": parse_verdict(reply)} for reply in replies])
+
+    whole = share(['{"stated": true}'] * 3)
+    short = share(['{"stated": true}', '{"stated": false}', '{"stated": false}'])
+    assert whole == 1.0, "the bait's own complete answer does not score as complete"
+    return {"metric:assertion_coverage"} if short is not None and short < whole else set()
+
+
 #: F17 has no bait here, and the reason is worth the line. It had one: every
 #: fragment of every context carrying a score from the keyword half alone.
 #: That is a whole context ruled by one half, which is what two neighbouring
@@ -706,6 +751,7 @@ BAITS = {
     "F41": bait_F41_the_guard_left_no_edges_at_all,
     "F42": bait_F42_fragments_that_are_only_a_heading,
     "F43": bait_F43_an_index_holding_nothing,
+    "F45": bait_F45_the_answer_stops_after_one_statement,
 }
 
 _CLAIMED = [f for f in FAILURES if f.detection != "none"]
@@ -814,3 +860,11 @@ def test_no_detector_fires_on_a_healthy_retrieval_only_run() -> None:
         "a run that deliberately stopped before generation is reported as "
         f"faulty for having no answers: {fired}"
     )
+
+
+@pytest.mark.parametrize("entry", ["F21", "F22"])
+def test_a_source_the_merge_lost_is_evidence_for_the_entries_about_the_merge(entry: str) -> None:
+    """The entry names the signal, and the bait has to produce it: a signal
+    listed and never provoked is a claim nobody tried to disprove."""
+    fired = BAITS[entry]()
+    assert "funnel:fusion" in fired and "detector:merge_lost_what_a_half_found" in fired

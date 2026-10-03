@@ -1,5 +1,5 @@
 """Per-question funnel diagnosis (Eval Measurement Trustworthiness, Phase
-1) — answers "on which layer (corpus → retrieval → rerank → generation)
+1) — answers "on which layer (corpus → retrieval → fusion → rerank → generation)
 did THIS question's result go wrong", synthesizing signals that already
 exist (answerability class, retrieval_recall_at_k, answer_similarity)
 plus two new ones (pre-rerank recall, grounded_in_correct_source) into one
@@ -23,6 +23,7 @@ Layer = Literal[
     "not_applicable",
     "suspected_ungrounded_answer",
     "retrieval",
+    "fusion",
     "rerank",
     "generation",
     "ok",
@@ -89,16 +90,41 @@ def diagnose_question(
     # answer_similarity 0.6-0.9) that isolated per-layer checks would
     # mis-read as "retrieval bad, generation fine".
     if recall is not None and recall < _RECALL_WARN and similarity is not None and similarity >= _SIMILARITY_SUSPICIOUS:
+        # This verdict comes first and so hides where the source went. When
+        # the run knows, the words say it: found live, thirty-six of fifty
+        # questions carried this layer and twenty-five of them had lost their
+        # source in the merge, which no screen showed.
+        kept = metrics.get("kept_through_fusion")
+        where = (" One half of the retrieval had the required source in its own list and the "
+                 "merged list did not carry it." if kept is not None and kept < 0.5 else "")
         return FunnelVerdict(
             layer="suspected_ungrounded_answer",
             detail=(
                 f"retrieval_recall_at_k={recall:.2f} is low while answer_similarity={similarity:.2f} "
                 "is high. The answer resembles the right one yet probably does not rest on the "
-                "retrieved context, drawing instead on the model's parametric knowledge."
+                "retrieved context, drawing instead on the model's parametric knowledge." + where
             ),
         )
 
     if recall is not None and recall < _RECALL_WARN:
+        # A half had the source in its own list and the merged list did not.
+        # Asked before the reranker, which only ever sees what the merge let
+        # through. Read from a number the run stored, like everything here,
+        # so the verdict does not change when the run's lists are cleared.
+        #
+        # Measured on a stored run of fifty questions: twenty-five lost their
+        # source this way, and each was reported as retrieval never having
+        # found it, which sends the reader to the index and the embedder when
+        # the place to look is the merge.
+        kept = metrics.get("kept_through_fusion")
+        if kept is not None and kept < 0.5:
+            return FunnelVerdict(
+                layer="fusion",
+                detail=(
+                    f"retrieval_recall_at_k={recall:.2f}: one half of the retrieval had the "
+                    "required source in its own list and the merged list did not carry it."
+                ),
+            )
         if (
             pre_rerank_recall_at_k is not None
             and pre_rerank_recall_at_k >= _RECALL_GOOD

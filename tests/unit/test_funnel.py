@@ -106,3 +106,32 @@ def test_to_dict_shape() -> None:
     v = diagnose_question("uncovered", metrics={})
     d = v.to_dict()
     assert set(d) == {"layer", "detail"}
+
+
+# ── A source one half found and the merge lost ────────────────────────────────
+
+def test_a_source_a_half_found_and_the_merge_lost_is_named_as_such() -> None:
+    """Measured on a stored run of fifty questions: half of them had the
+    source they needed in one half's own list and not in the merged one, and
+    every one of them was reported as "retrieval never found it"."""
+    v = diagnose_question("answerable", metrics={
+        "retrieval_recall_at_k": 0.0, "answer_similarity": 0.2, "kept_through_fusion": 0.0})
+    assert v.layer == "fusion"
+
+
+def test_a_source_the_merge_kept_and_the_cut_dropped_is_still_retrieval() -> None:
+    v = diagnose_question("answerable", metrics={
+        "retrieval_recall_at_k": 0.0, "answer_similarity": 0.2, "kept_through_fusion": 1.0})
+    assert v.layer == "retrieval"
+
+
+def test_a_run_that_recorded_no_halves_is_diagnosed_as_before() -> None:
+    v = diagnose_question("answerable", metrics={"retrieval_recall_at_k": 0.0, "answer_similarity": 0.2})
+    assert v.layer == "retrieval"
+
+
+def test_a_confident_answer_without_its_source_is_still_suspected_first() -> None:
+    """The merge losing the source does not make the answer grounded."""
+    v = diagnose_question("answerable", metrics={
+        "retrieval_recall_at_k": 0.0, "answer_similarity": 0.9, "kept_through_fusion": 0.0})
+    assert v.layer == "suspected_ungrounded_answer"

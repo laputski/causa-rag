@@ -76,6 +76,7 @@ const METRIC_META: Record<string, { label: string; color: string }> = {
   // module-load time.
   get pre_rerank_recall_at_k() { return { label: i18n.t('runCharts.preRerankRecallAtKLabel'), color: COLOR.warning } },
   retrieval_average_precision: { label: 'Average Precision', color: COLOR.success },
+  kept_through_fusion: { label: 'Kept Through Fusion', color: COLOR.warning },
   answer_relevance: { label: 'Answer Relevance', color: COLOR.primary },
   // legacy (pre-Phase-0 runs)
   faithfulness: { label: 'Faithfulness (legacy)', color: COLOR.primary },

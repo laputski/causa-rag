@@ -75,6 +75,12 @@ QUESTIONS_A_RUN_CAN_HOLD = 16 * 1024 * 1024 // WORST_BYTES_PER_QUESTION
 # Minimal metadata stored at run start so list_experiments can show running
 # runs before they complete and land in _get_results().
 _running_meta: dict[str, dict[str, Any]] = {}
+#: Runs whose question loop has ended and which are not stored yet: being
+#: judged, diagnosed and written. A run leaves `_running` when its loop ends,
+#: so that a stop arriving afterwards is refused, and it used to be nowhere
+#: until the store had it. Found live as a 404 for a run that had just
+#: answered its last question, for as long as the judge took.
+_finishing: set[str] = set()
 
 
 # ── Persistence ───────────────────────────────────────────────────────────────
@@ -1153,6 +1159,25 @@ class _CompositeEvaluator:
             pre_rerank_retrieved = extracted_refs([sr.model_dump() for sr in pre_rerank_refs])
             metrics["pre_rerank_recall_at_k"] = recall_at_k(article_refs, pre_rerank_retrieved, k=self._top_k)
 
+        # Whether the merge kept a source one of its halves had found. Asked
+        # of the same stages the run page shows (core/eval/stages.py), so the
+        # number and the picture cannot disagree. Absent when no half was
+        # recorded or no half found the source: the merge cannot lose what it
+        # was never given, and a zero there would blame it for a half's miss.
+        from core.eval.stages import HALVES, stages_of
+
+        def dumped(name: str) -> list[dict[str, Any]]:
+            return [sr.model_dump() for sr in getattr(answer, name, None) or []]
+
+        staged = stages_of({
+            "expected_refs": article_refs,
+            **{f"{half}_source_refs": dumped(f"{half}_source_refs") for half in HALVES},
+            **{name: dumped(name) for name in
+               ("source_refs", "pre_rerank_source_refs", "candidate_source_refs")},
+        })
+        if any(s["rank"] is not None for s in staged["stages"] if s["stage"] in HALVES):
+            metrics["kept_through_fusion"] = 0.0 if staged["lost_at"] == "fusion" else 1.0
+
     def _score_answer(self, metrics: dict[str, float], question: dict[str, Any], answer: Any,
                       answer_text: str, source_refs: list[dict[str, Any]],
                       article_refs: list[str], bounded: bool) -> None:
@@ -1293,7 +1318,7 @@ async def list_experiments(
         and (realm_id is None or s.get("realm_id", "") == realm_id)
     ]
     # Prepend in-flight runs so they appear at the top regardless of sort.
-    for run_id in list(_running):
+    for run_id in list(_running | _finishing):
         meta = _running_meta.get(run_id, {})
         if dataset is not None and meta.get("dataset_name") != dataset:
             continue
@@ -1549,12 +1574,16 @@ async def get_experiment(run_id: str) -> dict[str, Any]:
         # apart from "never existed".
         if run_id in _errors:
             raise HTTPException(status_code=500, detail=_errors[run_id])
-        if run_id in _running:
+        if run_id in _running or run_id in _finishing:
             events = _progress.get(run_id, [])
             return {
                 "run_id": run_id,
                 "status": "running",
                 "progress": events[-1] if events else None,
+                # Every question is answered; the run is being judged and
+                # stored. Said so that a reader of the progress does not take
+                # "all questions done" and "still running" for a hang.
+                "finishing": run_id in _finishing,
             }
         raise HTTPException(status_code=404, detail=f"Run {run_id!r} not found")
     # The one read that carries texts: this page shows fragments, and every
@@ -2458,6 +2487,7 @@ async def _run_experiment_background(
         # Mongo/file write) closes that window — POST /{run_id}/stop now
         # correctly 404s once the loop has actually finished, instead of
         # accepting a stop it can never honor.
+        _finishing.add(run_id)
         _running.discard(run_id)
         result.run_id = run_id
         result.realm_id = realm_id
@@ -2517,6 +2547,7 @@ async def _run_experiment_background(
         _errors[run_id] = str(exc)
     finally:
         _running.discard(run_id)
+        _finishing.discard(run_id)
         _running_meta.pop(run_id, None)
         _stop_requested.discard(run_id)
 

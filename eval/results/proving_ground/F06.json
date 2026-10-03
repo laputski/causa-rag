@@ -1,6 +1,6 @@
 {
   "failure_id": "F06",
-  "recorded_at": "2026-09-30T13:57:02.097880+00:00",
+  "recorded_at": "2026-10-03T07:56:38.432986+00:00",
   "reproduced": true,
   "claim": "shrink_to_fragments in the documents is read off the index by health:too_short",
   "measured": {

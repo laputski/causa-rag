@@ -337,3 +337,118 @@ def test_F29_a_citation_names_another_fragments_number(embedder: Any) -> None:
            what_the_base_corpus_gives="twenty-one numbered labels of ninety-five, and a "
                                       "coverage of 0.11 on the honest half, which is why this "
                                       "was recorded as a blocker twice")
+
+
+# ── Questions about the corpus as a whole ─────────────────────────────────────
+
+def _metrics_bounded_by_their_sources() -> list[str]:
+    """Read from the declarations and never listed here: a metric given the
+    precondition later is one this pair then checks too."""
+    from core.eval.metric_definitions import BOUNDED_BY_ITS_SOURCES, DEFINITIONS
+    return [d.name for d in DEFINITIONS if BOUNDED_BY_ITS_SOURCES in d.requires]
+
+
+def _judge() -> Any:
+    """The model that checks answers against their statements, or a skip
+    saying why there is none. A pair measured without it measures nothing."""
+    import asyncio
+
+    # The database client binds to the loop it is first used on, and each
+    # call here opens and closes a loop of its own. Found by running this pair
+    # without the one before it: the second call met a client bound to a
+    # closed loop.
+    import adapters.mongodb as mdb
+    from services.api_gateway.routers.experiments import _resolve_judge, _UnavailableJudge
+    mdb._client = None
+    judge = asyncio.run(_resolve_judge(REALM))
+    mdb._client = None
+    if isinstance(judge, _UnavailableJudge):
+        pytest.skip(f"NOT RUN: no judge of assertions, {judge.record()}")
+    return judge
+
+
+def _run_global(embedder: Any) -> dict[str, Any]:
+    """The questions about the whole corpus, against whatever is on that port.
+
+    Judged in one pass after every answer exists, as a run started through the
+    gateway is: the judge and the generator are different models on one
+    server, and asking them in turn reloads a model for every question.
+    """
+    from core.experiment.config import ComponentRef, ExperimentConfig
+    from core.experiment.runner import ExperimentRunner
+    from core.registry import ComponentRegistry
+    from eval.dataset import EvalDataset
+    from services.api_gateway.routers.experiments import _CompositeEvaluator
+
+    config = ExperimentConfig(
+        name="faulty-rag-global", pipeline_source="http", http_endpoint=URL,
+        chunking_strategy=ComponentRef(kind="chunker", component_id="structure_aware"),
+        embedder=ComponentRef(kind="embedder", component_id="bge_m3"),
+        generator=ComponentRef(kind="generator", component_id="external"),
+        pipeline_id="hybrid_rrf", corpus_id=CORPUS, top_k=5,
+    )
+    dataset = EvalDataset.from_jsonl(ROOT / "eval" / "golden" / f"{CORPUS}-global.v1.fast.jsonl")
+    evaluator = _CompositeEvaluator(embedder, top_k=config.top_k, judge=_judge(), defer_judging=True)
+    result = ExperimentRunner(ComponentRegistry()).run(
+        config, dataset, realm_id=REALM, evaluator=evaluator)
+    evaluator.judge_pending(result)
+    result.judge = evaluator.judge_record()
+    return result.to_dict()
+
+
+@pytest.fixture(scope="module")
+def whole(embedder: Any) -> dict[str, Any]:
+    """The honest half on the questions about the whole corpus, run once."""
+    with running("none"):
+        return _run_global(embedder)
+
+
+def test_a_question_about_the_whole_corpus_is_not_scored_by_its_references(
+    whole: dict[str, Any]
+) -> None:
+    """A real run, and no retrieval metric on any of its questions: their
+    references name the documents the question was drawn from, and a right
+    answer may rest on others. What they are scored by is there instead."""
+    assert len(_metrics_bounded_by_their_sources()) >= 6
+    for question in whole["question_results"]:
+        assert question["scope"] == "global"
+        kept = [m for m in _metrics_bounded_by_their_sources() if m in question["metrics"]]
+        assert kept == [], f"{question['question_id']} carries {kept}"
+    judged = [q for q in whole["question_results"] if "assertion_coverage" in q["metrics"]]
+    assert len(judged) == len(whole["question_results"]), (
+        f"{len(judged)} of {len(whole['question_results'])} questions were judged: {whole['judge']}"
+    )
+    assert "detector:metric_without_grounds" not in _signals(whole)
+
+
+def test_F45_a_server_that_stops_after_one_sentence_is_measured(
+    embedder: Any, whole: dict[str, Any]
+) -> None:
+    """The sentence it gives is true and drawn from the right sources, so
+    nothing comparing the answer with its context objects. What falls is the
+    share of the statements the question needed."""
+    with running("F45_stops_after_one_sentence"):
+        short = _run_global(embedder)
+
+    def coverage(run: dict[str, Any]) -> float:
+        return float(run["aggregate_metrics"].get("assertion_coverage", -1.0))
+
+    # A floor on the honest half, measured and never chosen: with nothing to
+    # lose there is nothing for the other half to show.
+    assert coverage(whole) > 0.3, (
+        f"the honest half already leaves most statements out: {coverage(whole)}, "
+        "so there is nothing for the broken half to break"
+    )
+    assert coverage(short) < coverage(whole), (
+        f"stopping after one sentence cost the coverage nothing: {coverage(short)} against "
+        f"{coverage(whole)}"
+    )
+    lengths = [len(q.get("generated_answer") or "") for q in short["question_results"]]
+    honest_lengths = [len(q.get("generated_answer") or "") for q in whole["question_results"]]
+    record("F45", "an external system that answers with one sentence loses the share of "
+                  "statements its honest half makes",
+           coverage_honest=round(coverage(whole), 3), coverage_short=round(coverage(short), 3),
+           questions=len(whole["question_results"]), judge=whole["judge"].get("model"),
+           mean_answer_chars_honest=round(sum(honest_lengths) / len(honest_lengths)),
+           mean_answer_chars_short=round(sum(lengths) / len(lengths)),
+           signals=sorted(_signals(short)), signals_on_the_control=sorted(_signals(whole)))

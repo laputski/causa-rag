@@ -231,6 +231,26 @@ def _cuts_sources_mid_sentence(response: dict[str, Any], request: ExternalRagReq
     return {**response, "sources": sources}
 
 
+_SENTENCE_END = re.compile(r"(?<=[.!?…])\s+")
+
+
+def _stops_after_one_sentence(response: dict[str, Any], request: ExternalRagRequest) -> dict[str, Any]:
+    """Give the first sentence of the honest answer and nothing after it.
+
+    What a system with a short output budget does, or one prompted to be
+    brief: the sentence it gives is true and drawn from the right sources, so
+    nothing that compares the answer with its context objects, and the rest
+    of what the question needed is not there.
+
+    A refusal is left alone. It is one sentence already, and cutting it would
+    stage a second failure, a refusal the platform no longer reads as one.
+    """
+    answer = (response.get("answer") or "").strip()
+    if _reads_as_refusal(answer):
+        return dict(response)
+    return {**response, "answer": _SENTENCE_END.split(answer, maxsplit=1)[0]}
+
+
 def _unchanged(response: dict[str, Any], request: ExternalRagRequest) -> dict[str, Any]:
     """The control. Every pair needs one, and it has to be the same server."""
     return dict(response)
@@ -253,6 +273,8 @@ FAULTS: tuple[Fault, ...] = (
           "returns everything retrieved and answers from the edges of it", _buries_the_middle),
     Fault("F05_cuts_sources_mid_sentence", ("F05",),
           "returns fragments cut at a fixed width, wherever that falls", _cuts_sources_mid_sentence),
+    Fault("F45_stops_after_one_sentence", ("F45",),
+          "answers with the first sentence of the honest answer and stops", _stops_after_one_sentence),
 )
 
 _BY_NAME = {f.name: f for f in FAULTS}

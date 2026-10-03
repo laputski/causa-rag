@@ -65,7 +65,11 @@ def _drop(namespace: str) -> None:
     from adapters.opensearch import _index_name
     from adapters.qdrant import _collection_name
 
-    client = QdrantClient(host="localhost", port=6333)
+    # A minute, where the client's own default is five seconds. Found on a
+    # machine busy with another suite: dropping a collection took longer than
+    # that, and two pairs failed on a timeout that says nothing about what
+    # they measure.
+    client = QdrantClient(host="localhost", port=6333, timeout=60)
     collection = _collection_name("structure_aware", "bge_m3", namespace, REALM)
     if collection in {c.name for c in client.get_collections().collections}:
         client.delete_collection(collection_name=collection)

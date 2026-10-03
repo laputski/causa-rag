@@ -739,3 +739,62 @@ dataset (incident 24) used it outside that branch. **Fix:** the name is
 imported where it is used. **Guard:**
 `test_a_run_asked_for_a_dataset_that_is_not_there_is_a_404` in
 `tests/unit/test_a_dataset_that_is_not_there_is_not_replaced.py`.
+
+## 33. A corpus read as one document wrote no question about itself as a whole
+
+**Symptom:** asking for sixteen questions about the corpus as a whole returned
+none, with the reason `not_enough_documents`, on a corpus of forty documents.
+
+**Found by:** drafting the golden sets for such questions on the proving
+ground. **Root cause:** the sampler told documents apart by `source_code` and
+fell back to `doc_id` only when there was none. In that corpus every fragment
+carries the corpus's own code, so forty documents were one. **Fix:** the
+document is the unit that was loaded, `doc_id`; the code is the fallback.
+**Guard:** `test_a_code_shared_by_the_whole_corpus_does_not_make_it_one_document`
+in `tests/unit/test_global_questions_are_drafted.py`.
+
+## 34. Words from a third writing system passed the check for mixed alphabets
+
+**Symptom:** English drafts read "requires an工程师 authorised to level 2" and
+"The service报告 is due", and the draft's list of words to look at was empty.
+
+**Found by:** reading the drafts. **Root cause:** the check looked for a word
+spelled in Latin and Cyrillic letters at once, the one case seen before, and
+these mix neither. **Fix:** a word is judged by the writing systems of its own
+letters, whichever they are, and a word wholly in a system that neither the
+fragments nor the draft's own language use is pointed out too.
+**Guard:** the three tests about a third script in the same file.
+
+## 35. A run that had just answered its last question was "not found"
+
+**Symptom:** polling `GET /experiments/{run_id}` got `running` for every
+question and then 404, for about half a minute, before the run appeared. The
+run was missing from the list for the same half minute.
+
+**Found by:** a script that started a run and polled it. **Root cause:** a run
+leaves the set of running runs when its question loop ends, so that a stop
+arriving later is refused, and it was in no other set until it was stored. The
+gap used to be one write. Judging every statement after the answers
+(incident 28's change) made it as long as the judge takes. **Fix:** between
+the loop's end and the store the run is `finishing`: reported as running, with
+a field saying so, listed, and still refusing a stop.
+**Guard:** `test_a_run_being_judged_and_stored_is_still_there` in
+`tests/unit/test_async_job_model.py`.
+
+## 36. The verdict for a source lost in the merge never appeared where it was needed
+
+**Symptom:** a run of fifty questions whose stages showed twenty-five sources
+present in one half's list and absent from the merged one carried the new
+funnel layer for exactly that on none of its questions. Thirty-six were named
+"an answer that resembles the right one without its source", one "retrieval",
+thirteen "ok".
+
+**Found by:** re-running the stored run the layer was written for, right after
+writing it. **Root cause:** the funnel gives a question one layer, and the
+check for a confident answer without its source comes first and holds for
+those questions too. The unit tests said so and were right; what they could
+not say is that on real data the earlier verdict covers nearly every case.
+**Fix:** the cause is also reported on the run, as a finding counting the
+questions whose source the merge lost, and the earlier verdict's own words say
+it when the run knows. **Guard:**
+`tests/unit/test_a_merge_that_loses_what_its_halves_find_is_named.py`.
