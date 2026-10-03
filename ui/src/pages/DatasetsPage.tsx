@@ -645,7 +645,14 @@ function QuestionForm({ initial, onSave, onCancel }: {
         </div>
         <div className="form-group">
           <label htmlFor={`${uid}-type`}>{t('datasetsPage.questionTypeLabel')}</label>
-          <QuestionTypeSelect id={`${uid}-type`} value={questionType} onChange={setQuestionType} />
+          {/* The type is a label and the kind below is what the metrics read.
+              One of the types names a kind, so choosing it sets the kind too:
+              left apart, a question could be labelled as about the whole
+              corpus and still be measured as an ordinary one. */}
+          <QuestionTypeSelect
+            id={`${uid}-type`} value={questionType}
+            onChange={v => { setQuestionType(v); if (v === 'global') setScope('global') }}
+          />
         </div>
         <div className="form-group">
           <label htmlFor={`${uid}-refs`}>{t('datasetsPage.articleRefsLabel')}</label>

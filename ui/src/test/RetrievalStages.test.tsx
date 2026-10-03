@@ -60,6 +60,48 @@ describe('RetrievalStages', () => {
     expect(screen.getByText('The source was found by BM25 (place 3), but it did not make the merged list.')).toBeInTheDocument()
   })
 
+  it('says the reranker dropped a source that was in the list it was given', () => {
+    const lost: QuestionStages = {
+      stages: [
+        { stage: 'retrieval', size: 20, rank: 7, same_as: null, ids: ids(20, 'c') },
+        { stage: 'rerank', size: 5, rank: null, same_as: null, ids: ids(5, 'r') },
+        { stage: 'context', size: 5, rank: null, same_as: 'rerank', ids: ids(5, 'r') },
+      ],
+      lost_at: 'rerank', found: true, needed: ['c7'],
+    }
+    render(<RetrievalStages qr={question(lost)} />)
+    expect(cell('rerank')).toHaveClass('lost')
+    expect(screen.getByText('The source was in the list given to the reranker (place 7), and the reranker did not keep it.')).toBeInTheDocument()
+  })
+
+  it('says a source that was found did not reach the context', () => {
+    const lost: QuestionStages = {
+      stages: [
+        { stage: 'retrieval', size: 20, rank: 9, same_as: null, ids: ids(20, 'c') },
+        { stage: 'context', size: 5, rank: null, same_as: null, ids: ids(5, 'c') },
+      ],
+      lost_at: 'context', found: true, needed: ['c9'],
+    }
+    render(<RetrievalStages qr={question(lost)} />)
+    expect(cell('context')).toHaveClass('lost')
+    expect(screen.getByText('The source was found (place 9), but it did not reach the context.')).toBeInTheDocument()
+  })
+
+  it('says a source no stage held is nowhere, and marks no stage as the one that lost it', () => {
+    const nowhere: QuestionStages = {
+      stages: [
+        { stage: 'retrieval', size: 20, rank: null, same_as: null, ids: ids(20, 'c') },
+        { stage: 'context', size: 5, rank: null, same_as: null, ids: ids(5, 'c') },
+      ],
+      lost_at: null, found: false, needed: [],
+    }
+    render(<RetrievalStages qr={question(nowhere)} />)
+    // Nothing lost it: it was never there. A red cell would send the reader
+    // to tune a stage that had nothing to keep.
+    expect(document.querySelector('.stage-cell.lost')).toBeNull()
+    expect(screen.getByText('The needed source is on no stage.')).toBeInTheDocument()
+  })
+
   it('notes a stage that holds the same list as the one before it', () => {
     render(<RetrievalStages qr={question(LOST_IN_FUSION)} />)
     expect(within(cell('context')).getByText('same as after fusion')).toBeInTheDocument()

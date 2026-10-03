@@ -919,13 +919,18 @@ page `ui/src/test/DatasetsPage.statements.test.tsx`.
 ## 45. A run made before its services were recorded looked like one made by a judge alone
 
 **Symptom:** the block naming what ran a run showed one row, the judge, for a
-run stored before generators and stores were recorded.
+run stored before generators and stores were recorded, and nothing at all for
+such a run that had no judge.
 
-**Found by:** opening such a run in the browser. **Root cause:** the note
-"this run did not record its services" was shown only when the table would be
-empty, and the judge is recorded separately and earlier. **Fix:** the note is
-shown whenever the run carries no record of its services. **Guard:**
-`ui/src/test/RunServedBy.test.tsx`.
+**Found by:** opening such runs in the browser, twice. **Root cause:** two
+faults in a row. The note "this run did not record its services" was shown
+only when the table would be empty, and the judge is recorded separately. The
+first fix asked whether the record was there, and the server sends a run that
+has none with an empty record and not without the field, so the answer was
+yes for every such run and the note never showed; the test had passed an
+absent field, which no stored run has. **Fix:** an empty record is no record.
+**Guard:** `ui/src/test/RunServedBy.test.tsx`, with the empty record a stored
+run actually carries.
 
 ## 46. A graph server that lacked nothing was reported as "[object Object]"
 

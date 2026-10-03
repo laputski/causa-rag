@@ -138,6 +138,20 @@ describe('DatasetsPage — kind of question and statements', () => {
     })))
   })
 
+  it('sets the kind when the type that names it is chosen, and leaves it alone otherwise', async () => {
+    await open()
+    fireEvent.click(within(rowOf(ORDINARY.question)).getByText('Edit'))
+    const kind = screen.getByLabelText('Kind of question') as HTMLSelectElement
+    fireEvent.change(screen.getByLabelText('Question type'), { target: { value: 'open' } })
+    expect(kind.value).toBe('local')
+    fireEvent.change(screen.getByLabelText('Question type'), { target: { value: 'global' } })
+    expect(kind.value).toBe('global')
+    fireEvent.click(screen.getByText('Save'))
+    await waitFor(() => expect(updateQuestionMock).toHaveBeenCalledWith('ds1', 'q2', expect.objectContaining({
+      question_type: 'global', scope: 'global',
+    })))
+  })
+
   it('shows the statements of a draft and the words it should be read for', async () => {
     generateMock.mockResolvedValue({ job_id: 'job-1', status: 'started', n_groups: 1 })
     await open()

@@ -105,6 +105,11 @@ export default function RunServedBy({ run }: { run: ExperimentDetail }) {
   const lastCall = run.served_by?.generator?.last_call
   const judge = run.judge
   const cleared = run.debug_cleared_at
+  // An empty record is no record: a run stored before its services were
+  // written down is served with `{}` in the field and not without it, so
+  // asking whether the field is there answered yes for every such run (found
+  // by opening one).
+  const recorded = Object.keys(run.served_by ?? {}).length > 0
   return (
     <div className="section" data-testid="run-served-by">
       <div className="section-rule">
@@ -114,7 +119,7 @@ export default function RunServedBy({ run }: { run: ExperimentDetail }) {
           would be empty: a run with a judge and nothing else showed one row,
           which read as a run made by a judge alone (found by opening a run
           stored before services were recorded). */}
-      {!run.served_by && <p className="field-note">{t('runPage.servedBy.notRecorded')}</p>}
+      {!recorded && <p className="field-note">{t('runPage.servedBy.notRecorded')}</p>}
       {rows.length > 0 && (
         <table className="served-table">
           <thead>

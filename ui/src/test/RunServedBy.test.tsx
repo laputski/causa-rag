@@ -66,6 +66,14 @@ describe('RunServedBy', () => {
     expect(screen.getByText(/The judge checked 52 statements in 88 s\./)).toBeInTheDocument()
   })
 
+  it('names an external system by its address and marks where it is', () => {
+    show(run({ served_by: { external_system: { address: 'https://rag.example', remote: true }, leaves_this_machine: ['external_system'] } }))
+    const row = rowOf('External system')
+    expect(within(row).getByText('https://rag.example')).toBeInTheDocument()
+    expect(within(row).getByText('external')).toBeInTheDocument()
+    expect(screen.queryByText('Generator')).toBeNull()
+  })
+
   it('says a seed was sent and which model the server named', () => {
     show(run())
     expect(screen.getByText(/A seed was sent\./)).toBeInTheDocument()
@@ -85,6 +93,13 @@ describe('RunServedBy', () => {
 
   it('says so when a run recorded nothing about its services', () => {
     show(run({ served_by: undefined }))
+    expect(screen.getByText('This run did not record which services ran it.')).toBeInTheDocument()
+  })
+
+  it('says so for a run served with an empty record, which is how the server sends none', () => {
+    // Found by opening a stored run: the field arrives as `{}`, and a check
+    // for its presence took that for a record.
+    show(run({ served_by: {} }))
     expect(screen.getByText('This run did not record which services ran it.')).toBeInTheDocument()
   })
 
