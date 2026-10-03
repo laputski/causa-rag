@@ -220,22 +220,18 @@ async def delete_collection(corpus_registry_id: str, hard: bool = False) -> None
     realm_id = doc.get("realm_id")
     if "qdrant" in backends and backends["qdrant"].get("collection"):
         try:
-            from qdrant_client import QdrantClient
+            from adapters.connections import QdrantTarget
             cfg = await _get_realm_resource(realm_id, "qdrant") if realm_id else None
-            host = cfg.get("host", "localhost") if cfg else os.getenv("QDRANT_HOST", "localhost")
-            port = int(cfg.get("port", 6333)) if cfg else int(os.getenv("QDRANT_PORT", "6333"))
-            QdrantClient(host=host, port=port, timeout=30, check_compatibility=False).delete_collection(
+            QdrantTarget.of(cfg).client(timeout=30).delete_collection(
                 backends["qdrant"]["collection"],
             )
         except Exception as e:
             log.warning("delete_collection.qdrant_drop_failed", corpus_registry_id=corpus_registry_id, error=str(e))
     if "opensearch" in backends and backends["opensearch"].get("index"):
         try:
-            from opensearchpy import OpenSearch
+            from adapters.connections import OpenSearchTarget
             cfg = await _get_realm_resource(realm_id, "opensearch") if realm_id else None
-            host = cfg.get("host", "localhost") if cfg else os.getenv("OPENSEARCH_HOST", "localhost")
-            port = int(cfg.get("port", 9200)) if cfg else int(os.getenv("OPENSEARCH_PORT", "9200"))
-            OpenSearch(hosts=[{"host": host, "port": port}], use_ssl=False).indices.delete(
+            OpenSearchTarget.of(cfg).client().indices.delete(
                 index=backends["opensearch"]["index"], ignore=[404],
             )
         except Exception as e:
@@ -266,6 +262,9 @@ async def ingest_corpus(
     exclude: str = Form("full.txt"),
     corpus_id: str = Form("default"),
     realm_id: str = Form(""),
+    # Which embedder fills the dense index: the local one, or the Realm's own
+    # model server when it declares an embedding model.
+    embedder: str = Form("bge_m3"),
 ) -> dict[str, Any]:
     job_id = str(uuid.uuid4())[:8]
     _progress[job_id] = []
@@ -310,7 +309,8 @@ async def ingest_corpus(
 
     # Run ingestion in background
     asyncio.create_task(
-        _run_ingestion(job_id, tmp_dir, strategy, chunk_size, overlap, exclude_list, doc, corpus_id, realm_resources)
+        _run_ingestion(job_id, tmp_dir, strategy, chunk_size, overlap, exclude_list, doc, corpus_id,
+                       realm_resources, embedder=embedder)
     )
 
     return {"job_id": job_id, "status": "started", "n_files": len(filenames)}
@@ -326,6 +326,7 @@ async def _run_ingestion(
     doc: dict[str, Any],
     corpus_id: str = "default",
     realm_resources: dict[str, Any] | None = None,
+    embedder: str = "bge_m3",
 ) -> None:
     def _emit(event: dict[str, Any]) -> None:
         _progress[job_id].append(event)
@@ -342,31 +343,19 @@ async def _run_ingestion(
             "--chunk-size", str(chunk_size),
             "--overlap", str(overlap),
             "--corpus-id", corpus_id,
+            "--embedder", embedder,
         ]
         if doc.get("realm_id"):
             cmd += ["--realm-id", doc["realm_id"]]
         for ex in exclude:
             cmd += ["--exclude", ex]
         if realm_resources:
-            if "qdrant" in realm_resources:
-                q = realm_resources["qdrant"]
-                cmd += ["--qdrant-host", str(q.get("host", "localhost")),
-                        "--qdrant-port", str(q.get("port", 6333))]
-            if "opensearch" in realm_resources:
-                o = realm_resources["opensearch"]
-                cmd += ["--opensearch-host", str(o.get("host", "localhost")),
-                        "--opensearch-port", str(o.get("port", 9200))]
-            if "neo4j" in realm_resources:
-                n = realm_resources["neo4j"]
-                if n.get("uri"):
-                    cmd += ["--neo4j-uri", n["uri"]]
-                if n.get("user"):
-                    cmd += ["--neo4j-user", n["user"]]
-                # In the environment and never on the command line, which every
-                # user on the machine can read while the process runs. The CLI
-                # falls back to NEO4J_PASSWORD when the flag is absent.
-                if n.get("password"):
-                    env["NEO4J_PASSWORD"] = str(n["password"])
+            # The loader reads each store's whole description from its
+            # environment (adapters/connections.py), and nothing from the
+            # command line, which every user on the machine can read while the
+            # process runs. It used to take a host and a port there, so a
+            # store behind TLS with a key could not be loaded into at all.
+            env.update(_store_environment(realm_resources))
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -395,7 +384,11 @@ async def _run_ingestion(
                     m = re.search(r"hit_ratio=([\d.]+)", text)
                     if m:
                         hit_ratio = float(m.group(1))
-                    mc = re.search(r"size=(\d+)", text)
+                    # The loader's own count of what it made. It used to be
+                    # read from `size=`, the embedder's cache, which equals
+                    # the number of distinct fragments for an embedder that
+                    # keeps one and is nothing for one that does not.
+                    mc = re.search(r"total_chunks=(\d+)", text)
                     if mc:
                         n_chunks = int(mc.group(1))
                 except Exception:
@@ -417,12 +410,16 @@ async def _run_ingestion(
             from adapters.opensearch import _index_name
             from adapters.qdrant import _collection_name
             realm_id = doc.get("realm_id")
+            # The embedder that filled it, by the same rule the loader named
+            # its collection with. It was the literal name of the local one.
+            embedder_id = _embedder_id_for(embedder, realm_resources)
             backends: dict[str, Any] = {
                 # embedder_id lives per-backend — a corpus can have
                 # more than one (e.g. a GraphRAG-type corpus also has a
                 # separate Neo4j community-embedding model); this ingest path
                 # only ever produces a dense Qdrant one, BGE-M3.
-                "qdrant": {"collection": _collection_name(strategy, "bge_m3", corpus_id, realm_id), "embedder_id": "bge_m3"},
+                "qdrant": {"collection": _collection_name(strategy, embedder_id, corpus_id, realm_id),
+                           "embedder_id": embedder_id},
                 # /corpus/ingest never passes --no-opensearch, so the sparse
                 # index always gets created alongside the dense one (see
                 # ingest()'s use_opensearch default in services/ingestion/cli.py).
@@ -461,16 +458,55 @@ async def _get_realm_resource(realm_id: str, resource_type: str) -> dict[str, An
         next((r for r in doc.get("resources", []) if r["type"] == resource_type), None))
 
 
+def _store_environment(resources: dict[str, dict[str, Any] | None]) -> dict[str, str]:
+    """A realm's stores as the environment a loader process reads them from.
+
+    Every field a target has, and only for the stores the realm declares: an
+    absent store leaves the loader's own environment standing.
+    """
+    from adapters.connections import Neo4jTarget, OpenSearchTarget, QdrantTarget
+
+    def stated(pairs: dict[str, Any]) -> dict[str, str]:
+        return {name: ("true" if value is True else "false" if value is False else str(value))
+                for name, value in pairs.items() if value is not None and value != ""}
+
+    env: dict[str, str] = {}
+    if resources.get("qdrant"):
+        q = QdrantTarget.of(resources["qdrant"])
+        env.update(stated({"QDRANT_HOST": q.host, "QDRANT_PORT": q.port, "QDRANT_HTTPS": q.https,
+                           "QDRANT_URL": q.url, "QDRANT_API_KEY": q.api_key}))
+    if resources.get("opensearch"):
+        o = OpenSearchTarget.of(resources["opensearch"])
+        env.update(stated({"OPENSEARCH_HOST": o.host, "OPENSEARCH_PORT": o.port,
+                           "OPENSEARCH_USE_SSL": o.use_ssl, "OPENSEARCH_VERIFY_CERTS": o.verify_certs,
+                           "OPENSEARCH_USER": o.user, "OPENSEARCH_PASSWORD": o.password}))
+    if resources.get("neo4j"):
+        n = Neo4jTarget.of(resources["neo4j"])
+        env.update(stated({"NEO4J_URI": n.uri, "NEO4J_USER": n.user, "NEO4J_PASSWORD": n.password,
+                           "NEO4J_DATABASE": n.database}))
+    if resources.get("openai_compatible"):
+        m = resources["openai_compatible"] or {}
+        env.update(stated({"OPENAI_BASE_URL": m.get("base_url"), "OPENAI_API_KEY": m.get("api_key"),
+                           "OPENAI_EMBEDDING_MODEL": m.get("embedding_model")}))
+    return env
+
+
+def _embedder_id_for(embedder: str, resources: dict[str, dict[str, Any] | None] | None) -> str:
+    """The identifier a named embedder gives its collection, on this Realm."""
+    if embedder != "openai_compatible":
+        return embedder
+    from adapters.openai_compatible import OpenAICompatibleEmbedder
+    return str(OpenAICompatibleEmbedder(from_environment=True).for_realm(resources).embedder_id)
+
+
 def _resolve_qdrant(
     corpus_id: str, strategy: str, embedder: str, cfg: dict[str, Any] | None = None,
     realm_id: str | None = None,
 ) -> Any:
+    from adapters.connections import QdrantTarget
     from adapters.qdrant import QdrantRetriever
-    host = cfg.get("host", "localhost") if cfg else os.getenv("QDRANT_HOST", "localhost")
-    port = int(cfg.get("port", 6333)) if cfg else int(os.getenv("QDRANT_PORT", "6333"))
     return QdrantRetriever(
-        host=host,
-        port=port,
+        target=QdrantTarget.of(cfg),
         strategy_id=strategy,
         embedder_id=embedder,
         corpus_id=corpus_id,
@@ -478,15 +514,33 @@ def _resolve_qdrant(
     )
 
 
+async def _corpus_embedder_id(realm_id: str | None, corpus_id: str, asked: str = "bge_m3") -> str:
+    """The embedder that filled this corpus, as the registry recorded it.
+
+    `asked` stands for a corpus the registry does not know, which is every
+    corpus loaded before it recorded embedders, and for a registry that
+    cannot be reached. A corpus is read with the vectors it was loaded with,
+    so a reader that assumed the gateway's own embedder looked for a
+    collection nobody had filled.
+    """
+    if not realm_id:
+        # The registry is kept per Realm, so with none there is nothing to ask.
+        return asked
+    try:
+        import adapters.mongodb as mdb
+        doc = await mdb.find_one(_CORPORA_COLLECTION, {"realm_id": realm_id, "corpus_id": corpus_id})
+    except Exception:
+        return asked
+    if not isinstance(doc, dict):
+        return asked
+    recorded = ((doc.get("backends") or {}).get("qdrant") or {}).get("embedder_id")
+    return str(recorded or asked)
+
+
 def _resolve_neo4j(cfg: dict[str, Any] | None = None) -> Any:
+    from adapters.connections import Neo4jTarget
     from adapters.neo4j_graph import Neo4jGraphRetriever
-    if cfg:
-        return Neo4jGraphRetriever(
-            uri=cfg.get("uri", "bolt://localhost:7687"),
-            user=cfg.get("user", "neo4j"),
-            password=cfg.get("password", "ragplatform"),
-        )
-    return Neo4jGraphRetriever()
+    return Neo4jGraphRetriever(target=Neo4jTarget.of(cfg))
 
 
 # ── Alternate dump ingestion — one physical backend at a time ──────────────────
@@ -530,12 +584,11 @@ async def ingest_qdrant_snapshot(
     collection = _collection_name(strategy, embedder, corpus_id, realm_id)
 
     qdrant_cfg = await _get_realm_resource(realm_id, "qdrant") if realm_id else None
-    host = qdrant_cfg.get("host", "localhost") if qdrant_cfg else os.getenv("QDRANT_HOST", "localhost")
-    port = int(qdrant_cfg.get("port", 6333)) if qdrant_cfg else int(os.getenv("QDRANT_PORT", "6333"))
 
-    from qdrant_client import QdrantClient
     from qdrant_client.http.exceptions import UnexpectedResponse
-    client = QdrantClient(host=host, port=port, timeout=120, check_compatibility=False)
+
+    from adapters.connections import QdrantTarget
+    client = QdrantTarget.of(qdrant_cfg).client(timeout=120)
     try:
         client.http.snapshots_api.recover_from_uploaded_snapshot(
             collection_name=collection, snapshot=file.file,
@@ -680,13 +733,13 @@ async def ingest_neo4j_cypher(
         raise HTTPException(status_code=400, detail="No Cypher statements found in the uploaded file")
 
     cfg = await _get_realm_resource(realm_id, "neo4j") if realm_id else None
-    uri = cfg.get("uri", os.getenv("NEO4J_URI", "bolt://localhost:7687")) if cfg else os.getenv("NEO4J_URI", "bolt://localhost:7687")
-    user = cfg.get("user", os.getenv("NEO4J_USER", "neo4j")) if cfg else os.getenv("NEO4J_USER", "neo4j")
-    password = cfg.get("password", os.getenv("NEO4J_PASSWORD", "ragplatform")) if cfg else os.getenv("NEO4J_PASSWORD", "ragplatform")
+    from adapters.connections import Neo4jTarget
+    graph_store = Neo4jTarget.of(cfg)
+    uri = graph_store.base_url
 
     if replace:
         from adapters.neo4j_graph import GraphUnavailable, Neo4jGraphRetriever
-        retriever = Neo4jGraphRetriever(uri=uri, user=user, password=password)
+        retriever = Neo4jGraphRetriever(target=graph_store)
         try:
             retriever.clear()
         except GraphUnavailable as e:
@@ -700,13 +753,14 @@ async def ingest_neo4j_cypher(
     from neo4j import GraphDatabase
     from neo4j.exceptions import Neo4jError
     try:
-        driver = GraphDatabase.driver(uri, auth=(user, password))
+        driver = GraphDatabase.driver(graph_store.uri, auth=(graph_store.user, graph_store.password))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Neo4j unreachable at {uri}: {e}") from e
 
     executed = 0
     try:
-        with driver.session() as session:
+        with (driver.session(database=graph_store.database) if graph_store.database
+              else driver.session()) as session:
             for i, stmt in enumerate(statements):
                 try:
                     session.run(stmt).consume()
@@ -948,9 +1002,9 @@ async def ingest_neo4j_chunks(
     from core.models import Chunk
 
     cfg = await _get_realm_resource(realm_id, "neo4j") if realm_id else None
-    uri = cfg.get("uri", os.getenv("NEO4J_URI", "bolt://localhost:7687")) if cfg else os.getenv("NEO4J_URI", "bolt://localhost:7687")
-    user = cfg.get("user", os.getenv("NEO4J_USER", "neo4j")) if cfg else os.getenv("NEO4J_USER", "neo4j")
-    password = cfg.get("password", os.getenv("NEO4J_PASSWORD", "ragplatform")) if cfg else os.getenv("NEO4J_PASSWORD", "ragplatform")
+    from adapters.connections import Neo4jTarget
+    graph_store = Neo4jTarget.of(cfg)
+    uri = graph_store.base_url
 
     raw_bytes = _decompress_upload_bytes(await file.read())
     raw, decode_warning = _decode_ndjson_bytes(raw_bytes)
@@ -980,7 +1034,7 @@ async def ingest_neo4j_chunks(
         )
 
     from adapters.neo4j_graph import GraphUnavailable, Neo4jGraphRetriever
-    retriever = Neo4jGraphRetriever(uri=uri, user=user, password=password)
+    retriever = Neo4jGraphRetriever(target=graph_store)
     try:
         if replace:
             retriever.clear()
@@ -1061,12 +1115,11 @@ async def ingest_opensearch_dump(
     index = _index_name(strategy, corpus_id, realm_id)
 
     cfg = await _get_realm_resource(realm_id, "opensearch") if realm_id else None
-    host = cfg.get("host", "localhost") if cfg else os.getenv("OPENSEARCH_HOST", "localhost")
-    port = int(cfg.get("port", 9200)) if cfg else int(os.getenv("OPENSEARCH_PORT", "9200"))
 
-    from opensearchpy import OpenSearch
     from opensearchpy.helpers import bulk
-    client = OpenSearch(hosts=[{"host": host, "port": port}], use_ssl=False)
+
+    from adapters.connections import OpenSearchTarget
+    client = OpenSearchTarget.of(cfg).client()
 
     raw_bytes = _decompress_upload_bytes(await file.read())
     raw, decode_warning = _decode_ndjson_bytes(raw_bytes)
@@ -1134,6 +1187,7 @@ async def browse_chunks(
 ) -> dict[str, Any]:
     """Paginate real indexed chunks for a corpus — the corpus content browser."""
     qdrant_cfg = await _get_realm_resource(realm_id, "qdrant") if realm_id else None
+    embedder = await _corpus_embedder_id(realm_id, corpus_id, embedder)
     try:
         qdrant = _resolve_qdrant(corpus_id, strategy, embedder, qdrant_cfg, realm_id)
         chunks, next_offset = qdrant.scroll(offset=offset, limit=limit, text_filter=q)
@@ -1180,6 +1234,7 @@ async def corpus_health(
     from core.eval.corpus_health import analyze, detect_near_duplicates
 
     qdrant_cfg = await _get_realm_resource(realm_id, "qdrant") if realm_id else None
+    embedder = await _corpus_embedder_id(realm_id, corpus_id, embedder)
     try:
         qdrant = _resolve_qdrant(corpus_id, strategy, embedder, qdrant_cfg, realm_id)
         chunks = qdrant.scroll_all()
@@ -1302,7 +1357,9 @@ async def graph_communities(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     try:
-        doc_to_code = _doc_to_source_code_map(corpus_id, strategy, embedder, qdrant_cfg, realm_id)
+        doc_to_code = _doc_to_source_code_map(
+            corpus_id, strategy, await _corpus_embedder_id(realm_id, corpus_id, embedder),
+            qdrant_cfg, realm_id)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Corpus index unavailable: {e}") from e
 
@@ -1519,6 +1576,7 @@ async def run_chunk_coherence_diagnostics(
 
     sample_size = min(sample_size, _MAX_CHUNK_COHERENCE_SAMPLE_SIZE)
     qdrant_cfg = await _get_realm_resource(realm_id, "qdrant") if realm_id else None
+    embedder = await _corpus_embedder_id(realm_id, corpus_id, embedder)
     try:
         qdrant = _resolve_qdrant(corpus_id, strategy, embedder, qdrant_cfg, realm_id)
         chunks = qdrant.scroll_all()

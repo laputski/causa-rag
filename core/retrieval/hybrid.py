@@ -90,6 +90,29 @@ class HybridRetriever:
             alpha=self._alpha, rrf_k=self._rrf_k,
         )
 
+    def reads_from(self) -> dict[str, dict[str, Any]]:
+        """What both halves read. See `core.interfaces.SayingWhereItReads`."""
+        stores: dict[str, dict[str, Any]] = {}
+        for half in (self._dense, self._sparse):
+            if hasattr(half, "reads_from"):
+                stores.update(half.reads_from())
+        return stores
+
+    def for_embedder(self, embedder: Any) -> Any:
+        """A copy of this whose dense half reads the index `embedder` built,
+        and which embeds with it. See
+        `core.interfaces.ReadingAnEmbeddersIndex`. The lexical half has no
+        vectors and is left alone."""
+        dense = (self._dense.for_embedder(embedder)
+                 if hasattr(self._dense, "for_embedder") else self._dense)
+        if dense is self._dense and embedder is self._embedder:
+            return self
+        return type(self)(
+            dense_retriever=dense, sparse_retriever=self._sparse,
+            embedder=embedder, merge=self._merge,
+            alpha=self._alpha, rrf_k=self._rrf_k,
+        )
+
     def with_fusion(
         self, merge: str | None = None, alpha: float | None = None, rrf_k: int | None = None,
     ) -> Any:

@@ -69,6 +69,37 @@ class BoundToACorpus(Protocol):
 
 
 @runtime_checkable
+class ReadingAnEmbeddersIndex(Protocol):
+    """A retriever that reads vectors, and can make a copy reading the index
+    another embedder built.
+
+    The collection a corpus lives in is named after the embedder that filled
+    it. A run could name another embedder, its queries were embedded with it,
+    and the retriever went on reading the collection of the embedder the
+    gateway started with: one model's vectors searched with another's. A
+    retriever made of others passes the embedder on to the half that reads
+    vectors and returns `self` when nothing would differ.
+    """
+
+    def for_embedder(self, embedder: Any) -> Any:
+        ...
+
+
+@runtime_checkable
+class SayingWhereItReads(Protocol):
+    """A retriever that can say which stores it reads and where they are.
+
+    Returns the store's kind mapped to `{"address", "remote"}`, with nothing
+    that opens it. A retriever made of others returns what its halves say
+    together. A run records the answer, because a store that is not on this
+    machine receives every query of the run.
+    """
+
+    def reads_from(self) -> dict[str, dict[str, Any]]:
+        ...
+
+
+@runtime_checkable
 class Fusing(Protocol):
     """A retriever that fuses lists, and can make a copy fusing differently.
 
@@ -100,6 +131,29 @@ class ChoosingItsModel(Protocol):
     which model wrote an answer."""
 
     def with_model(self, model: str) -> Any:
+        ...
+
+
+@runtime_checkable
+class ServedByARealm(Protocol):
+    """A component that calls a model server, and can make a copy calling the
+    Realm's own.
+
+    A pipeline is built once, when the gateway starts, around the server the
+    gateway was started with. A Realm that keeps its own was answered by the
+    gateway's all the same: the chat asked the Realm's server and a run did
+    not. `resources` maps a resource type to what the Realm declares for it,
+    with its secrets opened; a component answers for the type it speaks and
+    comes back unchanged when the Realm declares none.
+
+    `served_from` says where its answers come from, in words that carry no
+    key, so a run can record it.
+    """
+
+    def for_realm(self, resources: dict[str, dict[str, Any] | None] | None) -> Any:
+        ...
+
+    def served_from(self) -> dict[str, Any]:
         ...
 
 

@@ -32,6 +32,8 @@ class BgeM3Embedder:
     """
 
     embedder_id = "bge_m3"
+    #: The length of every vector it returns, which a collection is created with.
+    vector_size = _VECTOR_DIM
     version = "1.0.0"
 
     @property

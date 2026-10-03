@@ -224,49 +224,68 @@ def test_the_window_is_sent_only_when_named_and_a_cut_prompt_is_recognised(monke
 
 # ── Finding the judge ─────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("tags, gap", [
-    ({"models": [{"name": "qwen2.5:7b"}]}, "model_not_pulled"),
+@pytest.mark.parametrize("served, gap", [
+    (["qwen2.5:7b"], "model_not_pulled"),
     (ConnectionError("refused"), "unreachable"),
 ])
-def test_a_judge_that_cannot_be_had_is_named_with_why(monkeypatch, tags, gap) -> None:
-    import httpx
-
-    import services.api_gateway.routers.corpus as corpus
-    import services.api_gateway.routers.settings as settings
-
-    async def no_settings(realm_id=None):
-        return {}
-
-    async def no_resource(realm_id, kind):
-        return None
-
-    class _Client:
-        def __init__(self, *a, **k):
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *a):
-            return False
-
-        async def get(self, url):
-            if isinstance(tags, Exception):
-                raise tags
-
-            class _R:
-                def json(self_inner):
-                    return tags
-            return _R()
-
-    monkeypatch.setattr(settings, "_get_settings_doc", no_settings)
-    monkeypatch.setattr(corpus, "_get_realm_resource", no_resource)
-    monkeypatch.setattr(httpx, "AsyncClient", _Client)
-
-    judge = asyncio.run(E._resolve_judge("demo"))
+def test_a_judge_that_cannot_be_had_is_named_with_why(monkeypatch, served, gap) -> None:
+    judge = _resolved(monkeypatch, served)
     assert isinstance(judge, E._UnavailableJudge)
     assert judge.record()["gap"] == gap
     assert [v["stated"] for v in judge.verdicts("a", ["x"])] == [None]
+
+
+def _resolved(monkeypatch, served, resources=None, settings_doc=None):
+    """The judge a Realm gets, with its server answering `served` when asked
+    which models it has."""
+    import adapters.ollama_generator as og
+    import adapters.openai_compatible as oc
+    import services.api_gateway.model_servers as servers
+    import services.api_gateway.routers.settings as settings
+
+    async def the_settings(realm_id=None):
+        return settings_doc or {}
+
+    async def the_resources(realm_id):
+        return resources or {}
+
+    def listing(self):
+        if isinstance(served, Exception):
+            raise served
+        return list(served)
+
+    monkeypatch.setattr(settings, "_get_settings_doc", the_settings)
+    monkeypatch.setattr(servers, "model_resources", the_resources)
+    monkeypatch.setattr(og.OllamaGenerator, "list_models", listing)
+    monkeypatch.setattr(oc.OpenAICompatibleGenerator, "list_models", listing)
+    return asyncio.run(E._resolve_judge("demo"))
+
+
+def test_the_local_judge_is_the_platform_s_default_model(monkeypatch) -> None:
+    from eval.judge_model import ASSERTION_JUDGE_MODEL
+    judge = _resolved(monkeypatch, [ASSERTION_JUDGE_MODEL])
+    assert isinstance(judge, E._AssertionJudge)
+    assert judge.record()["provider"] == "ollama" and judge.record()["model"] == ASSERTION_JUDGE_MODEL
+
+
+_HOSTED = {"openai_compatible": {"base_url": "https://api.example.org/v1", "api_key": "k", "model": "answers"}}
+
+
+def test_a_realm_served_by_a_hosted_model_is_judged_by_the_model_it_names(monkeypatch) -> None:
+    judge = _resolved(monkeypatch, ["answers", "a-judge"], resources=_HOSTED,
+                      settings_doc={"judge": {"model": "a-judge"}})
+    record = judge.record()
+    assert isinstance(judge, E._AssertionJudge)
+    assert (record["provider"], record["model"], record["base_url"]) == (
+        "openai_compatible", "a-judge", "https://api.example.org/v1")
+    assert "k" not in record.values()
+
+
+def test_a_hosted_realm_that_names_no_judge_is_told_so(monkeypatch) -> None:
+    """The default is a local model's name. Asking a hosted service for it
+    would come back as a model it lacks, which hides what to do about it."""
+    judge = _resolved(monkeypatch, ["answers"], resources=_HOSTED)
+    assert isinstance(judge, E._UnavailableJudge) and judge.record()["gap"] == "model_not_set"
 
 
 # ── Judging after the run ─────────────────────────────────────────────────────

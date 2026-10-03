@@ -61,10 +61,25 @@ everything under a new key: `rotate --old-key <the old one> --write`.
 
 ## Data handling
 
-Nothing leaves the host. Generation and LLM judging call a local Ollama,
-embeddings are computed in-process, and every store runs in your own Docker.
-The platform makes no outbound call other than to the model and storage
-endpoints you configure.
+As installed, nothing leaves the host. Generation and LLM judging call a local
+Ollama, embeddings are computed in-process, and every store runs in your own
+Docker. The platform makes no outbound call other than to the model and
+storage endpoints you configure.
+
+Those endpoints may be somewhere else, and then data does leave. A Realm whose
+resources point at a hosted store sends that store the fragments of every
+corpus loaded into it and every query run against it. A Realm whose model is
+served over the OpenAI-compatible API by a hosted provider sends that provider
+every prompt: the question, the retrieved fragments, and for the judge the
+answer under test. A reviewer's comment being triaged goes to the same server
+as the Realm's answers. Nothing chooses a hosted service on a Realm's behalf:
+a Realm that declares a local and a hosted model server uses the local one
+unless a call names the other.
+
+What is said about it, so that it can be checked: `GET /realms/{id}` lists the
+resources that are not on this machine under `leaves_this_machine`, and every
+run records under `served_by` which model server, which embedder and which
+stores answered for it, each with its address and none with its key.
 
 Two exceptions, both opt-in and both visible in the code: `pip install` and
 `npm install` reach their registries during setup, and the embedder weights

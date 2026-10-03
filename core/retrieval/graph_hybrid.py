@@ -57,6 +57,27 @@ class GraphHybridRetriever:
             graph_weight=self._graph_weight, hops=self._hops,
         )
 
+    def reads_from(self) -> dict[str, dict[str, Any]]:
+        """What both halves read. See `core.interfaces.SayingWhereItReads`."""
+        stores: dict[str, dict[str, Any]] = {}
+        for half in (self._base, self._graph):
+            if hasattr(half, "reads_from"):
+                stores.update(half.reads_from())
+        return stores
+
+    def for_embedder(self, embedder: Any) -> Any:
+        """A copy of this whose base half reads the index `embedder` built.
+        See `core.interfaces.ReadingAnEmbeddersIndex`. The graph is walked
+        and holds no vectors of its own."""
+        base = (self._base.for_embedder(embedder)
+                if hasattr(self._base, "for_embedder") else self._base)
+        if base is self._base:
+            return self
+        return type(self)(
+            graph_retriever=self._graph, base_retriever=base,
+            graph_weight=self._graph_weight, hops=self._hops,
+        )
+
     def with_graph(
         self, graph_weight: float | None = None, hops: int | None = None,
     ) -> Any:

@@ -31,15 +31,20 @@ import sys
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
+from urllib.parse import urlparse
 
-QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
-QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
-OPENSEARCH_HOST = os.getenv("OPENSEARCH_HOST", "localhost")
-OPENSEARCH_PORT = int(os.getenv("OPENSEARCH_PORT", "9200"))
+from adapters.connections import Neo4jTarget, OpenSearchTarget, QdrantTarget, is_local
+
+# Where each store is and how it is reached, read the way the adapters read it
+# (adapters/connections.py). This used to ask `http://host:port` whatever the
+# environment said, so a store behind TLS with a key read as down while every
+# run against it worked.
+QDRANT = QdrantTarget.from_environment()
+OPENSEARCH = OpenSearchTarget.from_environment()
 MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 LANGFUSE_URL = os.getenv("LANGFUSE_EXTERNAL_HOST", "http://localhost:3001")
-NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+NEO4J = Neo4jTarget.from_environment()
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
 GATEWAY_URL = f"http://localhost:{os.getenv('PORT', '8081')}"
@@ -71,10 +76,12 @@ def _port_open(host: str, port: int, timeout: float = 2.0) -> bool:
         sock.close()
 
 
-def _http(url: str, timeout: float = 4.0) -> tuple[bool, Any]:
+def _http(url: str, timeout: float = 4.0, **request: Any) -> tuple[bool, Any]:
+    """`request` carries what a store that is not here asks for: headers, a
+    pair of credentials, whether the certificate is verified."""
     try:
         import httpx
-        resp = httpx.get(url, timeout=timeout)
+        resp = httpx.get(url, timeout=timeout, **request)
         resp.raise_for_status()
         try:
             return True, resp.json()
@@ -86,8 +93,29 @@ def _http(url: str, timeout: float = 4.0) -> tuple[bool, Any]:
 
 # ── individual checks ────────────────────────────────────────────────────────
 
+def _without_credentials(url: str) -> str:
+    """An address as it may be printed: scheme, host and port."""
+    parsed = urlparse(url)
+    port = f":{parsed.port}" if parsed.port else ""
+    return f"{parsed.scheme}://{parsed.hostname or ''}{port}"
+
+
+def _every_store_is_elsewhere() -> bool:
+    """Whether nothing this installation stores in is on this machine."""
+    return all((QDRANT.is_remote, OPENSEARCH.is_remote,
+                not is_local(urlparse(MONGODB_URL).hostname or ""),
+                not is_local(urlparse(REDIS_URL).hostname or "")))
+
+
+_ELSEWHERE = "check the address, the key or credentials, and that this machine can reach it"
+
+
 def check_docker() -> Check:
     if shutil.which("docker") is None:
+        # Containers are how the stores run here. An installation whose
+        # stores are all somewhere else has nothing to start in them.
+        if _every_store_is_elsewhere():
+            return Check("docker", OFF, "not installed, and every store is elsewhere")
         return Check("docker", FAIL, "not installed",
                      "https://docs.docker.com/get-docker/")
     try:
@@ -105,35 +133,50 @@ def check_docker() -> Check:
     return Check("docker", OK, f"daemon up, compose {version}")
 
 
+def _named(kind: str, port: int, remote: bool, address: str) -> str:
+    """A store's row: its port when it is here, its address when it is not."""
+    return f"{kind} {address}" if remote else f"{kind} :{port}"
+
+
 def check_qdrant() -> Check:
-    ok, body = _http(f"http://{QDRANT_HOST}:{QDRANT_PORT}/collections")
+    name = _named("qdrant", QDRANT.port, QDRANT.is_remote, QDRANT.base_url)
+    ok, body = _http(f"{QDRANT.base_url}/collections", headers=QDRANT.headers)
     if not ok:
-        return Check(f"qdrant :{QDRANT_PORT}", FAIL, "not answering", "make infra")
+        return Check(name, FAIL, "not answering", _ELSEWHERE if QDRANT.is_remote else "make infra")
     n = len((body or {}).get("result", {}).get("collections", []))
-    return Check(f"qdrant :{QDRANT_PORT}", OK, f"{n} collections")
+    return Check(name, OK, f"{n} collections")
 
 
 def check_opensearch() -> Check:
-    ok, body = _http(f"http://{OPENSEARCH_HOST}:{OPENSEARCH_PORT}/_cluster/health")
+    name = _named("opensearch", OPENSEARCH.port, OPENSEARCH.is_remote, OPENSEARCH.base_url)
+    ok, body = _http(f"{OPENSEARCH.base_url}/_cluster/health", auth=OPENSEARCH.auth,
+                     verify=OPENSEARCH.verify_certs)
     if not ok:
-        return Check(f"opensearch :{OPENSEARCH_PORT}", FAIL, "not answering", "make infra")
+        return Check(name, FAIL, "not answering", _ELSEWHERE if OPENSEARCH.is_remote else "make infra")
     status = (body or {}).get("status", "unknown")
-    return Check(f"opensearch :{OPENSEARCH_PORT}", OK if status in ("green", "yellow") else WARN,
-                 f"cluster {status}")
+    return Check(name, OK if status in ("green", "yellow") else WARN, f"cluster {status}")
 
 
 def check_mongodb() -> Check:
-    host = MONGODB_URL.split("//")[-1].split("/")[0]
-    hostname, _, port = host.partition(":")
-    if not _port_open(hostname or "localhost", int(port or 27017)):
-        return Check("mongodb :27017", FAIL, "not answering", "make infra")
+    parsed = urlparse(MONGODB_URL)
+    # A seed-list name (`mongodb+srv://`) is a DNS record and carries no port,
+    # so there is nothing to probe: the driver resolves it. Probing 27017 on
+    # it reported a hosted database as down.
+    seed_list = parsed.scheme == "mongodb+srv"
+    remote = not is_local(parsed.hostname or "")
+    name = f"mongodb {_without_credentials(MONGODB_URL)}" if remote else "mongodb :27017"
+    advice = _ELSEWHERE if remote else "make infra"
+    if not seed_list and not _port_open(parsed.hostname or "localhost", parsed.port or 27017):
+        return Check(name, FAIL, "not answering", advice)
     try:
         from pymongo import MongoClient
         client = MongoClient(MONGODB_URL, serverSelectionTimeoutMS=3000)
         names = client[os.getenv("MONGODB_DB", "ragplatform")].list_collection_names()
-        return Check("mongodb :27017", OK, f"{len(names)} collections")
+        return Check(name, OK, f"{len(names)} collections")
     except Exception:
-        return Check("mongodb :27017", OK, "port open")
+        if seed_list:
+            return Check(name, FAIL, "not answering", advice)
+        return Check(name, OK, "port open")
 
 
 def check_redis() -> Check:
@@ -152,10 +195,13 @@ def check_langfuse() -> Check:
 
 
 def check_neo4j() -> Check:
-    host, _, port = NEO4J_URI.split("//")[-1].partition(":")
-    if _port_open(host or "localhost", int(port or 7687), timeout=1.5):
-        return Check("neo4j :7687", OK, "answering")
-    return Check("neo4j :7687", OFF, "profile `graph` not started (optional)",
+    parsed = urlparse(NEO4J.uri)
+    name = f"neo4j {NEO4J.base_url}" if NEO4J.is_remote else "neo4j :7687"
+    if _port_open(parsed.hostname or "localhost", parsed.port or 7687, timeout=1.5):
+        return Check(name, OK, "answering")
+    if NEO4J.is_remote:
+        return Check(name, FAIL, "not answering", _ELSEWHERE)
+    return Check(name, OFF, "profile `graph` not started (optional)",
                  "docker compose --profile graph up -d neo4j")
 
 

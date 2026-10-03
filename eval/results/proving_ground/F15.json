@@ -1,6 +1,6 @@
 {
   "failure_id": "F15",
-  "recorded_at": "2026-10-03T07:57:03.808194+00:00",
+  "recorded_at": "2026-10-03T10:11:59.195787+00:00",
   "reproduced": true,
   "claim": "asked for a designation written into one passage, the keyword half returns it first and the semantic half does not return it in fifty",
   "measured": {

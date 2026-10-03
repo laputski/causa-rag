@@ -63,6 +63,37 @@ class OllamaGenerator:
         return OllamaGenerator(base_url=self._base_url, model=model,
                                timeout=self._timeout, seed=self._seed, num_ctx=self._num_ctx)
 
+    def for_realm(self, resources: dict[str, dict[str, Any] | None] | None) -> Any:
+        """A copy of this calling the Realm's own server. See
+        `core.interfaces.ServedByARealm`.
+
+        The model the resource names is taken too, and a resource that names
+        none leaves the one already chosen.
+        """
+        resource = (resources or {}).get("ollama")
+        if not resource:
+            return self
+        base_url = f"http://{resource.get('host') or 'localhost'}:{resource.get('port') or 11434}"
+        model = resource.get("model") or self._model
+        if base_url == self._base_url and model == self._model:
+            return self
+        return OllamaGenerator(base_url=base_url, model=model,
+                               timeout=self._timeout, seed=self._seed, num_ctx=self._num_ctx)
+
+    def list_models(self) -> list[str]:
+        """The models this server has pulled, by the names it gives them."""
+        response = httpx.get(f"{self._base_url}/api/tags", timeout=3.0)
+        response.raise_for_status()
+        return [str(m["name"]) for m in response.json().get("models", []) if m.get("name")]
+
+    def served_from(self) -> dict[str, Any]:
+        """Where answers come from. See `core.interfaces.ServedByARealm`."""
+        from urllib.parse import urlparse
+
+        from adapters.connections import is_local
+        return {"provider": "ollama", "address": self._base_url, "model": self._model,
+                "remote": not is_local(urlparse(self._base_url).hostname or "")}
+
     def with_seed(self, seed: int) -> Any:
         """A copy of this sampling the same way every time. See
         `core.interfaces.FixingItsSampling`.

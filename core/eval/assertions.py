@@ -71,7 +71,8 @@ Return JSON only: {{"stated": true or false}}"""
 #: a finding can carry the reason as an identifier and the reader gets a word
 #: in their own language; a library's message, when there is one, travels
 #: beside it as it arrived.
-JUDGE_GAPS = ("unreachable", "model_not_pulled", "transport_failed", "prompts_cut", "unparsed")
+JUDGE_GAPS = ("unreachable", "model_not_pulled", "model_not_set", "transport_failed", "prompts_cut",
+              "unparsed")
 
 _CYRILLIC = re.compile(r"[а-яё]", re.IGNORECASE)
 _LETTER = re.compile(r"[^\W\d_]")

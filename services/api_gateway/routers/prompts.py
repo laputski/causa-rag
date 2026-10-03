@@ -230,13 +230,15 @@ async def generate_prompt_draft(body: PromptGenerateRequest) -> dict[str, Any]:
     import asyncio
     import random
 
-    from adapters.ollama_generator import OllamaGenerator
+    from services.api_gateway.model_servers import generator_for_realm
     from services.api_gateway.routers.corpus import _get_realm_resource, _resolve_qdrant
     from services.api_gateway.routers.generation import _parse_llm_json
 
     qdrant_cfg = await _get_realm_resource(body.realm_id, "qdrant") if body.realm_id else None
+    from services.api_gateway.routers.corpus import _corpus_embedder_id
+    corpus_embedder = await _corpus_embedder_id(body.realm_id, body.corpus_id, body.embedder)
     try:
-        qdrant = _resolve_qdrant(body.corpus_id, body.strategy, body.embedder, qdrant_cfg, body.realm_id)
+        qdrant = _resolve_qdrant(body.corpus_id, body.strategy, corpus_embedder, qdrant_cfg, body.realm_id)
         chunks = qdrant.scroll_all()
     except Exception as e:
         logger.error("generate_prompt_draft.qdrant_unavailable: %s", e, exc_info=True)
@@ -248,7 +250,7 @@ async def generate_prompt_draft(body: PromptGenerateRequest) -> dict[str, Any]:
     excerpts = "\n\n---\n\n".join(c.text[:600] for c in sample)
     prompt = _PROMPT_GENERATE_META_TEMPLATE.format(excerpts=excerpts, model=body.model)
 
-    generator = OllamaGenerator(model=body.model)
+    generator = await generator_for_realm(body.realm_id, model=body.model)
     try:
         raw = await asyncio.to_thread(generator.generate, prompt, response_format="json", temperature=0.4)
     except Exception as e:

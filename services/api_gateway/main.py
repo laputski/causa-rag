@@ -95,17 +95,15 @@ def _build_generator():
 def _build_retriever(embedder: BgeM3Embedder):
     if _USE_REAL_QDRANT:
         try:
-            from qdrant_client import QdrantClient
-            host = os.getenv("QDRANT_HOST", "localhost")
-            port = int(os.getenv("QDRANT_PORT", "6333"))
-            QdrantClient(host=host, port=port, timeout=3, check_compatibility=False).get_collections()
+            from adapters.connections import QdrantTarget
+            target = QdrantTarget.from_environment()
+            target.client(timeout=3).get_collections()
             retr = QdrantRetriever(
-                host=host,
-                port=port,
+                target=target,
                 strategy_id=os.getenv("QDRANT_STRATEGY", "structure_aware"),
                 embedder_id=embedder.embedder_id,
             )
-            log.info("gateway.retriever", kind="qdrant", host=host, port=port)
+            log.info("gateway.retriever", kind="qdrant", address=target.base_url)
             return retr
         except Exception as e:
             log.warning("gateway.retriever.qdrant_unavailable", error=str(e), fallback="stub")
@@ -116,11 +114,10 @@ def _build_retriever(embedder: BgeM3Embedder):
 
 def _build_hybrid_retriever(dense_retriever: Any, embedder: BgeM3Embedder, merge: str) -> Any:
     try:
+        from adapters.connections import OpenSearchTarget
         from adapters.opensearch import OpenSearchRetriever
-        host = os.getenv("OPENSEARCH_HOST", "localhost")
-        port = int(os.getenv("OPENSEARCH_PORT", "9200"))
         strategy_id = os.getenv("QDRANT_STRATEGY", "structure_aware")
-        sparse = OpenSearchRetriever(host=host, port=port, strategy_id=strategy_id)
+        sparse = OpenSearchRetriever(target=OpenSearchTarget.from_environment(), strategy_id=strategy_id)
         retr = HybridRetriever(
             dense_retriever=dense_retriever,
             sparse_retriever=sparse,
@@ -252,6 +249,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     registry.register("embedder", embedder.embedder_id, embedder)
     registry.register("retriever", dense_retriever.retriever_id, dense_retriever)
     registry.register("generator", generator.generator_id, generator)
+    # Registered whether or not the gateway has an address for it: a Realm
+    # that declares such a server binds a copy to its own
+    # (core.interfaces.ServedByARealm), and one that does not is told the
+    # server is not configured, at the first call, and never served by a default.
+    from adapters.openai_compatible import OpenAICompatibleGenerator
+    hosted = OpenAICompatibleGenerator(from_environment=True)
+    registry.register("generator", hosted.generator_id, hosted)
+    # And its embedder, under the provider's name: its own identifier carries
+    # the model, which is only known once a Realm's resource names one.
+    from adapters.openai_compatible import PROVIDER, OpenAICompatibleEmbedder
+    registry.register("embedder", PROVIDER, OpenAICompatibleEmbedder(from_environment=True))
     registry.register("pipeline", naive_pipeline.pipeline_id, naive_pipeline)
     registry.register("pipeline", "hybrid_rrf", hybrid_rrf)
     registry.register("pipeline", "hybrid_weighted", hybrid_weighted)
@@ -387,16 +395,20 @@ async def _build_realm_scoped_retriever(
     the env-var instance, exactly the leak this function exists to close.
     """
     qdrant_cfg = await corpus_router._get_realm_resource(realm_id, "qdrant") if realm_id else None
-    dense = corpus_router._resolve_qdrant(corpus_id, "structure_aware", embedder.embedder_id, qdrant_cfg, realm_id)
+    # Read with the embedder that filled it, which the registry records. The
+    # caller embeds its queries with the same one (`_corpus_embedder`).
+    embedder_id = await corpus_router._corpus_embedder_id(
+        realm_id, corpus_id, str(getattr(embedder, "embedder_id", "bge_m3")))
+    dense = corpus_router._resolve_qdrant(corpus_id, "structure_aware", embedder_id, qdrant_cfg, realm_id)
 
     if pipeline_id in ("hybrid_rrf", "hybrid_weighted"):
         try:
             opensearch_cfg = await corpus_router._get_realm_resource(realm_id, "opensearch") if realm_id else None
+            from adapters.connections import OpenSearchTarget
             from adapters.opensearch import OpenSearchRetriever
-            host = opensearch_cfg.get("host", "localhost") if opensearch_cfg else os.getenv("OPENSEARCH_HOST", "localhost")
-            port = int(opensearch_cfg.get("port", 9200)) if opensearch_cfg else int(os.getenv("OPENSEARCH_PORT", "9200"))
             sparse = OpenSearchRetriever(
-                host=host, port=port, strategy_id="structure_aware", corpus_id=corpus_id, realm_id=realm_id,
+                target=OpenSearchTarget.of(opensearch_cfg), strategy_id="structure_aware",
+                corpus_id=corpus_id, realm_id=realm_id,
             )
             merge = "rrf" if pipeline_id == "hybrid_rrf" else "weighted"
             return HybridRetriever(dense_retriever=dense, sparse_retriever=sparse, embedder=embedder, merge=merge)
@@ -426,14 +438,28 @@ async def _build_realm_scoped_generator(realm_id: str | None) -> Any:
     and matches the existing behavior for every Realm that doesn't register
     its own model server.
     """
-    if realm_id:
-        cfg = await corpus_router._get_realm_resource(realm_id, "ollama")
-        if cfg:
-            from adapters.ollama_generator import OllamaGenerator
-            host = cfg.get("host", "localhost")
-            port = cfg.get("port", 11434)
-            return OllamaGenerator(base_url=f"http://{host}:{port}", model=cfg.get("model"))
+    from services.api_gateway.model_servers import generator_for, model_resources
+    resources = await model_resources(realm_id)
+    if any(resources.values()):
+        return generator_for(resources)
     return registry.resolve("generator", "ollama")
+
+
+async def _corpus_embedder(realm_id: str | None, corpus_id: str) -> Any:
+    """The embedder a corpus was filled with, for the questions asked of it.
+
+    The gateway's own for a corpus the registry does not know or that it
+    filled; the Realm's model server for one that server filled. Asking a
+    corpus a question embedded by another model than the one that filled it
+    searches one model's vectors with another's.
+    """
+    from services.api_gateway.model_servers import embedder_for, model_resources
+    local = registry.resolve("embedder", "bge_m3")
+    own_id = str(getattr(local, "embedder_id", "bge_m3"))
+    embedder_id = await corpus_router._corpus_embedder_id(realm_id, corpus_id, own_id)
+    if embedder_id == own_id:
+        return local
+    return embedder_for(embedder_id, await model_resources(realm_id), local)
 
 
 async def _build_chat_pipeline(
@@ -454,7 +480,7 @@ async def _build_chat_pipeline(
     against. `pipeline_id` picks which retrieval shape
     (naive/hybrid_rrf/hybrid_weighted/graph) that Realm-scoped retriever is.
     """
-    embedder = registry.resolve("embedder", "bge_m3")
+    embedder = await _corpus_embedder(realm_id, corpus_id)
     retriever = await _build_realm_scoped_retriever(realm_id, corpus_id, embedder, pipeline_id)
     generator = await _build_realm_scoped_generator(realm_id)
     # Chat deliberately applies NO retrieval pins.

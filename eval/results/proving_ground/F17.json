@@ -1,6 +1,6 @@
 {
   "failure_id": "F17",
-  "recorded_at": "2026-10-03T08:08:57.448998+00:00",
+  "recorded_at": "2026-10-03T10:30:57.795756+00:00",
   "reproduced": true,
   "claim": "a document of the corpus's own frequent words enters the keyword half's window and not the semantic half's, and nothing reads which half raised it",
   "measured": {
@@ -14,7 +14,8 @@
       "neither": 13
     },
     "signals_stuffed": [
-      "detector:layer_bottleneck"
+      "detector:layer_bottleneck",
+      "detector:merge_lost_what_a_half_found"
     ],
     "why_nothing_reads_it": "the only judgement about the halves counts the share of a whole context that came from one of them and reports a half that has stopped contributing; one document moves that share by a fragment",
     "the_entry_was_corrected": "it claimed a detector until this pair ran"

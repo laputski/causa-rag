@@ -432,6 +432,7 @@ def _parse_result(data: dict[str, Any], stem: str = "") -> ExperimentResult | No
         r.unavailable_components = data.get("unavailable_components") or []
         r.debug_cleared_at = data.get("debug_cleared_at") or ""
         r.debug_summary = data.get("debug_summary") or {}
+        r.served_by = data.get("served_by") or {}
         for qd in data.get("question_results", []):
             # Every field the class declares, read back by name. The list used
             # to be typed out here, and a field added to the class was written
@@ -944,38 +945,69 @@ class _UnavailableJudge:
 _JUDGE_NUM_CTX = 8192
 
 
+#: The embedder answers are measured with: the platform's own.
+MEASURING_EMBEDDER = "bge_m3"
+
+
+def _measuring_embedder(cfg: ExperimentConfig) -> Any:
+    """The embedder a run's answers are measured with.
+
+    The platform's own, and never the one the configuration names, which is
+    part of the system under test: two runs differing in their embedder would
+    be scored by two instruments, and the difference between their scores
+    would be partly the instruments'. Found live on the first run naming an
+    embedder served over HTTP.
+
+    The run's own stands in on an installation that has not got the
+    platform's, so that a run is still measured by what there is.
+    """
+    try:
+        return registry.resolve("embedder", MEASURING_EMBEDDER)
+    except KeyError:
+        return registry.resolve("embedder", cfg.embedder.component_id)
+
+
+def _run_embedder(cfg: ExperimentConfig) -> Any:
+    """The embedder the run searches with, or None when the registry has not
+    got it, which the run itself reports as an unavailable component."""
+    try:
+        return registry.resolve("embedder", cfg.embedder.component_id)
+    except KeyError:
+        return None
+
+
 async def _resolve_judge(realm_id: str | None) -> Any:
     """The judge a realm asks for, or a stand-in saying why there is none.
 
-    The model is the realm's setting `judge.model`, else the platform's
-    default. The server is the realm's own Ollama when it declares one, else
-    the gateway's, the same order the chat path follows.
+    The server is the Realm's own (services/api_gateway/model_servers.py):
+    the one it declares, or the one its setting `judge.provider` names when
+    it declares two. The model is its setting `judge.model`; on the local
+    server the platform's default stands in when that is unset, and on a
+    hosted one nothing does, because the default is a local model's name and
+    asking a hosted service for it would be reported as a model it lacks.
     """
-    import os
-
-    import httpx
-
-    from adapters.ollama_generator import OllamaGenerator
     from eval.judge_model import ASSERTION_JUDGE_MODEL
-    from services.api_gateway.routers.corpus import _get_realm_resource
+    from services.api_gateway.model_servers import generator_for, model_resources, provider_of
     from services.api_gateway.routers.settings import _get_settings_doc
 
     settings = await _get_settings_doc(realm_id or None)
-    model = ((settings.get("judge") or {}).get("model")) or ASSERTION_JUDGE_MODEL
-    resource = await _get_realm_resource(realm_id, "ollama") if realm_id else None
-    base_url = (f"http://{resource.get('host', 'localhost')}:{resource.get('port', 11434)}"
-                if resource else os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")).rstrip("/")
+    asked = settings.get("judge") or {}
+    resources = await model_resources(realm_id)
+    provider = provider_of(resources, asked.get("provider"))
+    model = asked.get("model") or (ASSERTION_JUDGE_MODEL if provider == "ollama" else "")
+    judge = generator_for(resources, provider=provider, model=model or None, seed=42,
+                          num_ctx=_JUDGE_NUM_CTX)
+    address = judge.served_from()["address"]
+    if not model:
+        return _UnavailableJudge(provider, "", address, "model_not_set",
+                                 "set the Realm's judge.model to a model its server offers")
     try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            tags = (await client.get(f"{base_url}/api/tags")).json()
+        names = await asyncio.to_thread(judge.list_models)
     except Exception as exc:  # noqa: BLE001 - the reason is what the run records
-        return _UnavailableJudge("ollama", model, base_url, "unreachable", f"{type(exc).__name__}: {exc}")
-    names = {m.get("name") for m in tags.get("models", [])}
+        return _UnavailableJudge(provider, model, address, "unreachable", f"{type(exc).__name__}: {exc}")
     if model not in names:
-        return _UnavailableJudge("ollama", model, base_url, "model_not_pulled")
-    return _AssertionJudge(
-        OllamaGenerator(base_url=base_url, model=model, seed=42, num_ctx=_JUDGE_NUM_CTX),
-        "ollama", model, base_url)
+        return _UnavailableJudge(provider, model, address, "model_not_pulled")
+    return _AssertionJudge(judge, provider, model, address)
 
 
 class _CompositeEvaluator:
@@ -1781,8 +1813,10 @@ async def diagnose_retrieval_miss_endpoint(
             qdrant_cfg = await _get_realm_resource(result.realm_id, "qdrant")
             opensearch_cfg = await _get_realm_resource(result.realm_id, "opensearch")
             neo4j_cfg = await _get_realm_resource(result.realm_id, "neo4j")
+        from services.api_gateway.model_servers import model_resources
         pipeline = runner._build_pipeline(result.config, result.realm_id, qdrant_cfg, opensearch_cfg,
-                                          neo4j_cfg=neo4j_cfg)
+                                          neo4j_cfg=neo4j_cfg,
+                                          model_cfg=await model_resources(result.realm_id))
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Could not rebuild pipeline: {e}") from e
 
@@ -1834,13 +1868,15 @@ async def _resample_flip_verdicts(
             # for a run that had them off would compare two different systems.
             if after.config.retrieval_pins_enabled:
                 retrieval_pins = await _load_active_pins(after.realm_id, after.config.corpus_id)
+        from services.api_gateway.model_servers import model_resources
         pipeline = runner._build_pipeline(after.config, after.realm_id, qdrant_cfg, opensearch_cfg,
-                                          retrieval_pins, neo4j_cfg=neo4j_cfg)
+                                          retrieval_pins, neo4j_cfg=neo4j_cfg,
+                                          model_cfg=await model_resources(after.realm_id))
 
         dataset = await _load_dataset(after.dataset_name, external_rag_id=after.config.external_rag_id)
         dataset_by_id = {q.get("id"): q for q in dataset.questions}
 
-        embedder = registry.resolve("embedder", after.config.embedder.component_id)
+        embedder = _measuring_embedder(after.config)
         evaluator = _CompositeEvaluator(embedder=embedder, top_k=after.config.top_k)
     except Exception:
         return None
@@ -2083,6 +2119,7 @@ _REF_INDEX_PAGE = 500
 
 async def _build_ref_resolver(
     realm_id: str | None, corpus_id: str, qdrant_cfg: dict[str, Any] | None = None,
+    embedder: Any = None,
 ) -> Any:
     """Build a `core/eval/ref_resolution.py` resolver over this run's index.
 
@@ -2100,11 +2137,17 @@ async def _build_ref_resolver(
     from core.eval.ref_resolution import UnknownRefResolver, resolver_from_chunks
 
     try:
-        from core.experiment.runner import _for_the_corpus
+        from core.experiment.runner import _for_the_corpus, _reading_the_index_of
         from core.registry import registry
 
         base = registry.resolve("pipeline", "naive")
-        retriever = _for_the_corpus(base._retriever, corpus_id, realm_id, qdrant_cfg, None)
+        # The index the run itself reads: this corpus, on this Realm's store,
+        # filled by the embedder the run names. Without the last, a corpus
+        # loaded with another embedder was enumerated from the collection of
+        # the gateway's own, which is empty, and every question was classed
+        # as asking for a source the corpus lacks.
+        retriever = _reading_the_index_of(
+            _for_the_corpus(base._retriever, corpus_id, realm_id, qdrant_cfg, None), embedder)
         scroll = getattr(retriever, "scroll", None)
         if scroll is None:
             return UnknownRefResolver(reason_id="the_retriever_cannot_enumerate",
@@ -2454,6 +2497,7 @@ async def _run_experiment_background(
     qdrant_cfg: dict[str, Any] | None = None, opensearch_cfg: dict[str, Any] | None = None,
     retrieval_pins: list[Any] | None = None, ref_resolver: Any = None,
     neo4j_cfg: dict[str, Any] | None = None,
+    model_cfg: dict[str, dict[str, Any] | None] | None = None,
 ) -> None:
     """Runs the (potentially long, N-question) experiment
     off the request/response cycle, so create_experiment can return run_id
@@ -2476,7 +2520,7 @@ async def _run_experiment_background(
             runner.run, cfg, dataset, evaluator=evaluator, on_progress=_on_progress,
             should_stop=lambda: run_id in _stop_requested,
             realm_id=realm_id, qdrant_cfg=qdrant_cfg, opensearch_cfg=opensearch_cfg,
-            retrieval_pins=retrieval_pins, neo4j_cfg=neo4j_cfg,
+            retrieval_pins=retrieval_pins, neo4j_cfg=neo4j_cfg, model_cfg=model_cfg,
         )
         # Found live: POST /{run_id}/stop kept accepting stop requests (and
         # replying {"status": "stopping"}) for a run whose question loop had
@@ -2532,7 +2576,8 @@ async def _run_experiment_background(
             try:
                 diag_pipeline = await asyncio.to_thread(
                     lambda: runner._build_pipeline(cfg, realm_id, qdrant_cfg, opensearch_cfg,
-                                                   retrieval_pins, neo4j_cfg=neo4j_cfg))
+                                                   retrieval_pins, neo4j_cfg=neo4j_cfg,
+                                                   model_cfg=model_cfg))
             except Exception:
                 diag_pipeline = None
             await asyncio.to_thread(
@@ -2638,6 +2683,11 @@ async def create_experiment(body: NewExperimentRequest) -> dict[str, Any]:
         _neo4j_cfg = await _get_realm_resource(body.realm_id, "neo4j")
         if cfg.retrieval_pins_enabled:
             _retrieval_pins = await _load_active_pins(body.realm_id, cfg.corpus_id)
+    # The Realm's own model server, for the generator and the embedder alike.
+    # A run used the server the gateway started with, whatever the Realm
+    # declared, while the chat asked the Realm's.
+    from services.api_gateway.model_servers import model_resources
+    _model_cfg = await model_resources(body.realm_id) if cfg.pipeline_source != "http" else None
     try:
         dataset = await _load_dataset(body.dataset_name, external_rag_id=cfg.external_rag_id)
     except DatasetNotFound as exc:
@@ -2647,15 +2697,17 @@ async def create_experiment(body: NewExperimentRequest) -> dict[str, Any]:
         # dataset that was not there.
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    embedder = registry.resolve("embedder", cfg.embedder.component_id)
+    embedder = _measuring_embedder(cfg)
     # Coverage is resolved against the INDEX this run actually
     # searches, built once per run. External RAG keeps relying on each row's
     # explicit `answerability` field: the platform never
     # sees that RAG's corpus, so there is nothing here it could check.
     ref_resolver = None
     if not cfg.external_rag_id:
+        from core.experiment.runner import _served_by
         ref_resolver = await _build_ref_resolver(
             realm_id=body.realm_id, corpus_id=cfg.corpus_id, qdrant_cfg=_qdrant_cfg,
+            embedder=_served_by(_run_embedder(cfg), _model_cfg),
         )
     # Resolved only when a question carries assertions: a run with none has
     # nobody to judge and no reason to wake a model that size.
@@ -2678,6 +2730,7 @@ async def create_experiment(body: NewExperimentRequest) -> dict[str, Any]:
         run_id, cfg, dataset, evaluator, runner, realm_id=body.realm_id,
         qdrant_cfg=_qdrant_cfg, opensearch_cfg=_opensearch_cfg,
         retrieval_pins=_retrieval_pins, ref_resolver=ref_resolver, neo4j_cfg=_neo4j_cfg,
+        model_cfg=_model_cfg,
     ))
 
     return {"run_id": run_id, "config_hash": cfg.config_hash, "status": "running"}

@@ -621,7 +621,7 @@ async def _run_generation_background(
     groups: list[list[Any]], group_types: list[str],
     shortfall: list[dict[str, Any]] | None = None,
 ) -> None:
-    from adapters.ollama_generator import OllamaGenerator
+    from services.api_gateway.model_servers import generator_for_realm
 
     def _emit(event: dict[str, Any]) -> None:
         _progress.setdefault(job_id, []).append(event)
@@ -631,7 +631,10 @@ async def _run_generation_background(
     # shared "ollama" generator (used by live /query traffic and controlled
     # by PUT /settings/model) — a one-off generation task picking its own
     # model has nothing to do with the platform's active chat model.
-    generator = OllamaGenerator(model=body.model, num_ctx=_GENERATION_NUM_CTX)
+    #
+    # On the Realm's own model server (services/api_gateway/model_servers.py).
+    # It used to be the gateway's whatever the Realm declared.
+    generator = await generator_for_realm(body.realm_id, model=body.model, num_ctx=_GENERATION_NUM_CTX)
 
     log.info(
         "generate_questions.start", realm_id=body.realm_id, corpus_id=body.corpus_id,
@@ -759,8 +762,12 @@ async def generate_questions(body: GenerateQuestionsRequest) -> dict[str, Any]:
             raise HTTPException(status_code=404, detail=f"Preset {body.preset_id!r} not found")
 
     qdrant_cfg = await _get_realm_resource(body.realm_id, "qdrant") if body.realm_id else None
+    # The embedder that filled the corpus, which the registry records
+    # (services/api_gateway/routers/corpus.py#_corpus_embedder_id).
+    from services.api_gateway.routers.corpus import _corpus_embedder_id
+    corpus_embedder = await _corpus_embedder_id(body.realm_id, body.corpus_id, body.embedder)
     try:
-        qdrant = _resolve_qdrant(body.corpus_id, body.strategy, body.embedder, qdrant_cfg, body.realm_id)
+        qdrant = _resolve_qdrant(body.corpus_id, body.strategy, corpus_embedder, qdrant_cfg, body.realm_id)
         chunks = qdrant.scroll_all()
     except Exception as e:
         log.error(

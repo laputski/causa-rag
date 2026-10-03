@@ -247,12 +247,25 @@ The field-by-field reference is [docs/external-rag-contract.md](docs/external-ra
 and [docs/connector-guide.md](docs/connector-guide.md) covers the Python SDK
 route. Both exist in Russian under [docs/ru/](docs/ru/).
 
-## Runs entirely on your machine
+## Runs on your machine unless a Realm says otherwise
 
-No document, question or answer leaves the host. Generation and judging use a
-local Ollama, embeddings are computed in-process, and every store runs in your
-own Docker. This was a hard requirement where the platform was built, and it
-stays one.
+As installed, no document, question or answer leaves the host. Generation and
+judging use a local Ollama, embeddings are computed in-process, and every
+store runs in your own Docker. That was a hard requirement where the platform
+was built, and it is still what a fresh install does.
+
+A Realm may point at services that are somewhere else: a hosted Qdrant, an
+OpenSearch behind TLS, a graph database with a named database, or a model
+served over the OpenAI-compatible API, for answers and for embeddings. That is
+a choice made per Realm, in its resources, and it has a cost the platform
+states instead of hiding. The Realm lists which of its resources are not on
+this machine, every run records which services answered for it and where each
+is, and a secret that opens one of them is sealed where it is stored.
+
+Support for services that are not local is checked against servers built into
+the tests, which shows what the platform sends. It has been run against one
+real server that speaks the model API, a local one. It has not been run
+against any hosted provider, so treat a first connection to one as a test.
 
 ## Layout
 

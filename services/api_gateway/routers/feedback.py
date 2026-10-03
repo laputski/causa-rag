@@ -137,27 +137,24 @@ class TriageDecideRequest(BaseModel):
 
 
 async def _resolve_triage_generator(realm_id: str | None) -> Any:
-    """The Realm's own local, self-hosted generator (triage must
-    never introduce a new/cloud model dependency). Mirrors
-    `services/api_gateway/main.py#_build_realm_scoped_generator`'s own
-    resolution in miniature rather than importing it — `main.py` imports
-    this router module, so the reverse import would be circular; falls
-    back to the shared registry-resolved "ollama" instance (the same one
-    chat/experiments already use without a Realm-specific override) when
-    the Realm has no dedicated generator resource or resolution fails for
-    any reason."""
+    """The Realm's own model server, whichever it declares
+    (services/api_gateway/model_servers.py), else the gateway's.
+
+    This used to say triage must never reach a hosted model, and enforced it
+    by knowing one kind of server only. The rule that replaced it is the
+    Realm's: a reviewer's comment goes where that Realm's questions and
+    answers already go, which is the server its owner declared, and a Realm
+    that declares a hosted one says so on every run it makes. A Realm that
+    declares none is served locally, as before.
+    """
     from core.registry import registry
-    if realm_id:
-        try:
-            from services.api_gateway.routers.corpus import _get_realm_resource
-            cfg = await _get_realm_resource(realm_id, "ollama")
-            if cfg:
-                from adapters.ollama_generator import OllamaGenerator
-                host = cfg.get("host", "localhost")
-                port = cfg.get("port", 11434)
-                return OllamaGenerator(base_url=f"http://{host}:{port}", model=cfg.get("model"))
-        except Exception:
-            pass
+    try:
+        from services.api_gateway.model_servers import generator_for, model_resources
+        resources = await model_resources(realm_id)
+        if any(resources.values()):
+            return generator_for(resources)
+    except Exception:
+        pass
     return registry.resolve("generator", "ollama")
 
 

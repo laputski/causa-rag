@@ -25,7 +25,8 @@ def _client(collection_exists: bool) -> MagicMock:
 def test_does_not_attempt_to_create_when_collection_exists() -> None:
     client = _client(collection_exists=True)
     with patch("qdrant_client.QdrantClient", return_value=client):
-        QdrantRetriever(strategy_id="structure_aware", embedder_id="bge_m3", corpus_id="handbook")
+        QdrantRetriever(strategy_id="structure_aware", embedder_id="bge_m3", corpus_id="handbook").count()
+    client.collection_exists.assert_called_once()
     client.create_collection.assert_not_called()
 
 
@@ -40,13 +41,16 @@ def test_does_not_attempt_to_create_when_name_is_an_alias():
         QdrantRetriever(
             strategy_id="structure_aware", embedder_id="bge_m3",
             corpus_id="handbook", realm_id="demo",
-        )
+        ).count()
+    client.collection_exists.assert_called_once()
     client.create_collection.assert_not_called()
 
 
 def test_creates_collection_when_it_genuinely_does_not_exist() -> None:
     client = _client(collection_exists=False)
     with patch("qdrant_client.QdrantClient", return_value=client):
-        QdrantRetriever(strategy_id="structure_aware", embedder_id="bge_m3", corpus_id="brand_new_corpus")
+        # On first use. Built and never used, a retriever creates nothing:
+        # see tests/contract/test_store_connections.py.
+        QdrantRetriever(strategy_id="structure_aware", embedder_id="bge_m3", corpus_id="brand_new_corpus").count()
     client.create_collection.assert_called_once()
     assert client.create_collection.call_args.kwargs["collection_name"] == "brand_new_corpus__structure_aware__bge_m3"

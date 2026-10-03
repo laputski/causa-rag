@@ -2191,6 +2191,7 @@
       "graph": "graph",
       "unreachable": "the judge's server could not be reached",
       "model_not_pulled": "the judge's model is not on its server",
+      "model_not_set": "the Realm names no model for its judge",
       "transport_failed": "the judge stopped answering during the run",
       "prompts_cut": "the server cut the judge's prompt",
       "unparsed": "the judge's reply could not be read",

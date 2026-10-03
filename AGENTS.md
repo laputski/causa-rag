@@ -37,6 +37,12 @@ Layer isolation is enforced separately by `lint-imports` against `.importlinter`
 An adapter implements exactly one protocol from `core/interfaces.py` and ships a
 stub beside it in the same file, so unit tests need no service running.
 
+Where a store or a model server is, and how it is reached, is read in one
+place each: `adapters/connections.py` for the stores and
+`services/api_gateway/model_servers.py` for the models. A client built anywhere
+else from a host and a port reaches a local service and silently fails to reach
+one behind TLS with a key, which is how seven such places came to exist.
+
 ## Naming that carries meaning
 
 Two namespacing rules exist because switching a component must not silently
@@ -118,8 +124,11 @@ parity check had not noticed, because the keys were all present.
 policy): implement the protocol in `core/`, write the adapter in `adapters/`,
 register it in `services/api_gateway/main.py`, add a contract test. Whatever a
 run may vary about it (another corpus, another Realm's instance, another
-fusion, another model) is a second protocol it implements: `BoundToACorpus`,
-`Fusing`, `WalkingAGraph`, `ChoosingItsModel`. The build asks the component,
+fusion, another model, another model server, another embedder's index) is a
+second protocol it implements: `BoundToACorpus`, `Fusing`, `WalkingAGraph`,
+`ChoosingItsModel`, `ServedByARealm`, `ReadingAnEmbeddersIndex`. A component
+that reaches a service also says where that service is (`SayingWhereItReads`,
+or `served_from` on a model), which a run records. The build asks the component,
 so one that answers nothing is left as it was, and the field asking for the
 change quietly does nothing. This used to be a case analysis over adapter
 class names written in the builder, which is the same outcome by a longer

@@ -87,15 +87,38 @@ async def set_active_model(body: ModelSelectRequest, realm_id: str | None = None
 
 
 @router.get("/models")
-async def list_models(completion_only: bool = False) -> list[dict[str, Any]]:
+async def list_models(completion_only: bool = False, realm_id: str | None = None) -> list[dict[str, Any]]:
+    """The models the Realm's own server offers
+    (services/api_gateway/model_servers.py), or the gateway's local server's
+    when no Realm is named. It was the gateway's for everyone, so a Realm
+    served elsewhere was offered models it could not run."""
     # `completion_only` — the question generator (services/api_gateway/
     # routers/generation.py) needs to offer only models that can actually
     # generate text, not the embedding models Ollama also serves locally
     # (e.g. BGE-M3/nomic-embed-text report capabilities=["embedding"], no
     # "completion" — confirmed live against a real local Ollama instance).
+    import asyncio
+
+    from services.api_gateway.model_servers import (
+        OPENAI_COMPATIBLE,
+        generator_for,
+        model_resources,
+        provider_of,
+    )
+
+    resources = await model_resources(realm_id)
+    provider = provider_of(resources)
     try:
+        generator = generator_for(resources, provider=provider)
+        if provider == OPENAI_COMPATIBLE:
+            # This API lists names and says nothing of what a model can do,
+            # so `completion_only` has nothing to filter by and filters nothing.
+            names = await asyncio.to_thread(generator.list_models)
+            return [{"name": name, "size_gb": 0, "modified_at": "", "capabilities": [],
+                     "provider": provider} for name in names]
+        base = generator.served_from()["address"] if any(resources.values()) else _OLLAMA_BASE
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{_OLLAMA_BASE}/api/tags")
+            resp = await client.get(f"{base}/api/tags")
             resp.raise_for_status()
             data = resp.json()
             models = [
@@ -104,6 +127,7 @@ async def list_models(completion_only: bool = False) -> list[dict[str, Any]]:
                     "size_gb": round(m.get("size", 0) / 1e9, 1),
                     "modified_at": m.get("modified_at", ""),
                     "capabilities": m.get("capabilities", []),
+                    "provider": provider,
                 }
                 for m in data.get("models", [])
             ]

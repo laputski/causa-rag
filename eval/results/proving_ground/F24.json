@@ -1,6 +1,6 @@
 {
   "failure_id": "F24",
-  "recorded_at": "2026-10-03T07:55:03.724701+00:00",
+  "recorded_at": "2026-10-03T10:08:47.250930+00:00",
   "reproduced": true,
   "claim": "a cross-encoder that has never seen this alphabet, ranking its corpus",
   "measured": {

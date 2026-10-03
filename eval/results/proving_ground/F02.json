@@ -1,6 +1,6 @@
 {
   "failure_id": "F02",
-  "recorded_at": "2026-10-03T08:08:48.631733+00:00",
+  "recorded_at": "2026-10-03T10:30:49.878142+00:00",
   "reproduced": true,
   "claim": "two fragments of a real run under one identifier",
   "measured": {

@@ -8,10 +8,10 @@ caller should fall back to ``LightRagRetrieverStub`` — see ``is_available``.
 """
 from __future__ import annotations
 
-import os
 import re
 from typing import Any
 
+from adapters.connections import Neo4jTarget
 from adapters.lightrag import GraphNode, GraphResult
 from core.models import Chunk, ScoredChunk
 
@@ -32,7 +32,7 @@ class GraphUnavailable(RuntimeError):
 
 #: The graph stores runs have been bound to, one retriever each, so a driver is
 #: opened once per store and not once per run.
-_BOUND: dict[tuple[str, str], Neo4jGraphRetriever] = {}
+_BOUND: dict[tuple[str, str, str], Neo4jGraphRetriever] = {}
 
 
 class Neo4jGraphRetriever:
@@ -46,13 +46,19 @@ class Neo4jGraphRetriever:
         user: str | None = None,
         password: str | None = None,
         connection_timeout: float | None = None,
+        target: Neo4jTarget | None = None,
     ) -> None:
-        # Annotated: os.getenv with a default never returns None, and the
-        # driver refuses anything else, but mypy widens the `or` to str | None
-        # and the resulting error hid behind an unread check for weeks.
-        self._uri: str = uri or os.getenv("NEO4J_URI", "bolt://localhost:7687")
-        self._user = user or os.getenv("NEO4J_USER", "neo4j")
-        self._password = password or os.getenv("NEO4J_PASSWORD", "ragplatform")
+        # Where the store is and how it is reached (adapters/connections.py):
+        # the arguments a caller states, and the environment for the rest.
+        if target is None:
+            target = Neo4jTarget.of({"uri": uri, "user": user, "password": password})
+        self._target = target
+        self._uri: str = target.uri
+        self._user = target.user
+        self._password = target.password
+        #: The database inside the server, or None for the server's own
+        #: default. Named on every session below.
+        self._database = target.database
         # The driver's own default is 30s, which is right for a pipeline that
         # is going to run for minutes and wrong for a health check somebody is
         # watching. Callers that ask a yes/no question pass their own bound.
@@ -75,13 +81,17 @@ class Neo4jGraphRetriever:
         One instance per store, kept, so a run does not open a driver it
         never closes."""
         cfg = (resources or {}).get("neo4j") or {}
-        uri = cfg.get("uri")
-        if not uri or uri == self._uri:
+        if not cfg.get("uri"):
             return self
-        key = (str(uri), str(cfg.get("user") or self._user))
+        # The database is part of which store it is: two realms may each keep
+        # one on the same server.
+        target = Neo4jTarget.of(cfg, self._target)
+        if (target.uri, target.database) == (self._uri, self._database):
+            return self
+        key = (target.uri, target.user, target.database or "")
         found = _BOUND.get(key)
         if found is None:
-            found = Neo4jGraphRetriever(uri=uri, user=cfg.get("user"), password=cfg.get("password"))
+            found = Neo4jGraphRetriever(target=target)
             _BOUND[key] = found
         return found
 
@@ -127,12 +137,37 @@ class Neo4jGraphRetriever:
                 raise GraphUnavailable(f"Neo4j unreachable at {self._uri}: {exc}") from exc
         return self._driver
 
+    def reads_from(self) -> dict[str, dict[str, Any]]:
+        """See `core.interfaces.SayingWhereItReads`."""
+        return {"neo4j": {"address": self._target.base_url, "remote": self._target.is_remote}}
+
+    def _session(self, driver: Any) -> Any:
+        """A session on this store's own database."""
+        return driver.session(database=self._database) if self._database else driver.session()
+
     def verify(self) -> bool:
         try:
             self._connect()
             return True
         except GraphUnavailable:
             return False
+
+    #: What each procedure library is called for here. A hosted server may
+    #: come without either, and the failure then arrives in the middle of a
+    #: load as a procedure the server has never heard of.
+    _NEEDS = {
+        "apoc": ("apoc.periodic.", ["clearing the graph in batches", "linking fragments by keyword"]),
+        "gds": ("gds.", ["community detection"]),
+    }
+
+    def missing_extensions(self) -> dict[str, list[str]]:
+        """The procedure libraries this server lacks, each with the
+        operations that will not work without it. Empty when it has both."""
+        driver = self._connect()
+        with self._session(driver) as session:
+            names = [str(record["name"]) for record in session.run("SHOW PROCEDURES YIELD name RETURN name")]
+        return {library: operations for library, (prefix, operations) in self._NEEDS.items()
+                if not any(name.startswith(prefix) for name in names)}
 
     def close(self) -> None:
         """Releases the driver's connection pool. Safe to call even if
@@ -161,7 +196,7 @@ class Neo4jGraphRetriever:
         the caller believed it had been cleared.
         """
         driver = self._connect()
-        with driver.session() as session:
+        with self._session(driver) as session:
             session.run(
                 "CALL apoc.periodic.iterate("
                 "'MATCH (n) RETURN n', "
@@ -177,7 +212,7 @@ class Neo4jGraphRetriever:
         ``link_related`` and the keyword-seed match in ``retrieve_graph``.
         """
         driver = self._connect()
-        with driver.session() as session:
+        with self._session(driver) as session:
             session.run(
                 "CREATE INDEX chunk_id_idx IF NOT EXISTS FOR (n:Chunk) ON (n.chunk_id)"
             )
@@ -194,7 +229,7 @@ class Neo4jGraphRetriever:
         Returns the number of chunks written.
         """
         driver = self._connect()
-        with driver.session() as session:
+        with self._session(driver) as session:
             for c in chunks:
                 session.run(
                     "MERGE (n:Chunk {chunk_id: $cid}) "
@@ -244,7 +279,7 @@ class Neo4jGraphRetriever:
         # parameters.
         max_freq = int(max_keyword_freq)
         driver = self._connect()
-        with driver.session() as session:
+        with self._session(driver) as session:
             session.run(
                 "CALL apoc.periodic.iterate("
                 "'MATCH (x:Chunk) UNWIND x.keywords AS k "
@@ -298,7 +333,7 @@ class Neo4jGraphRetriever:
         scanned tens of thousands of real corpus chunks first.
         """
         driver = self._connect()
-        with driver.session() as session:
+        with self._session(driver) as session:
             if doc_ids:
                 rows = session.run(
                     "MATCH (n:Chunk) WHERE n.doc_id IN $doc_ids RETURN n.chunk_id AS cid",
@@ -352,7 +387,7 @@ class Neo4jGraphRetriever:
 
     def _write_semantic_batch(self, edges: list[dict[str, Any]]) -> int:
         driver = self._connect()
-        with driver.session() as session:
+        with self._session(driver) as session:
             result = session.run(
                 "UNWIND $edges AS e "
                 "MATCH (x:Chunk {chunk_id: e.a}), (y:Chunk {chunk_id: e.b}) "
@@ -405,7 +440,7 @@ class Neo4jGraphRetriever:
             )
         rel_type = self._COMMUNITY_EDGE_TYPES[edge_type]
         driver = self._connect()
-        with driver.session() as session:
+        with self._session(driver) as session:
             session.run("CALL gds.graph.drop($name, false)", name=graph_name)
             row = session.run(
                 f"CALL gds.graph.project($name, 'Chunk', "
@@ -465,7 +500,7 @@ class Neo4jGraphRetriever:
                 "relationship_count": 0,
             }
         driver = self._connect()
-        with driver.session() as session:
+        with self._session(driver) as session:
             stats = session.run(
                 f"CALL gds.{algorithm}.write($name, {{writeProperty: $prop}}) "
                 "YIELD communityCount, modularity",
@@ -522,7 +557,7 @@ class Neo4jGraphRetriever:
         rel_type = self._COMMUNITY_EDGE_TYPES[edge_type]
         write_property = f"_{algorithm}Community_{edge_type}"
         driver = self._connect()
-        with driver.session() as session:
+        with self._session(driver) as session:
             node_rows = session.run(
                 f"MATCH (n:Chunk) WHERE n.{write_property} = $cid "
                 "RETURN n.chunk_id AS chunk_id, n.doc_id AS doc_id, n.path AS path",
@@ -576,7 +611,7 @@ class Neo4jGraphRetriever:
         )
         nodes: dict[str, GraphNode] = {}
         chunks: list[ScoredChunk] = []
-        with driver.session() as session:
+        with self._session(driver) as session:
             rec = session.run(cypher, terms=terms).single()
             seeds = (rec["seeds"] if rec else []) or []
             nbs = (rec["nbs"] if rec else []) or []

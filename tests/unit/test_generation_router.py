@@ -499,7 +499,10 @@ def test_generate_questions_works_without_a_preset(client):
             "type_counts": [{"question_type": "closed", "n_questions": 1}],
         })
 
-    mock_find_one.assert_not_called()
+    # No preset was looked up. The registry of corpora is asked which embedder
+    # filled this one, which is another collection and another question.
+    from services.api_gateway.routers.generation import _PRESETS_COLLECTION
+    assert [c for c in mock_find_one.call_args_list if c.args and c.args[0] == _PRESETS_COLLECTION] == []
     assert len(body["drafts"]) == 1
     assert body["drafts"][0]["provenance"]["preset_id"] is None
 

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from adapters.connections import QdrantTarget
 from core.models import Chunk, ScoredChunk
 
 
@@ -85,23 +86,23 @@ class QdrantRetriever:
         vector_size: int = 1024,
         corpus_id: str = "default",
         realm_id: str | None = None,
+        target: QdrantTarget | None = None,
     ) -> None:
-        from qdrant_client import QdrantClient
-        from qdrant_client.models import Distance, VectorParams
-
-        # Stored so core/experiment/runner.py can rebuild a corpus_id-bound
-        # copy of a registry-resolved (corpus_id="default") instance without
-        # re-deriving connection params from env vars a second time.
-        self._host = host
-        self._port = port
+        # Where the store is and how it is reached (adapters/connections.py).
+        # A host and a port are what a caller may still pass; a store behind
+        # TLS with a key passes the whole target. Kept, so a copy bound to
+        # another corpus reaches the same store the same way.
+        self._target = target or QdrantTarget(host=host, port=port)
+        self._host = self._target.host
+        self._port = self._target.port
         self._strategy_id = strategy_id
         self._embedder_id = embedder_id
         self._corpus_id = corpus_id
         self._realm_id = realm_id
         self._collection = _collection_name(strategy_id, embedder_id, corpus_id, realm_id)
-        self._client = QdrantClient(host=host, port=port, timeout=60, check_compatibility=False)
+        self._store = self._target.client(timeout=60)
         self._vector_size = vector_size
-        self._ensure_collection(Distance, VectorParams)
+        self._ensured = False
 
     def for_corpus(
         self,
@@ -120,8 +121,7 @@ class QdrantRetriever:
         if (corpus_id == self._corpus_id and realm_id == self._realm_id and not instance):
             return self
         return QdrantRetriever(
-            host=instance.get("host", self._host),
-            port=int(instance.get("port", self._port)),
+            target=QdrantTarget.of(instance, self._target),
             strategy_id=self._strategy_id,
             embedder_id=self._embedder_id,
             vector_size=self._vector_size,
@@ -129,7 +129,44 @@ class QdrantRetriever:
             realm_id=realm_id,
         )
 
-    def _ensure_collection(self, Distance: Any, VectorParams: Any) -> None:
+    def reads_from(self) -> dict[str, dict[str, Any]]:
+        """See `core.interfaces.SayingWhereItReads`."""
+        return {"qdrant": {"address": self._target.base_url, "remote": self._target.is_remote}}
+
+    def for_embedder(self, embedder: Any) -> Any:
+        """A copy of this reading the collection `embedder` filled. See
+        `core.interfaces.ReadingAnEmbeddersIndex`."""
+        embedder_id = str(getattr(embedder, "embedder_id", "") or self._embedder_id)
+        if embedder_id == self._embedder_id:
+            return self
+        return QdrantRetriever(
+            target=self._target, strategy_id=self._strategy_id, embedder_id=embedder_id,
+            vector_size=int(getattr(embedder, "vector_size", None) or self._vector_size),
+            corpus_id=self._corpus_id, realm_id=self._realm_id)
+
+    @property
+    def _client(self) -> Any:
+        """The store's client, with this retriever's collection made sure of.
+
+        On first use, and never when the retriever is built. Built, it used
+        to create its collection at once, so a copy made on the way to
+        another (bound to a corpus, then to an embedder) left an empty
+        collection behind without ever being queried. Found live, as a
+        collection for the gateway's own embedder beside a corpus loaded with
+        another.
+        """
+        if not self._ensured:
+            self._ensure_collection()
+            self._ensured = True
+        return self._store
+
+    @_client.setter
+    def _client(self, client: Any) -> None:
+        # A client handed in is one the caller vouches for, collection and all.
+        self._store = client
+        self._ensured = True
+
+    def _ensure_collection(self) -> None:
         from qdrant_client.models import Distance as D
         from qdrant_client.models import VectorParams as VP
 
@@ -142,8 +179,8 @@ class QdrantRetriever:
         # tried to create_collection() a name Qdrant already owns as an
         # alias, which Qdrant rejects outright (found live: every browse/
         # health/graph call against an aliased corpus_id 503'd).
-        if not self._client.collection_exists(self._collection):
-            self._client.create_collection(
+        if not self._store.collection_exists(self._collection):
+            self._store.create_collection(
                 collection_name=self._collection,
                 vectors_config=VP(size=self._vector_size, distance=D.COSINE),
             )
@@ -290,7 +327,7 @@ class QdrantRetriever:
         return chunks
 
     def count(self) -> int:
-        return self._client.count(collection_name=self._collection).count
+        return int(self._client.count(collection_name=self._collection).count)
 
     def scroll_all(self, page_size: int = 200) -> list[Chunk]:
         """Fetch every chunk in the collection — used by corpus health.

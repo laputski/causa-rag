@@ -34,6 +34,11 @@ _CONNECTOR_TYPES_SEED: list[dict[str, Any]] = [
         "params_schema": {
             "host": {"type": "string", "default": "localhost"},
             "port": {"type": "integer", "default": 6333},
+            # A store that is not on this machine: TLS, the key a hosted
+            # cluster issues, or its whole address in place of host and port.
+            "https": {"type": "boolean", "default": False},
+            "api_key": {"type": "string", "secret": True},
+            "url": {"type": "string"},
         },
     },
     {
@@ -47,6 +52,9 @@ _CONNECTOR_TYPES_SEED: list[dict[str, Any]] = [
             # (core/secrets.py). Declared here, because a field's name says
             # nothing about what its value opens.
             "password": {"type": "string", "secret": True},
+            # The database inside the server. Empty is the server's default,
+            # which a hosted instance does not always give its tenant.
+            "database": {"type": "string"},
         },
     },
     {
@@ -56,6 +64,26 @@ _CONNECTOR_TYPES_SEED: list[dict[str, Any]] = [
         "params_schema": {
             "host": {"type": "string", "default": "localhost"},
             "port": {"type": "integer", "default": 9200},
+            "use_ssl": {"type": "boolean", "default": False},
+            "verify_certs": {"type": "boolean", "default": True},
+            "user": {"type": "string"},
+            "password": {"type": "string", "secret": True},
+        },
+    },
+    {
+        "type": "openai_compatible",
+        "label": "OpenAI-compatible API",
+        "description": "LLM over the OpenAI-compatible HTTP API: a hosted provider, or a local "
+                       "server that speaks it. Text sent to it leaves this machine when it is hosted",
+        "params_schema": {
+            # The address up to and including the version, as providers give
+            # it: https://host/v1.
+            "base_url": {"type": "string"},
+            "api_key": {"type": "string", "secret": True},
+            "model": {"type": "string"},
+            # The model that turns text into vectors, when a corpus is to be
+            # loaded and searched with this server. Not the model above.
+            "embedding_model": {"type": "string"},
         },
     },
     {
@@ -143,9 +171,49 @@ def open_resource(resource: dict[str, Any] | None) -> dict[str, Any] | None:
     return opened(resource, _secret_fields(resource.get("type", ""), resource), secret_box())
 
 
+def resources_elsewhere(resources: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """The resources that are not on this machine, each with its address.
+
+    Read from the fields that say where a resource is and from none that
+    open it, so a sealed secret is never touched. A resource that is
+    somewhere else receives what the Realm's runs send it.
+    """
+    from adapters.connections import Neo4jTarget, OpenSearchTarget, QdrantTarget
+    from core.locality import address_of, is_local, is_remote_url
+
+    def where(resource: dict[str, Any]) -> tuple[str, bool] | None:
+        kind = resource.get("type")
+        placed = {k: v for k, v in resource.items() if not isinstance(v, dict)}
+        if kind == "qdrant":
+            q = QdrantTarget.of({**placed, "api_key": None}, QdrantTarget())
+            return q.base_url, q.is_remote
+        if kind == "opensearch":
+            o = OpenSearchTarget.of({**placed, "password": None}, OpenSearchTarget())
+            return o.base_url, o.is_remote
+        if kind == "neo4j":
+            n = Neo4jTarget.of({**placed, "password": None}, Neo4jTarget())
+            return n.base_url, n.is_remote
+        if kind == "ollama":
+            host = str(placed.get("host") or "localhost")
+            return f"http://{host}:{placed.get('port') or 11434}", not is_local(host)
+        if kind == "openai_compatible" and placed.get("base_url"):
+            url = str(placed["base_url"])
+            return address_of(url), is_remote_url(url)
+        return None
+
+    found = []
+    for resource in resources or []:
+        placed_at = where(resource)
+        if placed_at and placed_at[1]:
+            found.append({"type": str(resource.get("type")), "address": placed_at[0]})
+    return found
+
+
 def _public_realm(doc: dict[str, Any]) -> dict[str, Any]:
-    """A realm as the API shows it: every secret of every resource masked."""
+    """A realm as the API shows it: every secret of every resource masked,
+    and the resources that are somewhere else named."""
     out = _strip_id(doc)
+    out["leaves_this_machine"] = resources_elsewhere(out.get("resources") or [])
     out["resources"] = [
         masked(r, _secret_fields(r.get("type", ""), r)) for r in out.get("resources") or []]
     return out
@@ -599,15 +667,21 @@ async def test_realm_resource(realm_id: str, body: ResourceTestRequest) -> dict[
 
 
 async def _ping_resource(resource_type: str, cfg: dict[str, Any]) -> dict[str, Any]:
+    # Each store is reached the way the adapters reach it
+    # (adapters/connections.py): with TLS, a key or credentials when the
+    # resource says so. A test that asked over plain HTTP with no key would
+    # report a hosted store as down while every run against it worked, or the
+    # reverse.
+    from adapters.connections import Neo4jTarget, OpenSearchTarget, QdrantTarget
+
     if resource_type == "qdrant":
-        host = cfg.get("host", "localhost")
-        port = cfg.get("port", 6333)
-        async with httpx.AsyncClient(timeout=5) as client:
-            resp = await client.get(f"http://{host}:{port}/collections")
+        target = QdrantTarget.of(cfg, QdrantTarget())
+        async with httpx.AsyncClient(timeout=5, headers=target.headers) as client:
+            resp = await client.get(f"{target.base_url}/collections")
             resp.raise_for_status()
             data = resp.json()
             collections = [c["name"] for c in data.get("result", {}).get("collections", [])]
-            return {"collections": collections}
+            return {"collections": collections, "address": target.base_url, "remote": target.is_remote}
 
     if resource_type == "neo4j":
         # `verify()`, not `is_available()`. The latter only asks whether the
@@ -617,11 +691,10 @@ async def _ping_resource(resource_type: str, cfg: dict[str, Any]) -> dict[str, A
         # other three types here have always made a real request; this one
         # only looked like it did.
         from adapters.neo4j_graph import Neo4jGraphRetriever
-        uri = cfg.get("uri", "bolt://localhost:7687")
-        user = cfg.get("user", "neo4j")
-        password = cfg.get("password", "ragplatform")
+        graph_store = Neo4jTarget.of(cfg, Neo4jTarget())
+        uri = graph_store.base_url
         graph = Neo4jGraphRetriever(
-            uri=uri, user=user, password=password,
+            target=graph_store,
             # Same 5s bound the other three resource pings use. The driver's
             # own default is 30s, which turns "check everything" into half a
             # minute of nothing on a stand with one service down.
@@ -632,28 +705,38 @@ async def _ping_resource(resource_type: str, cfg: dict[str, Any]) -> dict[str, A
         try:
             if not graph.verify():
                 raise RuntimeError(f"Neo4j unreachable at {uri}")
+            # Which operations this server cannot do, said at the test and not
+            # in the middle of a load: a hosted server may come without the
+            # procedure libraries the graph path calls.
+            try:
+                unavailable = graph.missing_extensions()
+            except Exception as exc:  # noqa: BLE001 - the reason is what is reported
+                unavailable = {"unknown": [f"the server's procedures could not be listed: {exc}"]}
         finally:
             graph.close()
-        return {"neo4j_uri": uri}
+        return {"neo4j_uri": uri, "address": uri, "remote": graph_store.is_remote,
+                "unavailable_operations": unavailable}
 
     if resource_type == "opensearch":
-        host = cfg.get("host", "localhost")
-        port = cfg.get("port", 9200)
-        async with httpx.AsyncClient(timeout=5) as client:
-            resp = await client.get(f"http://{host}:{port}/")
+        search_store = OpenSearchTarget.of(cfg, OpenSearchTarget())
+        async with httpx.AsyncClient(timeout=5, auth=search_store.auth,
+                                     verify=search_store.verify_certs) as client:
+            resp = await client.get(f"{search_store.base_url}/")
             resp.raise_for_status()
             data = resp.json()
-            return {"cluster_name": data.get("cluster_name", "")}
+            return {"cluster_name": data.get("cluster_name", ""), "address": search_store.base_url,
+                    "remote": search_store.is_remote}
 
-    if resource_type == "ollama":
-        host = cfg.get("host", "localhost")
-        port = cfg.get("port", 11434)
-        async with httpx.AsyncClient(timeout=5) as client:
-            resp = await client.get(f"http://{host}:{port}/api/tags")
-            resp.raise_for_status()
-            data = resp.json()
-            models = [m["name"] for m in data.get("models", [])]
-            return {"models": models}
+    if resource_type in ("ollama", "openai_compatible"):
+        # Asked the way a run asks: through the generator this resource makes
+        # (services/api_gateway/model_servers.py), key and all.
+        import asyncio
+
+        from services.api_gateway.model_servers import generator_for
+        generator = generator_for({resource_type: cfg}, provider=resource_type)
+        served = generator.served_from()
+        models = await asyncio.to_thread(generator.list_models)
+        return {"models": models, "address": served["address"], "remote": served["remote"]}
 
     raise ValueError(f"No ping logic for type '{resource_type}'")
 

@@ -798,3 +798,101 @@ not say is that on real data the earlier verdict covers nearly every case.
 questions whose source the merge lost, and the earlier verdict's own words say
 it when the run knows. **Guard:**
 `tests/unit/test_a_merge_that_loses_what_its_halves_find_is_named.py`.
+
+## 37. A copy of the lexical retriever for another corpus dropped its credentials
+
+**Symptom:** none on a local stack, whose OpenSearch asks for no password. On
+a store that asks for one, every run naming a corpus other than the gateway's
+default would have been refused by the store.
+
+**Found by:** reading, while routing every store's connection through one
+place, and confirmed by a test against a server that records the headers it
+receives. **Root cause:** the copy bound to another corpus was built from the
+host and the port alone, and the credentials the retriever was constructed
+with stayed behind. **Fix:** a retriever keeps the whole description of how
+its store is reached (`adapters/connections.py`) and hands it to its copies.
+**Guard:** `test_a_copy_of_the_lexical_retriever_keeps_the_credentials` in
+`tests/contract/test_store_connections.py`.
+
+## 38. A run was answered by the gateway's model server whatever its Realm declared
+
+**Symptom:** none visible. A Realm with a model server of its own had its chat
+answered there and its runs answered by the server the gateway started with,
+and the run recorded the model's name and not where it had been served.
+
+**Found by:** reading every place a generator is built: five of them, two
+asking the Realm's server and three the gateway's. **Fix:** one place decides
+(`services/api_gateway/model_servers.py`), a generator can be bound to a
+Realm's server (`core.interfaces.ServedByARealm`), and a run records where it
+was served. **Guard:** `tests/unit/test_one_place_decides_a_realm_s_model_server.py`,
+which reads each caller's source so that a sixth building its own is caught.
+
+## 39. A resource without a secret gained an empty one when secrets were resealed
+
+**Symptom:** `tools/realm_secrets.py` reported a resource as untouched and
+wrote it back with a field it had not had, set to nothing.
+
+**Found by:** a unit test of the tool, the moment a resource type gained a
+declared secret that an existing resource did not carry. **Root cause:** the
+tool walked the fields a type declares secret and assigned each, present or
+not. **Fix:** a field the resource does not have is left alone.
+**Guard:** `test_a_resource_without_secrets_is_left_alone`.
+
+## 40. A load reported no fragments for a corpus of two hundred and twenty
+
+**Symptom:** a corpus loaded with an embedder served over HTTP finished with
+`n_chunks: 0` on its job, while its collection held 220 fragments.
+
+**Found by:** the first live load with such an embedder. **Root cause:** the
+gateway read the count from `size=` in the loader's last line, which is the
+size of the embedder's cache. The local embedder keeps one entry per distinct
+text, so the two numbers agreed by accident; an embedder that remembers
+nothing reports none. **Fix:** the count is read from `total_chunks=`, which
+is what the loader made. **Guard:**
+`test_a_load_reports_the_fragments_it_made_and_not_the_embedder_s_cache`.
+
+## 41. A run with another embedder left an empty collection for the gateway's own
+
+**Symptom:** after one run that named an embedder served over HTTP, the
+Realm's corpus had two collections: the one that embedder had filled, and an
+empty one named after the gateway's own embedder.
+
+**Found by:** listing the collections after the first such run. **Root
+cause:** a retriever created its collection when it was built. Binding one to
+a corpus and then to an embedder makes a copy in between, which nobody
+queries, and that copy created a collection all the same. **Fix:** the
+collection is made sure of on first use. **Guard:**
+`test_a_retriever_nobody_used_touches_no_store` in
+`tests/contract/test_store_connections.py`.
+
+## 42. Answers were to be measured with the embedder under test
+
+**Symptom:** the first run naming an embedder served over HTTP failed with
+"no embedding model is named", from the evaluator and not from retrieval.
+
+**Found by:** that run. **Root cause:** the similarity of an answer to its
+reference was computed with the embedder the configuration names. That is the
+system under test, so two runs differing in their embedder would have been
+scored by two instruments. The check of which references the corpus covers
+had the opposite fault: it read the collection of the gateway's own embedder,
+which for a corpus loaded with another is empty. **Fix:** answers are measured
+with the platform's own embedder, and coverage is read from the index the run
+itself reads. **Guard:**
+`tests/unit/test_answers_are_measured_with_the_platform_s_own_embedder.py`
+and the coverage test in
+`tests/unit/test_a_run_reads_the_index_of_the_embedder_it_names.py`.
+
+## 43. Every reader of a corpus but the run assumed the gateway's own embedder
+
+**Symptom:** none yet. A corpus loaded with an embedder served over HTTP could
+be run against, and its chat, its content browser, its health check and the
+drafting of questions about it each looked for the collection of the gateway's
+own embedder, which for such a corpus nobody had filled.
+
+**Found by:** checking the finished change for what it assumed. **Root
+cause:** each reader took an `embedder` parameter defaulting to the local
+one's name. **Fix:** the registry of corpora records which embedder filled a
+corpus, so each reader asks it; the chat embeds its questions with the same
+one, and refuses when the Realm's resource has since named another model.
+**Guard:** `tests/unit/test_a_corpus_is_read_with_the_embedder_that_filled_it.py`,
+which reads each reader's source.

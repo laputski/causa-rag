@@ -138,6 +138,63 @@ def _sampling_fixed_by(component: Any, seed: int | None) -> Any:
     return component.with_seed(seed)
 
 
+def where_it_was_served(pipeline: Any) -> dict[str, Any]:
+    """Which services answer for a pipeline, and where each of them is.
+
+    Asked of the parts themselves: a model server and a store each say their
+    own address, with nothing that opens them. A part that says nothing is
+    recorded as having said nothing, which for the in-process embedder is the
+    truth: it runs here. `leaves_this_machine` names the parts whose address
+    is somewhere else, since those receive what the run sends.
+    """
+    from core.locality import address_of, is_remote_url
+
+    url = getattr(pipeline, "_url", None)
+    if url:
+        system = {"address": address_of(str(url)), "remote": is_remote_url(str(url))}
+        return {"external_system": system,
+                "leaves_this_machine": ["external_system"] if system["remote"] else []}
+
+    served: dict[str, Any] = {}
+    for part in ("generator", "embedder"):
+        component = getattr(pipeline, f"_{part}", None)
+        says = getattr(component, "served_from", None)
+        if says is not None:
+            served[part] = dict(says())
+        elif hasattr(component, f"{part}_id"):
+            served[part] = {"provider": "in_process", "model": getattr(component, f"{part}_id"),
+                            "remote": False}
+    reads = getattr(getattr(pipeline, "_retriever", None), "reads_from", None)
+    served["stores"] = dict(reads()) if reads is not None else {}
+    served["leaves_this_machine"] = (
+        [part for part in ("generator", "embedder") if (served.get(part) or {}).get("remote")]
+        + [kind for kind, store in served["stores"].items() if store.get("remote")])
+    return served
+
+
+def _served_by(component: Any, model_cfg: dict[str, dict[str, Any] | None] | None) -> Any:
+    """The component, calling the model server of the Realm that runs it.
+
+    A component that calls no server, or a Realm that declares none, leaves
+    it as it was. See `core.interfaces.ServedByARealm` for what went wrong
+    without this.
+    """
+    if not model_cfg or not hasattr(component, "for_realm"):
+        return component
+    return component.for_realm(model_cfg)
+
+
+def _reading_the_index_of(retriever: Any, embedder: Any) -> Any:
+    """The retriever, reading the index the run's embedder built.
+
+    See `core.interfaces.ReadingAnEmbeddersIndex` for what went wrong without
+    this. A retriever that reads no vectors comes back as it was.
+    """
+    if embedder is None or not hasattr(retriever, "for_embedder"):
+        return retriever
+    return retriever.for_embedder(embedder)
+
+
 def _on_the_model(component: Any, model: str | None) -> Any:
     """The component, running the model this run named.
 
@@ -388,6 +445,11 @@ class ExperimentResult:
     # that never reported its windows, which is a finding about the system.
     debug_cleared_at: str = ""
     debug_summary: dict[str, Any] = field(default_factory=dict)
+    # Which services answered for this run and where each of them is
+    # (`where_it_was_served`). Recorded once a Realm could keep its stores
+    # and its model somewhere else: where the questions and the fragments
+    # went is then part of what the run is. Carries no key.
+    served_by: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -411,6 +473,7 @@ class ExperimentResult:
             "unavailable_components": self.unavailable_components,
             "debug_cleared_at": self.debug_cleared_at,
             "debug_summary": self.debug_summary,
+            "served_by": self.served_by,
             "aggregate_metrics": self.aggregate_metrics,
             # Every field of a question, derived from the class and never
             # listed by hand: a list typed here drops the next field added,
@@ -467,6 +530,7 @@ class ExperimentRunner:
         retrieval_pins: list[Any] | None = None,
         unavailable: list[str] | None = None,
         neo4j_cfg: dict[str, Any] | None = None,
+        model_cfg: dict[str, dict[str, Any] | None] | None = None,
     ) -> Any:
         """Build the pipeline the config describes.
 
@@ -556,16 +620,25 @@ class ExperimentRunner:
         # already read the right one instead of undoing the binding.
         retriever = _fusing_as(retriever, config.merge_strategy, config.merge_alpha, config.rrf_k)
         retriever = _walking_as(retriever, config.graph_weight, config.hops)
+        # The Realm's server first, then the model the run names: a resource
+        # carries a model of its own, and a run that names one means it.
         generator = _sampling_fixed_by(
             _on_the_model(
-                _component_for(self._registry, "generator", config.generator,
-                               base._generator, unavailable),
+                _served_by(
+                    _component_for(self._registry, "generator", config.generator,
+                                   base._generator, unavailable),
+                    model_cfg),
                 (config.params or {}).get("model"),
             ),
             config.seed,
         )
-        embedder = _component_for(
-            self._registry, "embedder", config.embedder, base._embedder, unavailable)
+        embedder = _served_by(
+            _component_for(self._registry, "embedder", config.embedder, base._embedder, unavailable),
+            model_cfg)
+        # After the embedder is known, and only where it is another one than
+        # the pipeline was built with: its index is another collection.
+        if embedder is not base._embedder:
+            retriever = _reading_the_index_of(retriever, embedder)
 
         if (config.reranker is None and config.grounding is None and config.route_policy is None
                 and config.scorer is None and config.mask_engine is None and config.refusal_policy is None):
@@ -652,6 +725,7 @@ class ExperimentRunner:
         # is even called, then threaded straight through to the pipeline.
         retrieval_pins: list[Any] | None = None,
         neo4j_cfg: dict[str, Any] | None = None,
+        model_cfg: dict[str, dict[str, Any] | None] | None = None,
     ) -> ExperimentResult:
         bound = log.bind(config_hash=config.config_hash, experiment=config.name)
         bound.info("experiment.start", dataset=dataset.name, n_questions=len(dataset.questions))
@@ -667,7 +741,7 @@ class ExperimentRunner:
         unavailable: list[str] = []
         pipeline = self._build_pipeline(
             config, realm_id, qdrant_cfg, opensearch_cfg, retrieval_pins, unavailable,
-            neo4j_cfg=neo4j_cfg,
+            neo4j_cfg=neo4j_cfg, model_cfg=model_cfg,
         )
         result = ExperimentResult(
             config=config,
@@ -677,6 +751,7 @@ class ExperimentRunner:
             dataset_name=dataset.name,
             unavailable_components=unavailable,
             applied=_what_actually_ran(pipeline),
+            served_by=where_it_was_served(pipeline),
         )
 
         # retrieval_only calls the cheaper retrieve() path
@@ -803,6 +878,13 @@ class ExperimentRunner:
                 )
 
         result.finished_at = datetime.datetime.now(datetime.UTC).isoformat()
+        # What the generator sent with its last request and what the server
+        # said of itself: whether a seed went out, and which model answered.
+        # A server may ignore the one and substitute the other, and neither
+        # shows in an answer.
+        last_call = getattr(getattr(pipeline, "_generator", None), "last_call", None)
+        if last_call and isinstance(result.served_by.get("generator"), dict):
+            result.served_by["generator"]["last_call"] = dict(last_call)
 
         bound.info("experiment.done", metrics=result.aggregate_metrics)
         return result

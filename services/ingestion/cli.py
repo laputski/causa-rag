@@ -75,13 +75,38 @@ def _collect_files(root: Path, exclude: set[str] | None = None) -> list[Path]:
     )
 
 
+#: The embedders a load can be given, by the name a caller uses.
+EMBEDDERS = ("bge_m3", "openai_compatible")
+
+
+def _embedder_named(name: str | None) -> Any:
+    """The embedder a load is given: by name, else the one the environment
+    names (`CAUSA_EMBEDDER`), else the local one.
+
+    It was the local one whatever was asked. A remote one is built from the
+    loader's own environment, which is where the gateway puts a Realm's
+    server when it starts a load as a process.
+    """
+    name = name or os.getenv("CAUSA_EMBEDDER") or "bge_m3"
+    if name == "bge_m3":
+        return BgeM3Embedder()
+    if name == "openai_compatible":
+        from adapters.openai_compatible import OpenAICompatibleEmbedder
+        return OpenAICompatibleEmbedder(from_environment=True)
+    raise ValueError(f"Unknown embedder: {name!r}. Available: {list(EMBEDDERS)}")
+
+
 def ingest(
     source: Path,
     strategy_id: str = "fixed",
-    qdrant_host: str = "localhost",
-    qdrant_port: int = 6333,
-    opensearch_host: str = "localhost",
-    opensearch_port: int = 9200,
+    # What a caller states about a store. Everything it leaves unsaid (the
+    # address when these are None, and always TLS, keys and credentials) is
+    # read from the environment by adapters/connections.py, which is where
+    # the gateway puts a realm's stores when it starts this as a process.
+    qdrant_host: str | None = None,
+    qdrant_port: int | None = None,
+    opensearch_host: str | None = None,
+    opensearch_port: int | None = None,
     neo4j_uri: str | None = None,
     neo4j_user: str | None = None,
     neo4j_password: str | None = None,
@@ -95,6 +120,8 @@ def ingest(
     # The analyser the sparse index is built with. Only matters at creation:
     # an index carries its analyser for life and queries inherit it.
     language: str = "ru_be",
+    # Which embedder fills the dense index; see `_embedder_named`.
+    embedder_name: str | None = None,
 ) -> dict[str, Any]:
     files = _collect_files(source, exclude=exclude)
     if not files:
@@ -135,15 +162,18 @@ def ingest(
     else:
         raise ValueError(f"Unknown strategy: {strategy_id!r}. Available: {list(_STRATEGIES)}")
 
-    embedder = BgeM3Embedder()
+    embedder = _embedder_named(embedder_name)
 
     # Dense index — namespace per strategy
+    from adapters.connections import Neo4jTarget, OpenSearchTarget, QdrantTarget
     from adapters.qdrant import QdrantRetriever
     qdrant = QdrantRetriever(
-        host=qdrant_host,
-        port=qdrant_port,
+        target=QdrantTarget.of({"host": qdrant_host, "port": qdrant_port}),
         strategy_id=strategy_id,
         embedder_id=embedder.embedder_id,
+        # Asked of the embedder, since a collection is created with it and an
+        # embedder that is not the local one has another.
+        vector_size=embedder.vector_size,
         corpus_id=corpus_id,
         realm_id=realm_id,
     )
@@ -154,8 +184,7 @@ def ingest(
         try:
             from adapters.opensearch import AnalyzerMismatch, OpenSearchRetriever
             opensearch = OpenSearchRetriever(
-                host=opensearch_host,
-                port=opensearch_port,
+                target=OpenSearchTarget.of({"host": opensearch_host, "port": opensearch_port}),
                 strategy_id=strategy_id,
                 corpus_id=corpus_id,
                 realm_id=realm_id,
@@ -175,7 +204,8 @@ def ingest(
     if os.getenv("USE_GRAPH", "").lower() == "true":
         try:
             from adapters.neo4j_graph import Neo4jGraphRetriever
-            candidate = Neo4jGraphRetriever(uri=neo4j_uri, user=neo4j_user, password=neo4j_password)
+            candidate = Neo4jGraphRetriever(target=Neo4jTarget.of(
+                {"uri": neo4j_uri, "user": neo4j_user, "password": neo4j_password}))
             if candidate.is_available() and candidate.verify():
                 graph = candidate
                 candidate.ensure_indexes()
@@ -355,13 +385,21 @@ def main() -> None:
     p = sub.add_parser("ingest", help="Ingest files")
     p.add_argument("path", type=Path)
     p.add_argument("--strategy", default="fixed", choices=list(_STRATEGIES))
-    p.add_argument("--qdrant-host", default="localhost")
-    p.add_argument("--qdrant-port", type=int, default=6333)
-    p.add_argument("--opensearch-host", default="localhost")
-    p.add_argument("--opensearch-port", type=int, default=9200)
+    p.add_argument("--qdrant-host", default=None, help="default: env QDRANT_HOST or localhost. "
+                   "TLS, a whole address and a key are read from QDRANT_HTTPS, QDRANT_URL and "
+                   "QDRANT_API_KEY, never from the command line")
+    p.add_argument("--qdrant-port", type=int, default=None, help="default: env QDRANT_PORT or 6333")
+    p.add_argument("--opensearch-host", default=None, help="default: env OPENSEARCH_HOST or localhost. "
+                   "TLS and credentials are read from OPENSEARCH_USE_SSL, OPENSEARCH_VERIFY_CERTS, "
+                   "OPENSEARCH_USER and OPENSEARCH_PASSWORD")
+    p.add_argument("--opensearch-port", type=int, default=None, help="default: env OPENSEARCH_PORT or 9200")
     p.add_argument("--neo4j-uri", default=None, help="Neo4j bolt URI (default: env NEO4J_URI or bolt://localhost:7687)")
     p.add_argument("--neo4j-user", default=None, help="Neo4j username (default: env NEO4J_USER or neo4j)")
     p.add_argument("--neo4j-password", default=None, help="Neo4j password (default: env NEO4J_PASSWORD)")
+    p.add_argument("--embedder", default=None, choices=list(EMBEDDERS),
+                   help="Which embedder fills the dense index (default: env CAUSA_EMBEDDER or "
+                        "bge_m3). A remote one reads its server from OPENAI_BASE_URL, "
+                        "OPENAI_API_KEY and OPENAI_EMBEDDING_MODEL")
     p.add_argument("--chunk-size", type=int, default=512)
     p.add_argument("--overlap", type=int, default=64)
     p.add_argument("--no-opensearch", action="store_true")
@@ -401,6 +439,7 @@ def main() -> None:
             structure=args.structure,
             language=args.language,
             realm_id=args.realm_id,
+            embedder_name=args.embedder,
         )
         if not result["files"]:
             # Said plainly and refused, because the quiet version of this is a

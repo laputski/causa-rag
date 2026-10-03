@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from adapters.connections import OpenSearchTarget
 from core.models import Chunk, ScoredChunk
 
 # Analyzer settings for Russian and Belarusian morphology.
@@ -170,24 +171,24 @@ class OpenSearchRetriever:
         corpus_id: str = "default",
         realm_id: str | None = None,
         language: str = DEFAULT_LANGUAGE,
+        target: OpenSearchTarget | None = None,
     ) -> None:
-        from opensearchpy import OpenSearch
-
-        # Stored so core/experiment/runner.py can rebuild a corpus_id-bound
-        # copy of a registry-resolved (corpus_id="default") instance without
-        # re-deriving connection params from env vars a second time.
-        self._host = host
-        self._port = port
+        # Where the store is and how it is reached (adapters/connections.py),
+        # kept so a copy bound to another corpus reaches it the same way. The
+        # copy used to be built from the host and the port alone and lost the
+        # credentials this was constructed with.
+        if target is None:
+            user, password = http_auth or (None, None)
+            target = OpenSearchTarget(host=host, port=port, user=user, password=password)
+        self._target = target
+        self._host = target.host
+        self._port = target.port
         self._strategy_id = strategy_id
         self._corpus_id = corpus_id
         self._realm_id = realm_id
         self._language = language
         self._index = _index_name(strategy_id, corpus_id, realm_id)
-        self._client = OpenSearch(
-            hosts=[{"host": host, "port": port}],
-            http_auth=http_auth,
-            use_ssl=False,
-        )
+        self._client = target.client()
         self._ensure_index()
 
     def for_corpus(
@@ -208,13 +209,16 @@ class OpenSearchRetriever:
         if corpus_id == self._corpus_id and realm_id == self._realm_id and not instance:
             return self
         return OpenSearchRetriever(
-            host=instance.get("host", self._host),
-            port=int(instance.get("port", self._port)),
+            target=OpenSearchTarget.of(instance, self._target),
             strategy_id=self._strategy_id,
             corpus_id=corpus_id,
             realm_id=realm_id,
             language=self._language,
         )
+
+    def reads_from(self) -> dict[str, dict[str, Any]]:
+        """See `core.interfaces.SayingWhereItReads`."""
+        return {"opensearch": {"address": self._target.base_url, "remote": self._target.is_remote}}
 
     def _ensure_index(self) -> None:
         """Create the index with this corpus's analyser, or refuse a mismatch.

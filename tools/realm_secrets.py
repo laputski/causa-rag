@@ -44,7 +44,12 @@ def resealed_realm(realm: dict[str, Any], new: SecretBox, old: SecretBox | None,
     for resource in realm.get("resources") or []:
         copy = dict(resource)
         for name in sorted(secret_fields(resource.get("type", ""), resource)):
-            copy[name], plain = _reseal(copy.get(name), new, old)
+            # Only a field the resource has. A type may declare a secret this
+            # resource never set, and writing it back as None would change a
+            # document the tool reports as untouched.
+            if name not in copy:
+                continue
+            copy[name], plain = _reseal(copy[name], new, old)
             if plain is not None:
                 changed.append((f"resources.{resource.get('type')}.{name}", plain))
         resources.append(copy)
