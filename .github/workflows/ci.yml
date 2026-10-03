@@ -109,6 +109,17 @@ jobs:
       - name: Prose style
         run: python3 -m tools.check_style --max-em 1688 --max-contrastive 508
 
+      # Names an installation must keep out of a public tree, checked against
+      # a list held as a repository secret, since the list is itself what must
+      # not be published. The step never prints what matched, only where. With
+      # no secret, which is every fork, it says NOT RUN and passes; the check
+      # that refuses to pass without a list is the pre-push hook
+      # (`python3 -m tools.check_publication --install-hook`).
+      - name: Nothing from the list is published
+        env:
+          PUBLICATION_DENYLIST: ${{ secrets.PUBLICATION_DENYLIST }}
+        run: python3 -m tools.check_publication
+
   ui:
     runs-on: ubuntu-latest
     defaults:

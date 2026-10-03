@@ -295,7 +295,7 @@ class Neo4jGraphRetriever:
         Neo4j instance that already holds a real corpus) don't pay for a
         Qdrant round-trip per pre-existing chunk that scan would otherwise
         drag in — found live: a 3-chunk test took 30+s because it silently
-        scanned 34,813 real corpus chunks first.
+        scanned tens of thousands of real corpus chunks first.
         """
         driver = self._connect()
         with driver.session() as session:

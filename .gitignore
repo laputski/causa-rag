@@ -123,3 +123,7 @@ packs.local/
 # Compose overlays for realms that exist on one machine only; a realm name in
 # the repository is a fact about somebody's data.
 deploy/compose/*.local.yml
+
+# What must not be published, by name: read by tools/check_publication.py and
+# never committed, since the list is itself what must not be published.
+.publication-denylist

@@ -157,6 +157,21 @@ one language; a pack for another language is a new pack.
 tried and removed, because a switcher offering a language that renders English
 is worse than one that does not offer it.
 
+## What is never published
+
+This repository is public, and it is developed against installations that hold
+other people's realms. A realm's name, the name of one of its datasets and the
+size of its corpus stay out of the tree, out of commit messages and out of
+every commit along the way: a name added in one commit and removed in the next
+is published all the same. Examples and tests use invented names.
+
+`tools/check_publication.py` checks all three places against a list that is
+not in this repository, because the list is itself what must not be published.
+It is read from `.publication-denylist`, which git ignores, or from the
+environment. Install it once with `python3 -m tools.check_publication
+--install-hook`, and every push is checked first and refused when there is no
+list to check against. CI runs it against a repository secret.
+
 ## Prose
 
 Comments and identifiers are English. The exceptions are deliberate and each
