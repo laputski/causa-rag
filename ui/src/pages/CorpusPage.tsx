@@ -84,7 +84,7 @@ export default function CorpusPage() {
   // The routes are unchanged, so every existing link and bookmark still lands
   // on the same view.
   const tab: CorpusTab = (VALID_TABS as readonly string[]).includes(tabParam ?? '') ? (tabParam as CorpusTab) : 'upload'
-  const { activeRealmId } = useRealm()
+  const { activeRealmId, activeRealm } = useRealm()
   const [searchParams] = useSearchParams()
   const { data: history = [], refetch } = useQuery({
     queryKey: ['corpus', activeRealmId],
@@ -104,6 +104,14 @@ export default function CorpusPage() {
 
   const [files, setFiles] = useState<File[]>([])
   const [strategy, setStrategy] = useState('structure_aware')
+  // Which model fills the dense index. The Realm's own server is offered only
+  // when the Realm names a model for it: without one there is nothing to load
+  // the corpus with, and the choice would be a way to start a load that fails.
+  const [embedder, setEmbedder] = useState('bge_m3')
+  const realmEmbeddingModel = String(
+    ((activeRealm?.resources ?? []) as { type?: string; embedding_model?: unknown }[])
+      .find(r => r.type === 'openai_compatible')?.embedding_model ?? '',
+  )
   const [chunkSize, setChunkSize] = useState(512)
   const [overlap, setOverlap] = useState(64)
   const [exclude, setExclude] = useState('full.txt')
@@ -165,6 +173,7 @@ export default function CorpusPage() {
     const form = new FormData()
     files.forEach(f => form.append('files', f))
     form.append('strategy', strategy)
+    form.append('embedder', realmEmbeddingModel ? embedder : 'bge_m3')
     form.append('chunk_size', String(chunkSize))
     form.append('overlap', String(overlap))
     form.append('exclude', exclude)
@@ -347,6 +356,21 @@ export default function CorpusPage() {
               <select value={strategy} onChange={e => setStrategy(e.target.value)} className="form-select">
                 {chunkers.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
+            </div>
+          )}
+
+          {dumpType === 'text' && realmEmbeddingModel && (
+            <div className="form-group">
+              <label htmlFor="upload-embedder">{t('corpusPage.upload.embedder')}</label>
+              <select id="upload-embedder" value={embedder} onChange={e => setEmbedder(e.target.value)} className="form-select">
+                <option value="bge_m3">{t('corpusPage.upload.embedderLocal')}</option>
+                <option value="openai_compatible">
+                  {t('corpusPage.upload.embedderRealm', { model: realmEmbeddingModel })}
+                </option>
+              </select>
+              {embedder === 'openai_compatible' && (
+                <p className="field-note">{t('corpusPage.upload.embedderLeaves')}</p>
+              )}
             </div>
           )}
 

@@ -81,11 +81,31 @@ def _fresh_provenance(client_provenance: dict[str, Any] | None) -> dict[str, Any
 
 
 async def _get_dataset_or_404(dataset_id: str, realm_id: str | None) -> dict[str, Any]:
+    """The set a request addresses: by its id, or by its file name within a
+    Realm when no set has that id.
+
+    Only the route that creates a set mints an id. A set written by a Realm
+    import has none, so the detail view returned `id: null` and every call
+    that addresses a set went to `/datasets/null/...`: such a set could not
+    be edited or profiled, and nothing said why. The file name is unique
+    within a Realm and not across them, which is why it is accepted only
+    together with one.
+    """
     import adapters.mongodb as mdb
     doc = await mdb.find_one("datasets", {"id": dataset_id})
+    if doc is None and realm_id:
+        doc = await mdb.find_one("datasets", {"filename": dataset_id, "realm_id": realm_id})
     if not doc or (realm_id and doc.get("realm_id") != realm_id):
         raise HTTPException(status_code=404, detail=f"Dataset {dataset_id!r} not found")
     return doc
+
+
+def _stored_as(doc: dict[str, Any]) -> dict[str, Any]:
+    """The query that finds this set again to write to it: its id when it has
+    one, else what `_get_dataset_or_404` found it by."""
+    if doc.get("id"):
+        return {"id": doc["id"]}
+    return {"filename": doc["filename"], "realm_id": doc.get("realm_id")}
 
 
 def _dataset_detail(doc: dict[str, Any]) -> dict[str, Any]:
@@ -234,6 +254,10 @@ async def delete_dataset(dataset_id: str, realm_id: str | None = None) -> None:
     if realm_id:
         query["realm_id"] = realm_id
     deleted = await mdb.delete_one("datasets", query)
+    if not deleted and realm_id:
+        # A set that carries no id is addressed by its file name within its
+        # Realm (see `_get_dataset_or_404`).
+        deleted = await mdb.delete_one("datasets", {"filename": dataset_id, "realm_id": realm_id})
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Dataset {dataset_id!r} not found")
 
@@ -254,7 +278,7 @@ async def add_question(
 
     questions = doc.get("questions", []) + [question]
     await mdb.update_one(
-        "datasets", {"id": dataset_id},
+        "datasets", _stored_as(doc),
         {"$set": {"questions": questions, "n_questions": len(questions)}},
     )
     doc["questions"] = questions
@@ -281,7 +305,7 @@ async def add_questions_batch(
 
     questions = doc.get("questions", []) + new_questions
     await mdb.update_one(
-        "datasets", {"id": dataset_id},
+        "datasets", _stored_as(doc),
         {"$set": {"questions": questions, "n_questions": len(questions)}},
     )
     doc["questions"] = questions
@@ -341,7 +365,7 @@ async def update_question(
     updated["provenance"] = prov
     questions[idx] = updated
 
-    await mdb.update_one("datasets", {"id": dataset_id}, {"$set": {"questions": questions}})
+    await mdb.update_one("datasets", _stored_as(doc), {"$set": {"questions": questions}})
     doc["questions"] = questions
     return _dataset_detail(doc)
 
@@ -361,7 +385,7 @@ async def delete_question(
         )
 
     await mdb.update_one(
-        "datasets", {"id": dataset_id},
+        "datasets", _stored_as(doc),
         {"$set": {"questions": new_questions, "n_questions": len(new_questions)}},
     )
     doc["questions"] = new_questions

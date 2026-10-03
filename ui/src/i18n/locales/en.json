@@ -510,7 +510,11 @@
       "replaceNeo4jGraph": "Fully wipe the graph before loading (the ENTIRE Realm's graph, not just this corpus — Neo4j has no corpus_id partitioning to scope a narrower wipe to). Otherwise the script's own content decides: a CREATE-based dump duplicates on re-upload, only a MERGE-based one is idempotent.",
       "replaceOpensearchIndex": "Fully recreate the index before loading (otherwise it's an upsert by chunk_id — chunks missing from the new dump stay in the index)",
       "uploadAndIndex": "Upload and index",
-      "pageTitle": "Corpus"
+      "pageTitle": "Corpus",
+      "embedder": "Embedder",
+      "embedderLocal": "Local (BGE-M3)",
+      "embedderRealm": "The Realm's server: {{model}}",
+      "embedderLeaves": "The corpus texts will be sent to the Realm's server."
     },
     "management": {
       "backends": "Backends",
@@ -578,7 +582,20 @@
       "subtitle": "The model drafts a question and reference answer from real fragments of the selected corpus — drafts can be edited before saving, nothing is added to the set directly.",
       "title": "Question generator",
       "totalLabel": "Total: {{count}}",
-      "typeCountsLabel": "Question types and counts"
+      "typeCountsLabel": "Question types and counts",
+      "type": {
+        "closed": "Closed",
+        "open": "Open",
+        "clarifying": "Clarifying",
+        "comparative": "Comparative",
+        "navigational": "Navigational",
+        "global": "Whole corpus"
+      },
+      "globalHint": "A whole-corpus question is written from four documents on a related topic.",
+      "notStarted_one": "For {{count}} whole-corpus question there were no four documents on one topic.",
+      "notStarted_other": "For {{count}} whole-corpus questions there were no four documents on one topic.",
+      "draftsReview": "A model writes the drafts. They need reading before they are saved.",
+      "mixedScript": "Check the spelling, these words mix letters of different alphabets: {{words}}."
     },
     "loading": "Loading...",
     "nameLabel": "Name",
@@ -627,7 +644,39 @@
     "questionsCount_one": "{{count}} question",
     "questionsCount_other": "{{count}} questions",
     "savedBanner_one": "Added {{count}} question — it's now in the list below.",
-    "savedBanner_other": "Added {{count}} questions — they're now in the list below."
+    "savedBanner_other": "Added {{count}} questions — they're now in the list below.",
+    "questionType": {
+      "closed": "closed",
+      "open": "open",
+      "clarifying": "clarifying",
+      "comparative": "comparative",
+      "navigational": "navigational",
+      "global": "whole corpus"
+    },
+    "scope": {
+      "label": "Kind of question",
+      "local": "ordinary",
+      "global": "whole corpus",
+      "globalHint": "Retrieval metrics are not computed for a whole-corpus question."
+    },
+    "statements": {
+      "label": "What the answer must contain",
+      "add": "Add a statement",
+      "remove": "Remove",
+      "one": "Statement {{n}}",
+      "count_one": "{{count}} statement",
+      "count_other": "{{count}} statements"
+    },
+    "composition": {
+      "sources_one": "{{count}} source",
+      "sources_other": "{{count}} sources",
+      "statementsAll": "every question has statements",
+      "statementsNone": "no statements",
+      "statementsSome": "{{n}} of {{total}} have statements",
+      "whole": "whole corpus: {{n}}",
+      "ordinary": "ordinary: {{n}}",
+      "oneKind": "The set holds questions of one kind only."
+    }
   },
   "diagnostics": {
     "latency": {
@@ -1598,6 +1647,10 @@
     },
     "retrievalRecallAtK": {
       "hint": "Share of the required articles (per the golden article_refs) found in the top-k. Answerable questions only. A pure retrieval signal — independent of the generator."
+    },
+    "assertionCoverage": {
+      "label": "Answer completeness",
+      "hint": "Share of the statements a right answer must make that the judge found in the answer. Computed over the questions with statements that the judge checked in full."
     }
   },
   "nav": {
@@ -1665,7 +1718,12 @@
       "scorerLabel": "Scorer",
       "selectPrompt": "— select —",
       "submit": "Start run",
-      "submitting": "Starting…"
+      "submitting": "Starting…",
+      "generatorLabel": "Generator",
+      "embedderLabel": "Embedder",
+      "embedderMismatch": "The corpus was loaded with the embedder {{embedder}}. With another one retrieval reads a collection nobody filled.",
+      "noApiServer": "This Realm has no “Model over the OpenAI-compatible API” resource. Without one the run gets no answers.",
+      "noEmbeddingModel": "The Realm's resource names no model that embeds. Without one retrieval cannot run."
     },
     "formIntro": "The form is built from the component registry — a new adapter appears automatically.",
     "pipelineLabels": {
@@ -1847,7 +1905,7 @@
     "resourceCount": "{{count}} resources"
   },
   "realmResourcesPage": {
-    "addResourceHeading": "Add {{label}}",
+    "addResourceHeading": "New resource: {{label}}",
     "cancel": "Cancel",
     "capabilities": {
       "blackBox": "black-box (no trace)",
@@ -1977,6 +2035,52 @@
       "ok": "Healthy",
       "down": "Not responding",
       "unknown": "Not checked"
+    },
+    "leavesThisMachine": "Some data leaves this machine: queries, fragments and prompt texts.",
+    "place": {
+      "local": "local",
+      "external": "external"
+    },
+    "typeLabel": {
+      "openaiCompatible": "Model over the OpenAI-compatible API"
+    },
+    "editResource": "Change the resource",
+    "editResourceHeading": "Editing {{label}}",
+    "notTriedWithHosted": "Not tried with cloud services.",
+    "field": {
+      "host": "Host",
+      "port": "Port",
+      "url": "Whole address (in place of host and port)",
+      "uri": "Address",
+      "https": "Connect over HTTPS",
+      "useSsl": "Connect over TLS",
+      "verifyCerts": "Verify the certificate",
+      "user": "User",
+      "password": "Password",
+      "apiKey": "Key",
+      "database": "Database (optional)",
+      "baseUrl": "Address",
+      "model": "Model that answers",
+      "embeddingModel": "Model that embeds (optional)"
+    },
+    "secret": {
+      "stored": "stored",
+      "replace": "Replace",
+      "remove": "Remove",
+      "keep": "Keep the stored one",
+      "willBeRemoved": "will be removed on save"
+    },
+    "judge": {
+      "heading": "Judge",
+      "hint": "The judge checks whether an answer contains the statements it must.",
+      "serverLabel": "Server",
+      "modelLabel": "Judge's model",
+      "server": {
+        "default": "Default",
+        "ollama": "Ollama",
+        "openaiCompatible": "Model over the API"
+      },
+      "modelNeeded": "A judge on an API server needs its model named: the default name belongs to a local model."
     }
   },
   "realmsPage": {
@@ -2025,7 +2129,18 @@
     "runs": "Runs",
     "idCol": "Identifier",
     "exportAction": "Export",
-    "hideAction": "Hide"
+    "hideAction": "Hide",
+    "retention": {
+      "heading": "Keeping runs",
+      "intro": "The intermediate retrieval lists take the most space. Old runs lose them; answers and metrics stay.",
+      "keepLast": "Leave the last runs of a Realm alone",
+      "maxAge": "Remove lists older than, days",
+      "maxVolume": "Volume limit, MiB",
+      "preview_one": "{{count}} run would be affected now.",
+      "preview_other": "{{count}} runs would be affected now.",
+      "baseline": "The baseline run never loses its lists.",
+      "automaticOff": "Automatic clearing is off on this installation."
+    }
   },
   "runCharts": {
     "answerShape": {
@@ -2398,7 +2513,8 @@
       "pipelineError": "pipeline error",
       "pipelineErrorDetail": "The pipeline crashed on this question — metrics weren't computed, the run continued: {{error}}",
       "referenceAnswer": "Reference answer",
-      "retrieval": "Retrieval ({{count}} chunks)"
+      "retrieval": "Retrieval ({{count}} chunks)",
+      "wholeCorpus": "whole corpus"
     },
     "resultsHeading": "Results by question ({{count}})",
     "results": {
@@ -2445,7 +2561,95 @@
     "attentionHeading": "Need attention",
     "attentionMeta": "{{n}} of {{total}}",
     "attentionChip": "All failing",
-    "allChip": "All questions"
+    "allChip": "All questions",
+    "stages": {
+      "heading": "Retrieval stages",
+      "stage": {
+        "dense": "Vector search",
+        "sparse": "BM25",
+        "graph": "Graph",
+        "fusion": "Fusion",
+        "retrieval": "Retrieval",
+        "rerank": "Reranker",
+        "context": "Context"
+      },
+      "sameAs": {
+        "fusion": "same as after fusion",
+        "retrieval": "same as after retrieval",
+        "rerank": "same as after the reranker"
+      },
+      "finder": {
+        "dense": "vector search",
+        "sparse": "BM25",
+        "graph": "graph search"
+      },
+      "ofSize": "of {{n}}",
+      "fragments_one": "{{count}} fragment",
+      "fragments_other": "{{count}} fragments",
+      "lost": "lost",
+      "sentence": {
+        "noSources": "The question names no needed sources, so only the sizes of the lists are shown.",
+        "nowhere": "The needed source is on no stage.",
+        "lostInFusion": "The source was found by {{who}} (place {{rank}}), but it did not make the merged list.",
+        "lostInRerank": "The source was in the list given to the reranker (place {{rank}}), and the reranker did not keep it.",
+        "lostBeforeContext": "The source was found (place {{rank}}), but it did not reach the context.",
+        "reached": "The source reached the context, place {{rank}}."
+      },
+      "matrix": "Fragments by stage",
+      "fragment": "Fragment",
+      "needed": "needed",
+      "more": "Show {{n}} more",
+      "collapse": "Collapse",
+      "legend": "A number is the fragment's place in the list. A dot means the fragment is not in the list.",
+      "cleared": "This run's intermediate lists were removed on {{date}}. The stages come from the saved summary; the fragment table is not available."
+    },
+    "statements": {
+      "heading": "What the answer must contain",
+      "count": "{{present}} of {{total}} present",
+      "yes": "in the answer",
+      "no": "not in the answer",
+      "notChecked": "not checked",
+      "noRetrievalMetrics": "Retrieval metrics are not computed for a whole-corpus question."
+    },
+    "servedBy": {
+      "heading": "What ran this run",
+      "col": {
+        "part": "Component",
+        "what": "Model or index",
+        "where": "Address"
+      },
+      "generator": "Generator",
+      "embedder": "Embedder",
+      "judge": "Judge",
+      "externalSystem": "External system",
+      "store": {
+        "qdrant": "Vector index",
+        "opensearch": "Lexical index",
+        "neo4j": "Graph"
+      },
+      "local": "local",
+      "external": "external",
+      "insidePlatform": "inside the platform",
+      "seedSent": "A seed was sent.",
+      "seedNotSent": "No seed was sent.",
+      "servedModel": "The server answered with the model {{model}}.",
+      "noJudge": "Answers were not checked against their statements.",
+      "judgeWork_one": "The judge checked {{count}} statement in {{seconds}} s.",
+      "judgeWork_other": "The judge checked {{count}} statements in {{seconds}} s.",
+      "judgeCaveat": "The model can err on near periods and on paraphrases.",
+      "cleared": "The intermediate retrieval lists were removed on {{date}}. What they showed is kept.",
+      "notRecorded": "This run did not record which services ran it."
+    },
+    "export": {
+      "open": "Export the run",
+      "heading": "Exporting the run",
+      "withoutTexts": "Without fragment texts",
+      "withTexts": "With fragment texts",
+      "download": "Download",
+      "sizeUnknown": "The size of the file could not be read.",
+      "kilobytes": "{{n}} KB",
+      "megabytes": "{{n}} MB"
+    }
   },
   "theme": {
     "toDark": "Dark theme",

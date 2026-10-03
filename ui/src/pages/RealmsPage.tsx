@@ -6,6 +6,7 @@ import { useRealm } from '../context/RealmContext'
 import { api, type RealmImportReport } from '../api/client'
 import { platform } from '../lib/platform'
 import { useConfirm } from '../components/ConfirmDialog'
+import RunRetention from '../components/RunRetention'
 
 interface Realm {
   id: string
@@ -339,6 +340,8 @@ export default function RealmsPage() {
           </table>
         </div>
       )}
+
+      <RunRetention />
 
       {preview && (
         <div className="overlay" onMouseDown={() => setPreview(null)} role="presentation">

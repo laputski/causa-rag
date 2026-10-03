@@ -2,9 +2,11 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation, Trans } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Trash2, Plus, Zap, Database, Waypoints, Search, Cpu, Server, CircleCheck, CircleX, Rocket, ExternalLink, Frame, Ban } from 'lucide-react'
+import { Trash2, Plus, Zap, Database, Waypoints, Search, Cpu, Cloud, Pencil, Server, CircleCheck, CircleX, Rocket, ExternalLink, Frame, Ban } from 'lucide-react'
 import { useRealm, useRealmPath } from '../context/RealmContext'
 import { api, type Dataset, type ExternalRag, type ExternalRagTestResult, type PanelStatus } from '../api/client'
+import ResourceForm, { type FieldSchema, type ResourceValues } from '../components/ResourceForm'
+import JudgeSetting from '../components/JudgeSetting'
 
 // Icon per connector type — falls back to a generic server icon for any
 // future connector_type the backend seeds that isn't listed here yet, so a
@@ -14,7 +16,20 @@ const RESOURCE_ICONS: Record<string, React.ElementType> = {
   neo4j: Waypoints,
   opensearch: Search,
   ollama: Cpu,
+  openai_compatible: Cloud,
 }
+
+// A connector's name comes from the server's catalogue, which names products.
+// This one is a kind of service and not a product, so it is named here, in
+// the reader's language.
+const TYPE_LABEL: Record<string, string> = {
+  openai_compatible: 'realmResourcesPage.typeLabel.openaiCompatible',
+}
+
+// The types whose place the server can tell from their address. Any other
+// resource gets no mark: "local" there would be a guess.
+const PLACED_TYPES = ['qdrant', 'neo4j', 'opensearch', 'ollama', 'openai_compatible']
+const MODEL_SERVERS = ['ollama', 'openai_compatible']
 
 // Resource params (host/port/user/...) and connector-test responses can both
 // carry credentials (Neo4j password, API keys) — masked everywhere a raw
@@ -23,6 +38,17 @@ const SENSITIVE_KEY_RE = /password|secret|token|api[_-]?key/i
 
 function displayValue(key: string, value: unknown): string {
   return SENSITIVE_KEY_RE.test(key) ? '••••••••' : String(value)
+}
+
+// A check may answer with a mapping, such as the operations a graph server
+// cannot run, by the library each needs. As a list of "name: what" it reads
+// like any other list here, and an empty one reads as empty. Printed as it
+// came it was "[object Object]", for a server that lacked nothing as well
+// (found by pressing Test on a healthy graph).
+function listed(value: unknown): unknown {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return value
+  return Object.entries(value as Record<string, unknown>)
+    .map(([name, what]) => `${name}: ${Array.isArray(what) ? what.join(', ') : String(what)}`)
 }
 
 // Renders a connector/RAG connection-test result as a proper panel instead
@@ -46,7 +72,7 @@ function ConnStatus({ ok, detail, fields, children }: {
       {detail && <p className="conn-status-plain">{detail}</p>}
       {fields && fields.length > 0 && (
         <div className="conn-status-detail">
-          {fields.map(([k, v]) => (
+          {fields.map(([k, raw]) => [k, listed(raw)] as [string, unknown]).map(([k, v]) => (
             <div key={k} className="conn-status-row">
               <span className="conn-status-key">{k}</span>
               {Array.isArray(v) ? (
@@ -86,7 +112,7 @@ interface ConnectorType {
   type: string
   label: string
   description: string
-  params_schema: Record<string, { type: string; default?: unknown }>
+  params_schema: Record<string, FieldSchema>
 }
 
 interface Resource {
@@ -807,7 +833,6 @@ export default function RealmResourcesPage() {
   const [connectorTypes, setConnectorTypes] = useState<ConnectorType[]>([])
   const [resources, setResources] = useState<Resource[]>([])
   const [addingType, setAddingType] = useState<string | null>(null)
-  const [params, setParams] = useState<Record<string, string>>({})
   const [testResults, setTestResults] = useState<Record<string, TestResult>>({})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -896,19 +921,21 @@ export default function RealmResourcesPage() {
     save(updated)
   }
 
-  const addResource = async () => {
+  // One path for a new resource and for a changed one: a Realm holds one
+  // resource of a type, so saving a type replaces whatever stood there.
+  const saveResource = async (values: ResourceValues) => {
     if (!addingType) return
-    const ct = connectorTypes.find(c => c.type === addingType)
-    if (!ct) return
-    const newResource: Resource = { type: addingType }
-    for (const [k, v] of Object.entries(ct.params_schema)) {
-      newResource[k] = params[k] ?? (v.default !== undefined ? String(v.default) : '')
-    }
-    const updated = [...resources.filter(r => r.type !== addingType), newResource]
+    // What the stored resource holds beyond the fields of its type is kept:
+    // the form shows the type's fields and is not the whole of the record.
+    const stored = resources.find(r => r.type === addingType) ?? {}
+    const updated = [...resources.filter(r => r.type !== addingType), { ...stored, ...values, type: addingType }]
     await save(updated)
     setAddingType(null)
-    setParams({})
   }
+
+  const typeLabel = (type: string) =>
+    TYPE_LABEL[type] ? t(TYPE_LABEL[type]) : (connectorTypes.find(c => c.type === type)?.label ?? type)
+  const elsewhere = activeRealm?.leaves_this_machine ?? []
 
   const testResource = async (type: string) => {
     if (!activeRealmId) return
@@ -990,6 +1017,15 @@ export default function RealmResourcesPage() {
         </div>
       </div>
 
+      {/* Said once, above everything, and with the addresses: a mark on one
+          tile among five does not say that a run sends its texts there. */}
+      {elsewhere.length > 0 && (
+        <div className="plain-note warn" data-testid="leaves-this-machine">
+          {t('realmResourcesPage.leavesThisMachine')}
+          {elsewhere.map(e => <span key={e.type} className="addr">{typeLabel(e.type)}: {e.address}</span>)}
+        </div>
+      )}
+
       <div className="section-rule flush">
         <h2 className="section-title">{t('realmResourcesPage.resourcesHeading')}</h2>
         <span className="section-meta">{t('realmResourcesPage.resourcesNote')}</span>
@@ -1005,15 +1041,20 @@ export default function RealmResourcesPage() {
       {resources.map((r, idx) => {
         const tr = testResults[r.type]
         const Icon = RESOURCE_ICONS[r.type] ?? Server
-        const entries = Object.entries(r).filter(([k]) => k !== 'type')
+        // A field left empty says nothing about the resource, and a tile of
+        // empty fields hides the two that do.
+        const entries = Object.entries(r).filter(([k, v]) => k !== 'type' && v !== '' && v !== null)
         return (
           <div key={r.type} className="res-tile">
             <div className="resource-card-head">
               <div className="resource-card-title">
                 <span className="resource-icon"><Icon size={16} /></span>
-                <strong className="resource-card-name">
-                  {connectorTypes.find(c => c.type === r.type)?.label ?? r.type}
-                </strong>
+                <strong className="resource-card-name">{typeLabel(r.type)}</strong>
+                {PLACED_TYPES.includes(r.type) && (r.type !== 'openai_compatible' || Boolean(r.base_url)) && (
+                  elsewhere.some(e => e.type === r.type)
+                    ? <span className="badge badge-warn">{t('realmResourcesPage.place.external')}</span>
+                    : <span className="badge badge-success">{t('realmResourcesPage.place.local')}</span>
+                )}
                 {/* The state sits beside the name rather than only in the
                     check result below: a tile is read for "is it alive", and
                     that should not require reading to the end. */}
@@ -1027,6 +1068,9 @@ export default function RealmResourcesPage() {
               <div className="flex-row res-tile-actions">
                 <button className="btn-sm" onClick={() => testResource(r.type)}>
                   <Zap size={12} className="btn-icon" />{t('realmResourcesPage.testShort')}
+                </button>
+                <button className="btn-sm" onClick={() => setAddingType(r.type)} title={t('realmResourcesPage.editResource')}>
+                  <Pencil size={13} />
                 </button>
                 <button className="btn-sm btn-danger" onClick={() => removeResource(idx)} title={t('realmResourcesPage.deleteResource')}>
                   <Trash2 size={13} />
@@ -1086,26 +1130,22 @@ export default function RealmResourcesPage() {
         <div className="section">
           <div className="section-rule flush">
             <h2 className="section-title">
-            {t('realmResourcesPage.addResourceHeading', { label: connectorTypes.find(c => c.type === addingType)?.label })}
-          </h2>
+              {resources.some(r => r.type === addingType)
+                ? t('realmResourcesPage.editResourceHeading', { label: typeLabel(addingType) })
+                : t('realmResourcesPage.addResourceHeading', { label: typeLabel(addingType) })}
+            </h2>
           </div>
-          {selectedCt && Object.entries(selectedCt.params_schema).map(([k, schema]) => (
-            <div key={k} className="form-group">
-              <label>{k}</label>
-              <input
-                className="form-input"
-                value={params[k] ?? String(schema.default ?? '')}
-                onChange={e => setParams(p => ({ ...p, [k]: e.target.value }))}
-                type={schema.type === 'integer' ? 'number' : k === 'password' ? 'password' : 'text'}
-              />
-            </div>
-          ))}
-          <div className="flex-row res-actions">
-            <button className="btn-primary" onClick={addResource} disabled={saving}>{t('realmResourcesPage.save')}</button>
-            <button className="btn" onClick={() => { setAddingType(null); setParams({}) }}>
-              {t('realmResourcesPage.cancel')}
-            </button>
-          </div>
+          {selectedCt && (
+            <ResourceForm
+              key={addingType}
+              schema={selectedCt.params_schema}
+              initial={resources.find(r => r.type === addingType)}
+              saving={saving}
+              note={addingType === 'openai_compatible' ? t('realmResourcesPage.notTriedWithHosted') : undefined}
+              onSave={saveResource}
+              onCancel={() => setAddingType(null)}
+            />
+          )}
         </div>
       ) : (
         <div className="resource-add-row">
@@ -1117,13 +1157,17 @@ export default function RealmResourcesPage() {
                 <button key={ct.type} className="btn" onClick={() => setAddingType(ct.type)}>
                   <Plus size={13} className="btn-icon" />
                   <AddIcon size={14} className="btn-icon bare" />
-                  {ct.label}
+                  {typeLabel(ct.type)}
                 </button>
               )
             })}
         </div>
       )}
 
+      <JudgeSetting
+        realmId={activeRealmId}
+        servers={resources.map(r => r.type).filter(type => MODEL_SERVERS.includes(type))}
+      />
       <RagEndpointsSection activeRealmId={activeRealmId} />
       <ToolsSection />
     </div>

@@ -15,6 +15,9 @@ import RunPrescription from '../components/RunPrescription'
 import RunCharts from '../components/RunCharts'
 import PipelineDiagram from '../components/PipelineDiagram'
 import FeedbackTriagePanel from '../components/FeedbackTriagePanel'
+import RetrievalStages from '../components/RetrievalStages'
+import AnswerStatements from '../components/AnswerStatements'
+import RunServedBy from '../components/RunServedBy'
 import { useRealm, useRealmPath } from '../context/RealmContext'
 import { useStopExperiment } from '../hooks/useStopExperiment'
 
@@ -455,8 +458,10 @@ function ConfirmGroundTruthControl({ runId, questionId, referenceAnswer, sourceD
   )
 }
 
-function QuestionRow({ runId, qr, feedback, sourceDatasetName, corpusId, external }: {
+function QuestionRow({ runId, qr, feedback, sourceDatasetName, corpusId, external, clearedAt }: {
   runId: string; qr: QuestionResult; feedback?: Feedback; sourceDatasetName: string; corpusId: string
+  // When the run's intermediate lists were removed, if they were.
+  clearedAt?: string
   // Only affects how latency is labelled: for a call to somebody else's
   // system the trace measures the handover, not their work.
   external: boolean
@@ -497,6 +502,7 @@ function QuestionRow({ runId, qr, feedback, sourceDatasetName, corpusId, externa
             {t(causeBadge.label)}
           </span>
         )}
+        {qr.scope === 'global' && <span className="badge badge-info">{t('runPage.questionRow.wholeCorpus')}</span>}
         <span className="qrow-text">{qr.question}</span>
         {leadMetric && (
           <span className="qrow-score" title={metricLabel(leadMetric[0])}>
@@ -550,6 +556,11 @@ function QuestionRow({ runId, qr, feedback, sourceDatasetName, corpusId, externa
           />
         </div>
       </div>
+
+      {/* What the answer had to say comes before where its sources went:
+          the first is the verdict on the answer, the second explains it. */}
+      <AnswerStatements verdicts={qr.assertion_verdicts ?? []} wholeCorpus={qr.scope === 'global'} />
+      <RetrievalStages qr={qr} clearedAt={clearedAt} />
 
       {qr.stage_trace && (
         <div className="qrow-full">
@@ -1171,6 +1182,7 @@ export default function RunPage() {
             ))}
           </dl>
         </div>
+        <RunServedBy run={data} />
       </>
       )}
 
@@ -1227,7 +1239,7 @@ export default function RunPage() {
             <QuestionRow
               key={qr.question_id} runId={data.run_id} qr={qr} feedback={feedbackMap?.[qr.question_id]}
               sourceDatasetName={runDatasetName} corpusId={data.config?.corpus_id || ''}
-              external={isExternal}
+              external={isExternal} clearedAt={data.debug_cleared_at || undefined}
             />
           ))
         )}

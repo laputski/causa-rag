@@ -265,8 +265,8 @@ function AiDraftPanel({ onDraft }: {
   const [corpusId, setCorpusId] = useState('')
 
   const { data: models = [] } = useQuery({
-    queryKey: ['models', 'completion'],
-    queryFn: () => api.models(true),
+    queryKey: ['models', 'completion', activeRealmId],
+    queryFn: () => api.models(true, activeRealmId),
     enabled: open,
   })
   const { data: corpusCollections = [] } = useQuery({

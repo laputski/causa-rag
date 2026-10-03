@@ -42,6 +42,7 @@ vi.mock('../api/client', () => ({
   },
   referenceAnswerOf: (q: { reference_answer?: string; ground_truth?: string } | undefined) =>
     q?.reference_answer ?? q?.ground_truth ?? '',
+  datasetKeyOf: (set: { id?: string | null; filename: string }) => set.id || set.filename,
 }))
 
 // POST /generate/questions now only starts a background job (see
@@ -460,17 +461,18 @@ describe('DatasetsPage generator', () => {
 
     const editor = screen.getByTestId('type-counts-editor')
     const addTypeButton = within(editor).getByText('+ add type')
-    // 5 known types total; the first row starts on "closed" — 4 more adds
+    // 6 known types total; the first row starts on "closed" — 5 more adds
     // exhaust the list.
     fireEvent.click(addTypeButton)
     fireEvent.click(addTypeButton)
     fireEvent.click(addTypeButton)
     fireEvent.click(addTypeButton)
+    fireEvent.click(addTypeButton)
 
-    expect(within(editor).getAllByRole('combobox')).toHaveLength(5)
+    expect(within(editor).getAllByRole('combobox')).toHaveLength(6)
     await waitFor(() => expect(addTypeButton).toBeDisabled())
 
-    // Row 0 ("closed") must not offer any type already used by rows 1-4.
+    // Row 0 ("closed") must not offer any type already used by rows 1-5.
     const firstRowOptions = within(editor).getAllByRole('combobox')[0]
       .querySelectorAll('option')
     expect(firstRowOptions).toHaveLength(1)

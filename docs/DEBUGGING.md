@@ -896,3 +896,65 @@ corpus, so each reader asks it; the chat embeds its questions with the same
 one, and refuses when the Realm's resource has since named another model.
 **Guard:** `tests/unit/test_a_corpus_is_read_with_the_embedder_that_filled_it.py`,
 which reads each reader's source.
+
+## 44. A set that arrived by import could not be edited, and nothing said so
+
+**Symptom:** the line with a set's composition did not appear above the
+questions of a seeded Realm, with no error on the page. The same set took an
+edit of a question without complaint and kept the old text.
+
+**Found by:** opening the control questions of an imported Realm in the
+browser, to look at a new block. **Root cause:** only the route that creates
+a set mints its `id`. A set written by a Realm import has none, the detail
+view returned `id: null`, and every call that addresses a set, the edit of a
+question among them, went to `/datasets/null/...` and got a 404 the page did
+not show. Three of ten sets on the installation it was found on were in that
+state. **Fix:** a set without an id is addressed by its file name within the
+Realm named in the same request, for reading, for writing and for deleting;
+the file name alone addresses nothing, since two Realms may each hold a set
+of one name. Nothing stored is changed. **Guard:**
+`tests/unit/test_a_set_without_an_id_is_still_addressable.py`, and on the
+page `ui/src/test/DatasetsPage.statements.test.tsx`.
+
+## 45. A run made before its services were recorded looked like one made by a judge alone
+
+**Symptom:** the block naming what ran a run showed one row, the judge, for a
+run stored before generators and stores were recorded.
+
+**Found by:** opening such a run in the browser. **Root cause:** the note
+"this run did not record its services" was shown only when the table would be
+empty, and the judge is recorded separately and earlier. **Fix:** the note is
+shown whenever the run carries no record of its services. **Guard:**
+`ui/src/test/RunServedBy.test.tsx`.
+
+## 46. A graph server that lacked nothing was reported as "[object Object]"
+
+**Symptom:** the result of testing a graph resource ended with
+`unavailable_operations [object Object]`, for a server that had every library.
+
+**Found by:** pressing Test on a healthy resource in the browser. **Root
+cause:** the check answers with a mapping from a missing library to the
+operations it takes away, and the panel printed every value that is not a
+list as text. **Fix:** a mapping is shown as a list of "library: operations",
+and an empty one as empty. **Guard:**
+`ui/src/test/RealmResourcesPage.remote.test.tsx`.
+
+## 47. No page named its Realm when it asked for models
+
+**Symptom:** none on an installation with one model server. In a Realm whose
+models are served elsewhere, the chat, the drafting of questions, the drafting
+of prompts and the form of a new run each offered the gateway's local models.
+
+**Found by:** checking a sentence of an approved screen against the form it
+described. **Root cause:** incident 38 made the listing answer for a Realm,
+and no caller in the interface passed one, so the fix was reachable only by
+hand. The form of a new run had the same shape one level up: it sent the
+generator and the embedder as fixed names, so a run with the Realm's own
+server could be started through the API and not from the form. **Fix:** every
+caller names its Realm; the form offers the generators and embedders the
+registry holds, asks the chosen generator's server for its models, and says
+when the Realm has no such server or the corpus was loaded with another
+embedder. A hosted server that cannot be asked now offers no model, where it
+used to offer the local default's name. **Guard:**
+`ui/src/test/NewExperimentPage.generator.test.tsx` and
+`tests/unit/test_the_models_listed_are_the_realm_s_server_s.py`.

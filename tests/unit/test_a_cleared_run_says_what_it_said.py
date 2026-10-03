@@ -98,7 +98,13 @@ def test_every_conclusion_drawn_from_the_windows_survives_their_removal(client, 
     for key in _CONCLUDED:
         assert after[key] == before[key], key
     for mine, theirs in zip(before["question_results"], after["question_results"], strict=True):
-        assert theirs["stages"] == mine["stages"]
+        # The same ranks and the same stage of loss. Which fragments each
+        # stage held went with the lists, and the summary says so by naming none.
+        assert theirs["stages"]["lost_at"] == mine["stages"]["lost_at"]
+        assert [(s["stage"], s["rank"], s["size"]) for s in theirs["stages"]["stages"]] == \
+            [(s["stage"], s["rank"], s["size"]) for s in mine["stages"]["stages"]]
+        assert all("ids" not in s for s in theirs["stages"]["stages"]) and theirs["stages"]["needed"] == []
+        assert any(s["ids"] for s in mine["stages"]["stages"])
         assert theirs["funnel"] == mine["funnel"]
 
 

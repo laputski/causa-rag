@@ -11,6 +11,9 @@ interface Realm {
   purpose?: string
   description?: string
   resources: unknown[]
+  /** The resources that are not on this machine, decided by the server from
+   *  their addresses. They receive what the Realm's runs send them. */
+  leaves_this_machine?: { type: string; address: string }[]
   /** The realm's key metrics: one list governing both the run table's columns
    *  and the number band on the run screen. */
   key_metrics?: string[]

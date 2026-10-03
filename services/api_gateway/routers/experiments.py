@@ -818,6 +818,11 @@ def _without_windows(payload: dict[str, Any]) -> dict[str, Any]:
         for qr in payload.get("question_results") or []]}
 
 
+def _without_fragment_lists(stages: dict[str, Any]) -> dict[str, Any]:
+    return {**stages, "needed": [],
+            "stages": [{k: v for k, v in stage.items() if k != "ids"} for stage in stages.get("stages") or []]}
+
+
 def _freeze(payload: dict[str, Any]) -> dict[str, Any]:
     """What a run's windows show, kept for when they are gone.
 
@@ -834,7 +839,10 @@ def _freeze(payload: dict[str, Any]) -> dict[str, Any]:
         "findings": [d for d in whole["diagnostics"] if d not in bare["diagnostics"]],
         "suppress": sorted({d["id"] for d in bare["diagnostics"]
                             if d not in whole["diagnostics"]}),
-        "stages": whole["stages"],
+        # Where the needed source was, without which fragments each stage
+        # held: the lists are what is being cleared, and a summary that kept
+        # their identifiers would keep a third of their weight.
+        "stages": [_without_fragment_lists(stages) for stages in whole["stages"]],
         "trace_gaps": whole["trace_gaps"],
         "diagnosis_depth": whole["diagnosis_depth"],
         "context_size_advice": whole["context_size_advice"],

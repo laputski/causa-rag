@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from fastapi import APIRouter
@@ -87,11 +87,16 @@ async def set_active_model(body: ModelSelectRequest, realm_id: str | None = None
 
 
 @router.get("/models")
-async def list_models(completion_only: bool = False, realm_id: str | None = None) -> list[dict[str, Any]]:
+async def list_models(completion_only: bool = False, realm_id: str | None = None,
+                      provider: str | None = None) -> list[dict[str, Any]]:
     """The models the Realm's own server offers
     (services/api_gateway/model_servers.py), or the gateway's local server's
     when no Realm is named. It was the gateway's for everyone, so a Realm
-    served elsewhere was offered models it could not run."""
+    served elsewhere was offered models it could not run.
+
+    `provider` names which of the Realm's servers to ask, for a Realm that
+    declares more than one; unnamed, the rule every other caller follows
+    decides."""
     # `completion_only` — the question generator (services/api_gateway/
     # routers/generation.py) needs to offer only models that can actually
     # generate text, not the embedding models Ollama also serves locally
@@ -107,7 +112,7 @@ async def list_models(completion_only: bool = False, realm_id: str | None = None
     )
 
     resources = await model_resources(realm_id)
-    provider = provider_of(resources)
+    provider = provider_of(resources, provider)
     try:
         generator = generator_for(resources, provider=provider)
         if provider == OPENAI_COMPATIBLE:
@@ -135,6 +140,10 @@ async def list_models(completion_only: bool = False, realm_id: str | None = None
                 models = [m for m in models if "completion" in m["capabilities"]]
             return models
     except Exception as e:
+        if provider == OPENAI_COMPATIBLE:
+            # The name below is the local default's. A hosted server that
+            # could not be asked offers nothing, which is what is known.
+            return []
         return [{"name": os.getenv("OLLAMA_MODEL", "qwen3:8b"), "size_gb": 0, "error": str(e)}]
 
 
@@ -154,8 +163,10 @@ class DebugRetentionRequest(BaseModel):
 async def get_debug_retention() -> dict[str, Any]:
     from dataclasses import asdict
 
-    from services.api_gateway.run_retention import retention
-    return asdict(await retention())
+    from services.api_gateway.run_retention import enabled, retention
+    # Whether the pass runs by itself on this installation, beside the rule:
+    # a rule that is saved and never applied reads as one that is in force.
+    return {**asdict(await retention()), "automatic": enabled()}
 
 
 @router.put("/settings/debug-retention")
@@ -171,3 +182,33 @@ async def preview_debug_retention() -> dict[str, Any]:
     """What the next pass would clear, without clearing it."""
     from services.api_gateway.run_retention import prune
     return await prune(write=False)
+
+
+# ── Who judges answers against their statements ──────────────────────────────
+
+class JudgeRequest(BaseModel):
+    """Which of the Realm's model servers judges, and with which model.
+
+    An empty provider leaves the choice to the rule every other caller follows
+    (services/api_gateway/model_servers.py); an empty model means the
+    platform's default, which exists on the local server only.
+    """
+
+    provider: Literal["", "ollama", "openai_compatible"] = ""
+    model: str = ""
+
+
+@router.get("/settings/judge")
+async def get_judge(realm_id: str | None = None) -> dict[str, Any]:
+    from eval.judge_model import ASSERTION_JUDGE_MODEL
+    stored = (await _get_settings_doc(realm_id)).get("judge") or {}
+    return {"provider": stored.get("provider") or "", "model": stored.get("model") or "",
+            "default_model": ASSERTION_JUDGE_MODEL}
+
+
+@router.put("/settings/judge")
+async def set_judge(body: JudgeRequest, realm_id: str | None = None) -> dict[str, Any]:
+    settings = await _get_settings_doc(realm_id)
+    settings["judge"] = body.model_dump()
+    await _save_settings(settings, realm_id)
+    return body.model_dump()

@@ -110,3 +110,30 @@ def test_the_run_page_payload_carries_each_question_s_stages() -> None:
     questions = [{"expected_refs": ["base/07"], "dense_source_refs": [gold], "source_refs": []}]
     stages = _conclusions({"config": {}, "question_results": questions})["stages"]
     assert stages[0]["lost_at"] == "fusion"
+
+
+# ── What a table of fragments by stage is drawn from ─────────────────────────
+
+def test_a_stage_names_its_fragments_in_order() -> None:
+    """The page draws a table of fragments by stage. Which list a stage is
+    was decided here, so the stage says which fragments it holds; a page
+    working that out again from the lists would be a second definition."""
+    gold, a, b = _ref(1, "07"), _ref(2, "other"), _ref(3, "other")
+    result = stages_of({"expected_refs": ["base/07"], "dense_source_refs": [a, gold],
+                        "sparse_source_refs": [b], "source_refs": [a, b]})
+    by_stage = {s["stage"]: s["ids"] for s in result["stages"]}
+    assert by_stage["dense"] == ["other-2", "07-1"]
+    assert by_stage["sparse"] == ["other-3"]
+    assert by_stage["fusion"] == by_stage["context"] == ["other-2", "other-3"]
+
+
+def test_the_fragments_a_question_needs_are_named() -> None:
+    gold, twin, other = _ref(1, "07"), _ref(4, "07"), _ref(2, "other")
+    result = stages_of({"expected_refs": ["base/07"], "dense_source_refs": [other, gold],
+                        "sparse_source_refs": [twin], "source_refs": [other]})
+    assert result["needed"] == ["07-1", "07-4"]
+
+
+def test_a_question_about_the_whole_corpus_names_no_needed_fragment() -> None:
+    result = stages_of({"scope": "global", "expected_refs": ["base/07"], "source_refs": [_ref(1, "07")]})
+    assert result["needed"] == []

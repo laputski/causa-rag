@@ -61,6 +61,13 @@ export const METRIC_META: Record<string, MetricMeta> = {
     get hint() { return i18n.t('metricMeta.preRerankRecallAtK.hint') },
     noiseThreshold: 0.05,
   },
+  assertion_coverage: {
+    // Named in the reader's language: unlike its neighbours this one has no
+    // established English name a reader would look up.
+    get label() { return i18n.t('metricMeta.assertionCoverage.label') },
+    get hint() { return i18n.t('metricMeta.assertionCoverage.hint') },
+    noiseThreshold: 0.05,
+  },
   kept_through_fusion: {
     label: 'Kept Through Fusion',
     get hint() { return i18n.t('metricMeta.keptThroughFusion.hint') },

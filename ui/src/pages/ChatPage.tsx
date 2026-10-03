@@ -124,8 +124,10 @@ export default function ChatPage() {
   // core/experiment/config.py#ExperimentConfig.pipeline_id.
   const [pipelineId, setPipelineId] = useState('naive')
 
-  const { data: models = [] } = useQuery({ queryKey: ['models'], queryFn: () => api.models(), staleTime: 30000 })
   const { activeRealmId } = useRealm()
+  const { data: models = [] } = useQuery({
+    queryKey: ['models', activeRealmId], queryFn: () => api.models(false, activeRealmId), staleTime: 30000,
+  })
 
   const { data: settings } = useQuery({
     queryKey: ['settings', activeRealmId],

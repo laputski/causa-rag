@@ -113,23 +113,19 @@ function buildConfig(form: Record<string, string>, pipelines: Record<string, Pip
 
   const cfg: Record<string, unknown> = {
     name: form.name || 'experiment',
-    // Never varied from this form, and the reason has narrowed twice. Of the
-    // four fields sent as fixed literals here, only `chunking_strategy` is
-    // still read by nothing: a corpus is cut at load time and a run reads
-    // what the cut produced. `embedder`, `generator` and `seed` are applied
-    // now, so each of them is a control this form could honestly offer, and
-    // each is a screen that has to be designed before it is written. Until
-    // then this sends what the gateway registers, and says so, rather than
-    // claiming nothing reads them.
+    // Two of the four fields below are sent as fixed literals. Nothing reads
+    // `chunking_strategy`: a corpus is cut at load time and a run reads what
+    // the cut produced. `seed` is applied and has no control yet. `embedder`
+    // and `generator` are chosen in the form, from what the registry holds.
     seed: 42,
     chunking_strategy: { kind: 'chunker', component_id: 'fixed' },
-    embedder: { kind: 'embedder', component_id: 'bge_m3' },
+    embedder: { kind: 'embedder', component_id: form.embedder || 'bge_m3' },
     // Read from what the server holds under this pipeline id, never derived
     // from the id itself: the old expression named a dense retriever for
     // every pipeline but the graph one, so a hybrid run was recorded as
     // dense and any architecture registered later would be too.
     retrievers: [{ kind: 'retriever', component_id: pipelines[pipeline_id]?.retriever || 'qdrant_dense' }],
-    generator: { kind: 'generator', component_id: 'ollama' },
+    generator: { kind: 'generator', component_id: form.generator || 'ollama' },
     top_k: parseInt(form.top_k || '5', 10),
     pipeline_id,
     // Inert: services/api_gateway/routers/experiments.py's create_experiment
@@ -307,6 +303,9 @@ const DEFAULT_FORM: Record<string, string> = {
   // not 'naive', so existing muscle memory / comparisons against older runs
   // don't shift just because 'naive' became reachable.
   retrievalType: 'hybrid_rrf',
+  // Which generator and which embedder: the local ones unless another is
+  // picked, so a run started without touching them is the run it always was.
+  generator: 'ollama', embedder: 'bge_m3',
   // These remain genuinely optional — empty here means the step is omitted
   // from the config entirely (buildConfig's `if (form.x) cfg.x = ...`), not
   // "use some hidden default", so "— none —" stays accurate.
@@ -341,7 +340,7 @@ const DEFAULT_FORM: Record<string, string> = {
 export default function NewExperimentPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { activeRealmId } = useRealm()
+  const { activeRealmId, activeRealm } = useRealm()
   const toRealm = useRealmPath()
   const [form, setForm] = useState<Record<string, string>>(DEFAULT_FORM)
   const [activePreset, setActivePreset] = useState<string | null>(null)
@@ -402,7 +401,27 @@ export default function NewExperimentPage() {
   // params.model key (buildConfig merges it in) — an external RAG already
   // read params["model"] itself, this just gives in_process
   // runs the identical, working lever instead of a second field shape.
-  const { data: models = [] } = useQuery({ queryKey: ['models', 'completion'], queryFn: () => api.models(true) })
+  // Asked of the server the chosen generator calls, in this Realm: the list
+  // used to come from the gateway's local server whatever was chosen.
+  const { data: models = [] } = useQuery({
+    queryKey: ['models', 'completion', activeRealmId, form.generator],
+    queryFn: () => api.models(true, activeRealmId, form.generator),
+  })
+  // The embedder that filled the chosen corpus, as its registry entry
+  // records it, named as the registry names embedders. A run with another
+  // one reads a collection nobody filled.
+  const recordedEmbedder = String(
+    corpusCollections.find(c => c.corpus_id === form.corpus_id)?.backends?.qdrant?.embedder_id ?? '',
+  )
+  const corpusEmbedder = (registry?.embedder ?? []).find(
+    id => recordedEmbedder === id || recordedEmbedder.startsWith(`${id}__`),
+  )
+  // The registry is one for the gateway and says what can be built; whether
+  // this Realm has a server for it is the Realm's resource. A run that names
+  // a server the Realm does not have fails on every question, so the form
+  // says it before the run does.
+  const apiServer = ((activeRealm?.resources ?? []) as { type?: string; embedding_model?: unknown }[])
+    .find(r => r.type === 'openai_compatible')
   const isHttp = form.pipeline_source === 'http'
   // Only to warn that a chosen external RAG declared no retrieve_endpoint,
   // in which case the platform quietly runs the full generation path.
@@ -473,6 +492,8 @@ export default function NewExperimentPage() {
       // adapter literal — see the design notes#Live levers.
       model: sourceRun.generator_model || (cfg.params?.model as string | undefined) || '',
       retrievalType: cfg.pipeline_id || f.retrievalType,
+      generator: cfg.generator?.component_id || f.generator,
+      embedder: cfg.embedder?.component_id || f.embedder,
       reranker: cfg.reranker?.component_id || '',
       top_k: cfg.top_k != null ? String(cfg.top_k) : f.top_k,
       corpus_id: cfg.corpus_id || f.corpus_id,
@@ -495,6 +516,10 @@ export default function NewExperimentPage() {
 
   const set = (key: string) => (e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>) =>
     setForm(prev => ({ ...prev, [key]: e.target.value }))
+  // A model belongs to the server that offers it, so choosing another
+  // generator drops the model chosen for the previous one.
+  const pick = (key: string) => (e: React.ChangeEvent<HTMLSelectElement>) =>
+    setForm(prev => ({ ...prev, [key]: e.target.value, ...(key === 'generator' ? { model: '' } : {}) }))
 
   // Fields a preset fully determines — reset to baseline before applying so
   // a value left over from a PREVIOUS preset (e.g. retrievalType: 'graph'
@@ -536,10 +561,10 @@ export default function NewExperimentPage() {
     }
   }
 
-  const sel = (key: string, kind: string, label: string, dim = false, optional = false) => (
+  const sel = (key: string, kind: string, label: string, dim = false, optional = false, note?: React.ReactNode) => (
     <div className="form-group" style={dim ? { opacity: 0.4, pointerEvents: 'none' } : undefined}>
       <label htmlFor={key}>{label}</label>
-      <SelectBox id={key} value={form[key]} onChange={set(key)} disabled={regLoading}>
+      <SelectBox id={key} value={form[key]} onChange={pick(key)} disabled={regLoading}>
         {/* Optional steps: empty really means "step omitted from config" —
             "— none —" is accurate. Required steps: pre-selected in
             DEFAULT_FORM with the same literal buildConfig() falls back to,
@@ -550,6 +575,7 @@ export default function NewExperimentPage() {
           <option key={id} value={id}>{id}</option>
         ))}
       </SelectBox>
+      {note}
     </div>
   )
 
@@ -771,6 +797,12 @@ export default function NewExperimentPage() {
               reranker_id — same wiring as corpus_id/pipeline_id. Grounding/
               Routing stay dimmed: reference_rag_server has no equivalent for
               them, and _build_pipeline's http branch never reads them. */}
+          {sel('generator', 'generator', t('newExperimentPage.form.generatorLabel'), isHttp, false,
+            !isHttp && form.generator === 'openai_compatible' && !apiServer && (
+              <p className="field-hint warn" data-testid="generator-no-server">
+                {t('newExperimentPage.form.noApiServer')}
+              </p>
+            ))}
           <div className="form-group">
             <label htmlFor="model">{t('newExperimentPage.form.modelLabel')}</label>
             <SelectBox id="model" value={form.model} onChange={set('model')}>
@@ -783,6 +815,21 @@ export default function NewExperimentPage() {
               </p>
             )}
           </div>
+          {sel('embedder', 'embedder', t('newExperimentPage.form.embedderLabel'), isHttp, false,
+            !isHttp && (
+              <>
+                {corpusEmbedder && corpusEmbedder !== form.embedder && (
+                  <p className="field-hint warn" data-testid="embedder-mismatch">
+                    {t('newExperimentPage.form.embedderMismatch', { embedder: corpusEmbedder })}
+                  </p>
+                )}
+                {form.embedder === 'openai_compatible' && !apiServer?.embedding_model && (
+                  <p className="field-hint warn" data-testid="embedder-no-model">
+                    {t('newExperimentPage.form.noEmbeddingModel')}
+                  </p>
+                )}
+              </>
+            ))}
           {sel('reranker',  'reranker', t('newExperimentPage.form.rerankerLabel'), false, true)}
           {sel('grounding', 'grounder', t('newExperimentPage.form.groundingLabel'), isHttp, true)}
           {sel('routing', 'route_policy', t('newExperimentPage.form.routingLabel'), isHttp, true)}

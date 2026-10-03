@@ -1,14 +1,36 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
-import { api, Dataset, DatasetDetail, Question, QuestionWrite, referenceAnswerOf } from '../api/client'
+import { api, Dataset, DatasetDetail, Question, QuestionWrite, datasetKeyOf, referenceAnswerOf } from '../api/client'
 import { useRealm, useRealmPath } from '../context/RealmContext'
 import { useConfirm } from '../components/ConfirmDialog'
+import DatasetComposition from '../components/DatasetComposition'
 import { CheckCircle2, Database, Sparkles, X } from 'lucide-react'
 
-const KNOWN_QUESTION_TYPES = ['closed', 'open', 'clarifying', 'comparative', 'navigational']
+const KNOWN_QUESTION_TYPES = ['closed', 'open', 'clarifying', 'comparative', 'navigational', 'global']
+// A type's name as a reader meets it. The value sent to the server stays the
+// identifier; a type somebody typed by hand has no entry and is shown as typed.
+const QUESTION_TYPE_LABEL: Record<string, string> = {
+  closed: 'datasetsPage.questionType.closed',
+  open: 'datasetsPage.questionType.open',
+  clarifying: 'datasetsPage.questionType.clarifying',
+  comparative: 'datasetsPage.questionType.comparative',
+  navigational: 'datasetsPage.questionType.navigational',
+  global: 'datasetsPage.questionType.global',
+}
+// The same types as a generator counts them: several of a kind.
+const QUESTION_TYPES_LABEL: Record<string, string> = {
+  closed: 'datasetsPage.generator.type.closed',
+  open: 'datasetsPage.generator.type.open',
+  clarifying: 'datasetsPage.generator.type.clarifying',
+  comparative: 'datasetsPage.generator.type.comparative',
+  navigational: 'datasetsPage.generator.type.navigational',
+  global: 'datasetsPage.generator.type.global',
+}
+const typeLabel = (type: string, t: TFunction) => QUESTION_TYPE_LABEL[type] ? t(QUESTION_TYPE_LABEL[type]) : type
+const typesLabel = (type: string, t: TFunction) => QUESTION_TYPES_LABEL[type] ? t(QUESTION_TYPES_LABEL[type]) : type
 const CUSTOM_TYPE = '__custom__'
 const CUSTOM_CORPUS = '__custom_corpus__'
 
@@ -86,7 +108,7 @@ export default function DatasetsPage() {
   })
 
   const deleteDatasetMut = useMutation({
-    mutationFn: () => api.datasets.delete(detail!.id!, activeRealmId),
+    mutationFn: () => api.datasets.delete(datasetKeyOf(detail!), activeRealmId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['datasets'] })
       setSelectedFilename(null)
@@ -95,20 +117,20 @@ export default function DatasetsPage() {
   })
 
   const addQuestionMut = useMutation({
-    mutationFn: (q: QuestionWrite) => api.datasets.addQuestion(detail!.id!, q, activeRealmId),
+    mutationFn: (q: QuestionWrite) => api.datasets.addQuestion(datasetKeyOf(detail!), q, activeRealmId),
     onSuccess: setDetail,
   })
   const updateQuestionMut = useMutation({
     mutationFn: ({ questionId, q }: { questionId: string; q: QuestionWrite }) =>
-      api.datasets.updateQuestion(detail!.id!, questionId, q, activeRealmId),
+      api.datasets.updateQuestion(datasetKeyOf(detail!), questionId, q, activeRealmId),
     onSuccess: setDetail,
   })
   const deleteQuestionMut = useMutation({
-    mutationFn: (questionId: string) => api.datasets.deleteQuestion(detail!.id!, questionId, activeRealmId),
+    mutationFn: (questionId: string) => api.datasets.deleteQuestion(datasetKeyOf(detail!), questionId, activeRealmId),
     onSuccess: setDetail,
   })
   const addBatchMut = useMutation({
-    mutationFn: (qs: QuestionWrite[]) => api.datasets.addQuestionsBatch(detail!.id!, qs, activeRealmId),
+    mutationFn: (qs: QuestionWrite[]) => api.datasets.addQuestionsBatch(datasetKeyOf(detail!), qs, activeRealmId),
     onSuccess: (d: DatasetDetail) => {
       setDetail(d)
       // The sidebar's own "N questions" count comes from the separate
@@ -310,6 +332,13 @@ function DatasetDetailView({
     return () => clearTimeout(id)
   }, [justSaved])
 
+  // Everything the composition line counts, so that an edit of any of it
+  // asks the server again; the detail itself is replaced in place on a save.
+  const compositionSignature = useMemo(
+    () => detail.questions.map(q => `${q.scope ?? ''}:${(q.assertions ?? []).length}:${(q.article_refs ?? []).join(',')}`).join('|'),
+    [detail.questions],
+  )
+
   return (
     <div>
       <div className="flex-between ds-head">
@@ -342,6 +371,7 @@ function DatasetDetailView({
               </button>
             </div>
           )}
+          <DatasetComposition datasetId={datasetKeyOf(detail)} realmId={realmId} signature={compositionSignature} />
           <div className="table-toolbar">
             <input
               className="toolbar-search" type="search" value={search}
@@ -524,7 +554,15 @@ function QuestionRow({ question, onSave, onDelete }: {
         {/* The reference answer on a second line, muted: it belongs beside the
             question, but the question is what eyes scan the list for. */}
         <div className="q-answer">{referenceAnswerOf(question)}</div>
-        {question.question_type && <span className="badge badge-info">{question.question_type}</span>}
+        <span className="q-marks">
+          {question.question_type && <span className="badge badge-info">{typeLabel(question.question_type, t)}</span>}
+          {question.scope === 'global' && question.question_type !== 'global' && (
+            <span className="badge badge-info">{t('datasetsPage.scope.global')}</span>
+          )}
+          {(question.assertions ?? []).length > 0 && (
+            <span className="field-note">{t('datasetsPage.statements.count', { count: (question.assertions ?? []).length })}</span>
+          )}
+        </span>
       </td>
       <td className="q-refs">
         {(question.article_refs ?? []).length > 0
@@ -554,6 +592,8 @@ function QuestionForm({ initial, onSave, onCancel }: {
   const [referenceAnswer, setReferenceAnswer] = useState(referenceAnswerOf(initial))
   const [questionType, setQuestionType] = useState(initial?.question_type ?? '')
   const [articleRefs, setArticleRefs] = useState((initial?.article_refs ?? []).join(', '))
+  const [scope, setScope] = useState(initial?.scope === 'global' ? 'global' : 'local')
+  const [statements, setStatements] = useState<string[]>(initial?.assertions ?? [])
   const valid = question.trim().length > 0 && referenceAnswer.trim().length > 0
 
   const handleSave = () => {
@@ -562,6 +602,8 @@ function QuestionForm({ initial, onSave, onCancel }: {
       reference_answer: referenceAnswer.trim(),
       question_type: questionType.trim(),
       article_refs: articleRefs.split(',').map(s => s.trim()).filter(Boolean),
+      scope,
+      assertions: statements.map(s => s.trim()).filter(Boolean),
     })
   }
 
@@ -615,6 +657,44 @@ function QuestionForm({ initial, onSave, onCancel }: {
               here costs less than showing an empty metric after a run. */}
           <p className="hint-line">{t('datasetsPage.articleRefsHint')}</p>
         </div>
+        <div className="form-group">
+          <label htmlFor={`${uid}-scope`}>{t('datasetsPage.scope.label')}</label>
+          <select id={`${uid}-scope`} className="input" value={scope} onChange={e => setScope(e.target.value)}>
+            <option value="local">{t('datasetsPage.scope.local')}</option>
+            <option value="global">{t('datasetsPage.scope.global')}</option>
+          </select>
+          {scope === 'global' && <p className="hint-line">{t('datasetsPage.scope.globalHint')}</p>}
+        </div>
+        <div className="form-group form-span">
+          <label>{t('datasetsPage.statements.label')}</label>
+          <StatementsEditor value={statements} onChange={setStatements} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** What a right answer must contain, one statement to a line. A blank line
+ *  is dropped on save, so an added and untouched row costs nothing. */
+function StatementsEditor({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const { t } = useTranslation()
+  return (
+    <div className="stmt-edit" data-testid="statements-editor">
+      {value.map((statement, i) => (
+        <div key={i} className="stmt-edit-row">
+          <input
+            className="input" value={statement} aria-label={t('datasetsPage.statements.one', { n: i + 1 })}
+            onChange={e => onChange(value.map((s, idx) => (idx === i ? e.target.value : s)))}
+          />
+          <button type="button" className="btn-sm" onClick={() => onChange(value.filter((_, idx) => idx !== i))}>
+            {t('datasetsPage.statements.remove')}
+          </button>
+        </div>
+      ))}
+      <div>
+        <button type="button" className="btn-sm" onClick={() => onChange([...value, ''])}>
+          + {t('datasetsPage.statements.add')}
+        </button>
       </div>
     </div>
   )
@@ -651,7 +731,7 @@ function QuestionTypeSelect({ id, value, onChange }: { id: string; value: string
       }}
     >
       <option value="" disabled>{t('datasetsPage.selectPrompt')}</option>
-      {KNOWN_QUESTION_TYPES.map(qt => <option key={qt} value={qt}>{qt}</option>)}
+      {KNOWN_QUESTION_TYPES.map(qt => <option key={qt} value={qt}>{typeLabel(qt, t)}</option>)}
       <option value={CUSTOM_TYPE}>{t('datasetsPage.customTypeOption')}</option>
     </select>
   )
@@ -700,7 +780,7 @@ function TypeCountsEditor({ value, onChange, disabled }: {
               className="input" value={tc.question_type} disabled={disabled}
               onChange={e => update(i, { question_type: e.target.value })}
             >
-              {optionsForRow.map(qt => <option key={qt} value={qt}>{qt}</option>)}
+              {optionsForRow.map(qt => <option key={qt} value={qt}>{typesLabel(qt, t)}</option>)}
             </select>
             <input
               type="number" className="input tc-count" min={1} max={50}
@@ -788,10 +868,14 @@ function CorpusSelect({ id, value, onChange, collections, disabled }: {
 
 type Draft = QuestionWrite & { _key: string }
 
+// `missing` is set on the one entry that says how many questions of a type
+// could not even be started, for want of documents to write them from.
+type GenFailure = { reason: string; chunk_ids: string[]; missing?: number }
+
 type GenProgressEvent =
   | { type: 'start'; total: number }
   | { type: 'progress'; processed: number; total: number; generated: number; failed: number }
-  | { type: 'done'; drafts: (QuestionWrite & { id?: string })[]; failed: { reason: string; chunk_ids: string[] }[] }
+  | { type: 'done'; drafts: (QuestionWrite & { id?: string })[]; failed: GenFailure[] }
   | { type: 'error'; message?: string }
 
 /** Follows a generation job's progress WebSocket
@@ -803,7 +887,7 @@ type GenProgressEvent =
  * file for why). */
 function useGenerationProgress(
   jobId: string | null,
-  onDone: (drafts: (QuestionWrite & { id?: string })[], failed: { reason: string; chunk_ids: string[] }[]) => void,
+  onDone: (drafts: (QuestionWrite & { id?: string })[], failed: GenFailure[]) => void,
 ) {
   const { t } = useTranslation()
   const [event, setEvent] = useState<GenProgressEvent | null>(null)
@@ -837,8 +921,8 @@ function GeneratePanel({ realmId, existingCount, onSaveDrafts, onSaved }: {
 }) {
   const { t } = useTranslation()
   const { data: models = [] } = useQuery({
-    queryKey: ['models', 'completion'],
-    queryFn: () => api.models(true),
+    queryKey: ['models', 'completion', realmId],
+    queryFn: () => api.models(true, realmId),
   })
   const { data: corpusCollections = [] } = useQuery({
     queryKey: ['corpus-collections', realmId],
@@ -856,6 +940,7 @@ function GeneratePanel({ realmId, existingCount, onSaveDrafts, onSaved }: {
   const [presetId, setPresetId] = useState('')
   const [drafts, setDrafts] = useState<Draft[]>([])
   const [failedCount, setFailedCount] = useState(0)
+  const [notStarted, setNotStarted] = useState(0)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [jobId, setJobId] = useState<string | null>(null)
@@ -863,7 +948,11 @@ function GeneratePanel({ realmId, existingCount, onSaveDrafts, onSaved }: {
 
   const { event: progress, wsError } = useGenerationProgress(jobId, (newDrafts, failed) => {
     setDrafts(newDrafts.map((d, i) => ({ ...d, _key: `draft-${Date.now()}-${i}` })))
-    setFailedCount(failed.length)
+    // Two different shortfalls: a question the model was asked for and did
+    // not write, and one that was never asked for.
+    const unstarted = failed.filter(f => f.reason === 'not_enough_documents')
+    setFailedCount(failed.length - unstarted.length)
+    setNotStarted(unstarted.reduce((sum, f) => sum + (f.missing ?? 0), 0))
     setJobId(null)
   })
 
@@ -885,6 +974,7 @@ function GeneratePanel({ realmId, existingCount, onSaveDrafts, onSaved }: {
       setGenError(null)
       setSaveError(null)
       setFailedCount(0)
+      setNotStarted(0)
       setJobId(res.job_id)
     },
     onError: (e) => setGenError((e as Error).message),
@@ -953,6 +1043,9 @@ function GeneratePanel({ realmId, existingCount, onSaveDrafts, onSaved }: {
         <div className="gen-block">
           <FieldLabel htmlFor="gen-type-counts">{t('datasetsPage.generator.typeCountsLabel')}</FieldLabel>
           <TypeCountsEditor value={typeCounts} onChange={setTypeCounts} disabled={isGenerating} />
+          {typeCounts.some(tc => tc.question_type === 'global') && (
+            <p className="field-note">{t('datasetsPage.generator.globalHint')}</p>
+          )}
         </div>
 
         <div className="gen-actions">
@@ -986,6 +1079,11 @@ function GeneratePanel({ realmId, existingCount, onSaveDrafts, onSaved }: {
             {t('datasetsPage.generator.failedCount', { count: failedCount })}
           </p>
         )}
+        {!isGenerating && notStarted > 0 && (
+          <p className="gen-hint">
+            {t('datasetsPage.generator.notStarted', { count: notStarted })}
+          </p>
+        )}
       </div>
 
       {drafts.length > 0 && (
@@ -995,6 +1093,7 @@ function GeneratePanel({ realmId, existingCount, onSaveDrafts, onSaved }: {
               <h3 className="section-title">{t('datasetsPage.generator.draftsHeading', { count: drafts.length })}</h3>
               <p className="field-note">
                 {t('datasetsPage.generator.draftsHint', { count: existingCount })}
+                {' '}{t('datasetsPage.generator.draftsReview')}
               </p>
             </div>
             <button className="btn btn-primary" disabled={saving} onClick={handleSaveAll}>
@@ -1048,8 +1147,22 @@ function DraftRow({ draft, onChange, onRemove }: {
             value={draft.reference_answer}
             onChange={e => onChange({ ...draft, reference_answer: e.target.value })}
           />
+          {(draft.assertions ?? []).length > 0 && (
+            <div>
+              <div className="eyebrow">{t('datasetsPage.statements.label')}</div>
+              <StatementsEditor
+                value={draft.assertions ?? []}
+                onChange={assertions => onChange({ ...draft, assertions })}
+              />
+            </div>
+          )}
+          {(draft.provenance?.mixed_script_words ?? []).length > 0 && (
+            <p className="plain-note warn">
+              {t('datasetsPage.generator.mixedScript', { words: (draft.provenance?.mixed_script_words ?? []).join(', ') })}
+            </p>
+          )}
           <div className="draft-meta">
-            {draft.question_type && <span className="badge badge-info">{draft.question_type}</span>}
+            {draft.question_type && <span className="badge badge-info">{typeLabel(draft.question_type, t)}</span>}
             {(draft.article_refs ?? []).map(ref => <span key={ref} className="badge">{ref}</span>)}
             <span className="field-note">
               {t('datasetsPage.generator.draftGenerated', { model: draft.provenance?.model })}

@@ -30,6 +30,7 @@ vi.mock('../api/client', () => ({
   },
   referenceAnswerOf: (q: { reference_answer?: string; ground_truth?: string } | undefined) =>
     q?.reference_answer ?? q?.ground_truth ?? '',
+  datasetKeyOf: (set: { id?: string | null; filename: string }) => set.id || set.filename,
 }))
 
 const DATASET = {

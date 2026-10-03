@@ -59,6 +59,11 @@ def stages_of(question: dict[str, Any]) -> dict[str, Any]:
     whether any stage had it at all. For a question about the corpus as a
     whole there is no bounded set of sources to rank, so ranks are None, and
     `lost_at` and `found` are None as well: nothing is claimed.
+
+    Each stage names its fragments in order (`ids`), and `needed` names the
+    fragments that carry a source the question needs. The run page draws its
+    table of fragments by stage from those, so which list a stage is stays
+    decided here and nowhere else.
     """
     bounded = question.get("scope", "local") != "global"
     wanted = set(question.get("expected_refs") or []) if bounded else set()
@@ -82,19 +87,19 @@ def stages_of(question: dict[str, Any]) -> dict[str, Any]:
     for name, refs in ordered:
         previous = stages[-1] if stages and stages[-1]["stage"] not in HALVES else None
         same_as = (previous["stage"]
-                   if previous is not None and previous["_ids"] == _ids(refs) else None)
+                   if previous is not None and previous["ids"] == _ids(refs) else None)
         stages.append({
             "stage": name,
             "size": len(refs),
             "rank": _rank(refs, wanted) if wanted else None,
             "same_as": same_as,
-            "_ids": _ids(refs),
+            "ids": _ids(refs),
         })
-    for stage in stages:
-        del stage["_ids"]
+    needed = sorted({str(ref.get("chunk_id") or "") for _, refs in ordered for ref in refs
+                     if wanted and ref.get("chunk_id") and extract_ref_id(ref) in wanted})
 
     if not wanted:
-        return {"stages": stages, "lost_at": None, "found": None}
+        return {"stages": stages, "lost_at": None, "found": None, "needed": needed}
 
     seen = any(s["rank"] is not None for s in stages if s["stage"] in HALVES)
     lost_at = None
@@ -105,4 +110,4 @@ def stages_of(question: dict[str, Any]) -> dict[str, Any]:
             lost_at = stage["stage"]
             break
     found = any(s["rank"] is not None for s in stages)
-    return {"stages": stages, "lost_at": lost_at, "found": found}
+    return {"stages": stages, "lost_at": lost_at, "found": found, "needed": needed}

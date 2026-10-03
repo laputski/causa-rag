@@ -76,3 +76,27 @@ def test_a_realm_with_its_own_local_server_is_asked_there(client, monkeypatch) -
     models = client.get("/models?realm_id=acme").json()
     assert asked == ["http://models.internal:11500/api/tags"]
     assert models[0]["name"] == "m" and models[0]["provider"] == "ollama"
+
+
+def test_a_realm_with_both_servers_lists_the_one_a_call_names(client, monkeypatch) -> None:
+    """The form of a new run offers a generator and then the models of that
+    generator's server. With both declared the unnamed choice is the local
+    one, so without the name the hosted server's models could not be listed
+    at all."""
+    _realm(monkeypatch, {"ollama": {"host": "localhost", "port": 11434},
+                         "openai_compatible": {"base_url": "https://api.example.org/v1", "api_key": "k"}})
+    monkeypatch.setattr(oc.OpenAICompatibleGenerator, "list_models", lambda self: ["model-a"])
+    models = client.get("/models?realm_id=acme&provider=openai_compatible").json()
+    assert [(m["name"], m["provider"]) for m in models] == [("model-a", "openai_compatible")]
+
+
+def test_a_hosted_server_that_cannot_be_asked_offers_no_model(client, monkeypatch) -> None:
+    """The fallback for a failed listing is the name of the local default
+    model. Offered under a hosted server it would be a model that server
+    never had, chosen from a list that looks like its own."""
+    _realm(monkeypatch, {"openai_compatible": {"base_url": "https://api.example.org/v1"}})
+
+    def unreachable(self) -> list[str]:
+        raise RuntimeError("the model server answered 401")
+    monkeypatch.setattr(oc.OpenAICompatibleGenerator, "list_models", unreachable)
+    assert client.get("/models?realm_id=acme").json() == []

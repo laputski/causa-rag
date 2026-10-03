@@ -57,16 +57,19 @@ describe('NewExperimentPage', () => {
   })
 
   it('offers no field this form cannot honestly vary', () => {
-    // The reason has narrowed twice and the list has not moved. Of the four,
-    // only the chunking strategy is still read by nothing: a corpus is cut at
-    // load time and a run reads what the cut produced. The embedder, the
-    // generator and the seed are all applied now, and each is a control that
-    // has to be designed before it is written, so this form sends what the
-    // gateway registers instead of drawing a lever nobody agreed on.
+    // Two fields stay out. The chunking strategy is read by nothing: a corpus
+    // is cut at load time and a run reads what the cut produced. The seed is
+    // applied and has no agreed control yet.
+    //
+    // The embedder and the generator stood in this list too, as levers nobody
+    // had agreed on. They were agreed with the screens for services that are
+    // not on this machine, where a run has to be able to name the Realm's own
+    // model server, so the form offers both now; see
+    // NewExperimentPage.generator.test.tsx for what they do.
     render(wrap(<NewExperimentPage />))
     expect(screen.queryByLabelText(/seed/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/chunking strategy/i)).not.toBeInTheDocument()
-    expect(screen.queryByLabelText(/embedder/i)).not.toBeInTheDocument()
-    expect(screen.queryByLabelText(/^generator$/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/^embedder$/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^generator$/i)).toBeInTheDocument()
   })
 })

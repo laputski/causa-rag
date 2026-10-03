@@ -153,6 +153,16 @@ export interface ExperimentDetail {
   // response body). config.generator?.component_id is a fixed adapter-kind literal
   // ("ollama") and never reflects the real model name.
   generator_model?: string
+  // Which services answered for this run and where each of them is, with no
+  // key (core/experiment/runner.py#where_it_was_served). Absent on a run made
+  // before it was recorded.
+  served_by?: ServedBy
+  // When the run's intermediate retrieval lists were removed by the retention
+  // rule, empty when they are still there. What was concluded from them is
+  // kept and served as before.
+  debug_cleared_at?: string
+  // Who checked the answers against their statements, or why nobody did.
+  judge?: { provider?: string; model?: string; base_url?: string; gap?: string; note?: string; calls?: number; seconds?: number }
   // backend-provided diagnostics & regression guard
   diagnostics?: DetectorItem[]
   // What this run made impossible to check. Beside the findings and not on
@@ -368,6 +378,48 @@ export interface SourceRefView {
   pinned?: boolean
 }
 
+/** One service of a run: a model server, or the embedder that runs inside the
+ *  platform. `remote` is decided by the server from the address. */
+export interface ServedPart {
+  provider?: string
+  address?: string
+  model?: string
+  remote?: boolean
+  last_call?: { seed_sent?: boolean; served_model?: string; system_fingerprint?: string }
+}
+
+export interface ServedBy {
+  generator?: ServedPart
+  embedder?: ServedPart
+  stores?: Record<string, { address: string; remote: boolean }>
+  external_system?: { address: string; remote: boolean }
+  leaves_this_machine?: string[]
+}
+
+/** One stage of a question's retrieval (core/eval/stages.py). `ids` is the
+ *  stage's fragments in order; absent once the run's lists were removed. */
+export interface RetrievalStage {
+  stage: string
+  size: number
+  rank: number | null
+  same_as: string | null
+  ids?: string[]
+}
+
+export interface QuestionStages {
+  stages: RetrievalStage[]
+  lost_at: string | null
+  found: boolean | null
+  // The fragments that carry a source the question needs.
+  needed?: string[]
+}
+
+export interface StatementVerdict {
+  statement: string
+  // null: the judge gave no verdict, which is not the same as "not stated".
+  stated: boolean | null
+}
+
 export interface QuestionResult {
   question_id: string
   question: string
@@ -383,6 +435,18 @@ export interface QuestionResult {
   // Ranked list BEFORE the reranker cut it (core/pipeline.py) — empty when
   // no reranker ran. Lets you see what reranking actually changed.
   pre_rerank_source_refs?: SourceRefView[]
+  // The candidate window and each half's own list before the merge. Read by
+  // the table of fragments by stage; absent once the lists were removed.
+  candidate_source_refs?: SourceRefView[]
+  dense_source_refs?: SourceRefView[]
+  sparse_source_refs?: SourceRefView[]
+  graph_source_refs?: SourceRefView[]
+  // Where the needed source was at each stage, decided server-side.
+  stages?: QuestionStages
+  // "global" for a question about the corpus as a whole.
+  scope?: string
+  // What the judge said of each statement a right answer must make.
+  assertion_verdicts?: StatementVerdict[]
   // core/citation.py:compute_citation_labels() — citation derived from
   // retrieved chunk metadata, not from whatever the LLM wrote in the
   // answer text (the LLM's own in-text citation can be wrong even when
@@ -522,6 +586,9 @@ export interface QuestionProvenance {
   chunk_id?: string | string[]
   preset_id?: string
   generated_at?: string
+  // Words of a draft that mix alphabets inside themselves, which a model
+  // does and a reader of the draft should look at.
+  mixed_script_words?: string[]
   // reviewer_feedback-only — backlinks to the run/
   // question/feedback this golden question was promoted from, so
   // DatasetsPage can link back instead of collapsing it into "manual".
@@ -552,6 +619,17 @@ export interface Question {
   question_type?: string
   article_refs?: string[]
   provenance?: QuestionProvenance
+  // "global": a question about the corpus as a whole. Absent means ordinary.
+  scope?: string
+  // What a right answer must contain, one statement each.
+  assertions?: string[]
+}
+
+/** What a set is addressed by: its id, or its file name when it has none.
+ *  A set written by a Realm import carries no id, and the server then finds
+ *  it by file name within the Realm named in the same request. */
+export function datasetKeyOf(set: { id?: string | null; filename: string }): string {
+  return set.id || set.filename
 }
 
 // One question's answer text, tolerant of the field-name split above.
@@ -571,6 +649,35 @@ export interface QuestionWrite {
   question_type?: string
   article_refs?: string[]
   provenance?: QuestionProvenance
+  scope?: string
+  assertions?: string[]
+}
+
+/** What a set is made of (core/eval/composition.py). */
+export interface DatasetProfile {
+  questions: number
+  by_scope: Record<string, number>
+  by_type: Record<string, number>
+  by_answerability: Record<string, number>
+  distinct_references: number
+  with_assertions: number
+  assertions: number
+}
+
+/** The rule for removing old runs' intermediate retrieval lists. */
+export interface DebugRetention {
+  keep_last_per_realm: number
+  max_age_days: number
+  max_mib: number
+  // Whether the pass runs by itself on this installation. Sent by the server
+  // beside the rule; not part of what is saved.
+  automatic?: boolean
+}
+
+export interface JudgeSetting {
+  provider: '' | 'ollama' | 'openai_compatible'
+  model: string
+  default_model?: string
 }
 
 // Human feedback on one answer — stored separately from the run itself (see
@@ -688,6 +795,9 @@ export interface RealmRecord {
   // are the expected outcome and read as a broken installation otherwise.
   purpose?: string
   resources: { type: string; [k: string]: unknown }[]
+  // The resources that are not on this machine, decided server-side from
+  // their addresses. They receive what the Realm's runs send them.
+  leaves_this_machine?: { type: string; address: string }[]
   key_metrics?: string[]
   created_at: string
   deleted_at?: string | null
@@ -860,6 +970,13 @@ export const api = {
       return req<ExperimentItem[]>('/experiments' + (q ? `?${q}` : ''))
     },
     get: (id: string) => req<ExperimentDetail>(`/experiments/${id}`),
+    // How large the run is as a file, either way, asked before downloading.
+    exportSize: (id: string) =>
+      req<{ bytes_without_texts: number; bytes_with_texts: number; debug_cleared_at: string | null }>(
+        `/experiments/${id}/export/size`,
+      ),
+    exportUrl: (id: string, withTexts: boolean) =>
+      `${BASE}/experiments/${id}/export${withTexts ? '?with_texts=true' : ''}`,
     // `progressId` is the client's own, and it has to exist before the request
     // is sent, because the socket it names is what reports the comparison
     // while the request is still open (see ComparisonPage).
@@ -970,32 +1087,36 @@ export const api = {
       return req<Dataset[]>(`/datasets${q ? `?${q}` : ''}`)
     },
     get: (filename: string) => req<DatasetDetail>(`/datasets/${filename}`),
+    profile: (datasetId: string, realmId?: string | null) =>
+      req<DatasetProfile>(
+        `/datasets/${encodeURIComponent(datasetId)}/profile${realmId ? `?realm_id=${encodeURIComponent(realmId)}` : ''}`,
+      ),
     // The first live write path this collection has ever had;
     // usable identically by the platform's own upload form or an external
     // RAG's own ingest pipeline (source_rag_id is provenance only).
     create: (body: { filename: string; realm_id: string; questions: Record<string, unknown>[]; source_rag_id?: string }) =>
       req<Dataset>('/datasets', { method: 'POST', body: JSON.stringify(body) }),
     delete: (datasetId: string, realmId?: string | null) =>
-      req<void>(`/datasets/by-id/${datasetId}${realmId ? `?realm_id=${encodeURIComponent(realmId)}` : ''}`, { method: 'DELETE' }),
+      req<void>(`/datasets/by-id/${encodeURIComponent(datasetId)}${realmId ? `?realm_id=${encodeURIComponent(realmId)}` : ''}`, { method: 'DELETE' }),
     // Per-question CRUD — id is always server-generated (see QuestionWrite).
     addQuestion: (datasetId: string, question: QuestionWrite, realmId?: string | null) =>
       req<DatasetDetail>(
-        `/datasets/${datasetId}/questions${realmId ? `?realm_id=${encodeURIComponent(realmId)}` : ''}`,
+        `/datasets/${encodeURIComponent(datasetId)}/questions${realmId ? `?realm_id=${encodeURIComponent(realmId)}` : ''}`,
         { method: 'POST', body: JSON.stringify(question) },
       ),
     addQuestionsBatch: (datasetId: string, questions: QuestionWrite[], realmId?: string | null) =>
       req<DatasetDetail>(
-        `/datasets/${datasetId}/questions/batch${realmId ? `?realm_id=${encodeURIComponent(realmId)}` : ''}`,
+        `/datasets/${encodeURIComponent(datasetId)}/questions/batch${realmId ? `?realm_id=${encodeURIComponent(realmId)}` : ''}`,
         { method: 'POST', body: JSON.stringify(questions) },
       ),
     updateQuestion: (datasetId: string, questionId: string, question: QuestionWrite, realmId?: string | null) =>
       req<DatasetDetail>(
-        `/datasets/${datasetId}/questions/${questionId}${realmId ? `?realm_id=${encodeURIComponent(realmId)}` : ''}`,
+        `/datasets/${encodeURIComponent(datasetId)}/questions/${questionId}${realmId ? `?realm_id=${encodeURIComponent(realmId)}` : ''}`,
         { method: 'PUT', body: JSON.stringify(question) },
       ),
     deleteQuestion: (datasetId: string, questionId: string, realmId?: string | null) =>
       req<DatasetDetail>(
-        `/datasets/${datasetId}/questions/${questionId}${realmId ? `?realm_id=${encodeURIComponent(realmId)}` : ''}`,
+        `/datasets/${encodeURIComponent(datasetId)}/questions/${questionId}${realmId ? `?realm_id=${encodeURIComponent(realmId)}` : ''}`,
         { method: 'DELETE' },
       ),
   },
@@ -1152,10 +1273,20 @@ export const api = {
     },
   },
   health: () => req<{ status: string; components: RegistryEntry }>('/health'),
-  models: (completionOnly?: boolean) =>
-    req<{ name: string; size_gb: number; modified_at: string; capabilities: string[] }[]>(
-      `/models${completionOnly ? '?completion_only=true' : ''}`,
-    ),
+  // The models a Realm's own server offers. Unnamed, the Realm is the
+  // gateway's and the list is the local server's, which for a Realm served
+  // elsewhere is a list of models it cannot run. `provider` names which of
+  // the Realm's servers to ask when it declares more than one.
+  models: (completionOnly?: boolean, realmId?: string | null, provider?: string) => {
+    const qs = new URLSearchParams()
+    if (completionOnly) qs.set('completion_only', 'true')
+    if (realmId) qs.set('realm_id', realmId)
+    if (provider) qs.set('provider', provider)
+    const q = qs.toString()
+    return req<{ name: string; size_gb: number; modified_at: string; capabilities: string[] }[]>(
+      `/models${q ? `?${q}` : ''}`,
+    )
+  },
   generationPresets: {
     list: (realmId?: string | null) =>
       req<GenerationPreset[]>(
@@ -1206,6 +1337,19 @@ export const api = {
       req<{ active_model: string }>(
         `/settings/model${realmId ? `?realm_id=${encodeURIComponent(realmId)}` : ''}`,
         { method: 'PUT', body: JSON.stringify({ model }) },
+      ),
+    judge: (realmId: string) => req<JudgeSetting>(`/settings/judge?realm_id=${encodeURIComponent(realmId)}`),
+    setJudge: (realmId: string, judge: { provider: string; model: string }) =>
+      req<JudgeSetting>(`/settings/judge?realm_id=${encodeURIComponent(realmId)}`, {
+        method: 'PUT', body: JSON.stringify(judge),
+      }),
+    retention: () => req<DebugRetention>('/settings/debug-retention'),
+    setRetention: (rule: DebugRetention) =>
+      req<DebugRetention>('/settings/debug-retention', { method: 'PUT', body: JSON.stringify(rule) }),
+    // What the next pass would remove, without removing it.
+    retentionPreview: () =>
+      req<{ cleared: { run_id: string; reason: string }[]; texts_removed: number }>(
+        '/settings/debug-retention/preview', { method: 'POST' },
       ),
   },
   corpus: {
