@@ -76,17 +76,27 @@ _USE_OLLAMA = os.getenv("USE_OLLAMA_GENERATOR", "true").lower() == "true"
 _USE_REAL_QDRANT = os.getenv("USE_REAL_QDRANT", "true").lower() == "true"
 
 
+# A service that is down at start-up still gets its real component. Each one
+# connects when first used, so a run started after the service came up works
+# without a restart, and one started while it is down fails on its questions
+# and says why. They used to be replaced by stubs for the life of the process,
+# and a gateway started a minute before the stack answered every run with the
+# stubs' canned output, green (tests/unit/test_the_gateway_starts_without_its_services.py).
+# A stub is served when the flags ask for one.
+
+
 def _build_generator():
     if _USE_OLLAMA:
+        from adapters.ollama_generator import OllamaGenerator
+        gen = OllamaGenerator()
         try:
             import httpx
             httpx.get(os.getenv("OLLAMA_BASE_URL", "http://localhost:11434") + "/api/tags", timeout=2).raise_for_status()
-            from adapters.ollama_generator import OllamaGenerator
-            gen = OllamaGenerator()
-            log.info("gateway.generator", kind="ollama", model=gen._model)
-            return gen
         except Exception as e:
-            log.warning("gateway.generator.ollama_unavailable", error=str(e), fallback="stub")
+            log.warning("gateway.generator.ollama_unreachable", error=str(e),
+                        hint="runs will fail until it answers; no restart needed")
+        log.info("gateway.generator", kind="ollama", model=gen._model)
+        return gen
     gen = GeneratorStub()
     log.info("gateway.generator", kind="stub")
     return gen
@@ -94,19 +104,20 @@ def _build_generator():
 
 def _build_retriever(embedder: BgeM3Embedder):
     if _USE_REAL_QDRANT:
+        from adapters.connections import QdrantTarget
+        target = QdrantTarget.from_environment()
         try:
-            from adapters.connections import QdrantTarget
-            target = QdrantTarget.from_environment()
             target.client(timeout=3).get_collections()
-            retr = QdrantRetriever(
-                target=target,
-                strategy_id=os.getenv("QDRANT_STRATEGY", "structure_aware"),
-                embedder_id=embedder.embedder_id,
-            )
-            log.info("gateway.retriever", kind="qdrant", address=target.base_url)
-            return retr
         except Exception as e:
-            log.warning("gateway.retriever.qdrant_unavailable", error=str(e), fallback="stub")
+            log.warning("gateway.retriever.qdrant_unreachable", error=str(e),
+                        hint="runs will fail until it answers; no restart needed")
+        retr = QdrantRetriever(
+            target=target,
+            strategy_id=os.getenv("QDRANT_STRATEGY", "structure_aware"),
+            embedder_id=embedder.embedder_id,
+        )
+        log.info("gateway.retriever", kind="qdrant", address=target.base_url)
+        return retr
     retr = QdrantRetrieverStub()
     log.info("gateway.retriever", kind="stub")
     return retr
@@ -159,8 +170,9 @@ def _register_optional_components() -> None:
 def _register_graph_pipeline(dense_retriever: Any, embedder: Any, generator: Any) -> None:
     """Register a functional GraphRAG retriever + pipeline.
 
-    Uses Neo4j when the driver is installed and the server is reachable; otherwise
-    falls back to the in-memory graph stub so the option still works in dev/CI.
+    Uses Neo4j whenever the driver is installed, reachable or not (see the
+    note above `_build_generator`); without the driver, the in-memory graph
+    stub, so the option still works in dev/CI.
     """
     from adapters.lightrag import LightRagRetrieverStub
     from core.pipeline import NaivePipeline
@@ -170,12 +182,15 @@ def _register_graph_pipeline(dense_retriever: Any, embedder: Any, generator: Any
     try:
         from adapters.neo4j_graph import Neo4jGraphRetriever
         candidate = Neo4jGraphRetriever()
-        if candidate.is_available() and candidate.verify():
+        if candidate.is_available():
             graph = candidate
+            if not candidate.verify():
+                log.warning("gateway.graph.neo4j_unreachable", uri=candidate._uri,
+                            hint="graph runs will fail until it answers; no restart needed")
             log.info("gateway.graph.neo4j", uri=candidate._uri)
         else:
             graph = LightRagRetrieverStub()
-            log.info("gateway.graph.stub_fallback", reason="neo4j_unavailable")
+            log.info("gateway.graph.stub_fallback", reason="no_graph_driver_installed")
     except Exception as exc:
         graph = LightRagRetrieverStub()
         log.info("gateway.graph.stub_fallback", reason=str(exc))

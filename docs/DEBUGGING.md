@@ -997,3 +997,20 @@ of a resource goes through. **Fix:** the resource names no password, so a
 connection takes the environment's, and the generated service starts with
 that same one (`NEO4J_PASSWORD`, default as before). **Guard:**
 `tests/unit/test_generate_realm_neo4j_compose.py`.
+
+## 50. A gateway started before its services answered every run with stubs
+
+**Symptom:** none observed on this installation, and that is the danger: runs
+would finish green with the stub generator's canned text, the stub dense
+half, or the in-memory graph.
+
+**Found by:** reading, while re-verifying open items. **Root cause:** the
+gateway probed each service once at start-up and, finding one down, put a
+stub in its place for the life of the process. Starting the gateway a minute
+before the stack, the ordinary order on a laptop, was enough. **Fix:** the
+real components are built whatever the probe says, since each connects when
+first used: a run started after the service came up works without a restart,
+and one started while it is down fails on its questions and says why. A stub
+is still served when `USE_OLLAMA_GENERATOR` or `USE_REAL_QDRANT` asks for one,
+and the in-memory graph when the Neo4j driver is not installed. **Guard:**
+`tests/unit/test_the_gateway_starts_without_its_services.py`.
