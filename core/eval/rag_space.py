@@ -65,8 +65,8 @@ SCHEMA_RELEASE = "2026-08-14"
 # The date is repeated for a reader, who should not have to run a command to
 # learn how old a copy is, and a test derives it from the revision so the two
 # cannot drift apart.
-SCHEMA_VERIFIED_AGAINST = "5bca84c142c4dc89eb56edd1601fdf28eca3f24a"
-SCHEMA_VERIFIED_ON = "2026-09-01"
+SCHEMA_VERIFIED_AGAINST = "342c84af740f0399d0a965f1312f3e5731b42dbe"
+SCHEMA_VERIFIED_ON = "2026-10-22"
 
 # The composition, fixed by a check so that a changed copy is a deliberate act
 # and not a slip. RAG World holds the same count for the same reason.
@@ -136,7 +136,9 @@ DIMENSIONS: tuple[Dimension, ...] = (
     Dimension("F3", "Forgetting", ("none", "by_ttl", "by_significance_decay",), core=False, default="none"),
     Dimension("G1", "Privacy", ("open", "isolated_circuit", "differential_privacy", "tee",), core=True, default="open"),
     Dimension("G2", "Execution site", ("server", "edge_device", "mixed",), core=True, default="server"),
-    Dimension("G3", "Trainability of components", ("frozen", "trained_retriever", "trained_reader", "joint_training",), core=True, default="frozen"),
+    # `trained_separately` follows the published schema (2026-10-22): a
+    # retriever and a reader both trained, in separate steps.
+    Dimension("G3", "Trainability of components", ("frozen", "trained_retriever", "trained_reader", "trained_separately", "joint_training",), core=True, default="frozen"),
 )
 
 
