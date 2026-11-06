@@ -38,7 +38,8 @@ class OllamaGenerator:
         # Ollama 0.34.4: a prompt longer than the window is cut, silently, to
         # exactly half of it plus two tokens (2050 of a 4096 window, 16386 of
         # 32768), which `prompt_was_cut` reads. Measured again on 0.35.1, with
-        # the same two figures for windows of 4096 and 8192.
+        # the same two figures for windows of 4096 and 8192, and on 0.40.15,
+        # with 1026, 2050 and 4098 for windows of 2048, 4096 and 8192.
         self._num_ctx = num_ctx
 
     def prompt_was_cut(self) -> bool:

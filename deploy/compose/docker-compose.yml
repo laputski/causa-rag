@@ -106,7 +106,10 @@ services:
       langfuse-db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/public/health || exit 1"]
+      # By the container's own name: the server listens on $HOSTNAME, which
+      # Docker sets to the container id, so asking localhost was refused and
+      # the service showed as unhealthy while it answered on its port.
+      test: ["CMD-SHELL", "wget -qO- http://$$(hostname):3000/api/public/health || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 8
