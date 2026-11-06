@@ -8,16 +8,37 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from services.reference_rag_server.main import app
+
+@pytest.fixture(scope="module")
+def app():
+    """The server built from stubs, as its flags allow, and not from whatever
+    this machine runs. It is assembled at import, from the gateway's
+    builders, which used to swap a stub in for a service that was down, so on
+    CI these tests met stubs and on a machine with the stack up they queried
+    the real stores and the real model. The builders no longer swap (see
+    tests/unit/test_the_gateway_starts_without_its_services.py), and CI then
+    met a refused connection, which is how this was found."""
+    import importlib
+
+    import services.api_gateway.main as gateway
+    import services.reference_rag_server.main as reference
+
+    saved = (gateway._USE_OLLAMA, gateway._USE_REAL_QDRANT)
+    gateway._USE_OLLAMA = gateway._USE_REAL_QDRANT = False
+    try:
+        yield importlib.reload(reference).app
+    finally:
+        gateway._USE_OLLAMA, gateway._USE_REAL_QDRANT = saved
+        importlib.reload(reference)
 
 
-def test_health():
+def test_health(app):
     client = TestClient(app)
     resp = client.get("/health")
     assert resp.status_code == 200
 
 
-def test_query_matches_external_rag_contract():
+def test_query_matches_external_rag_contract(app):
     client = TestClient(app)
     resp = client.post("/", json={"query": "a test question", "top_k": 3})
     assert resp.status_code == 200
@@ -27,7 +48,7 @@ def test_query_matches_external_rag_contract():
     assert isinstance(body["sources"], list)
 
 
-def test_retrieve_only_returns_sources_without_answer():
+def test_retrieve_only_returns_sources_without_answer(app):
     client = TestClient(app)
     resp = client.post("/retrieve", json={"query": "a test question", "top_k": 3})
     assert resp.status_code == 200
@@ -36,7 +57,7 @@ def test_retrieve_only_returns_sources_without_answer():
     assert "answer" not in body
 
 
-def test_pipelines_endpoint_lists_builtin_strategies():
+def test_pipelines_endpoint_lists_builtin_strategies(app):
     """The built-in hybrid/graph strategies must be
     selectable through the same HTTP contract, not only the dense-only
     default; /pipelines lets a caller discover the valid pipeline_id values."""
@@ -47,7 +68,7 @@ def test_pipelines_endpoint_lists_builtin_strategies():
     assert {"naive", "hybrid_rrf", "hybrid_weighted", "graph"} <= set(ids)
 
 
-def test_query_with_explicit_pipeline_id_does_not_error():
+def test_query_with_explicit_pipeline_id_does_not_error(app):
     client = TestClient(app)
     for pipeline_id in ("naive", "hybrid_rrf", "hybrid_weighted", "graph"):
         resp = client.post("/", json={"query": "a test question", "top_k": 3, "pipeline_id": pipeline_id})
@@ -74,13 +95,24 @@ def _qdrant_answering() -> bool:
            "stub, and the rebind no-ops on stubs by design, so there is "
            "nothing here to test",
 )
-def test_corpus_id_rebinds_to_a_distinct_retriever():
+def test_corpus_id_rebinds_to_a_distinct_retriever(app, monkeypatch):
     """A non-default corpus_id must produce a retriever
     bound to that corpus, not silently fall back to whatever corpus this
     server started up against (the root cause of a near-zero-recall run when
     the dataset assumed a different corpus_id than the server's startup
     default)."""
+    import services.reference_rag_server.main as reference
+    from adapters.qdrant import QdrantRetriever
+    from core.pipeline import NaivePipeline
     from services.reference_rag_server.main import _resolve_pipeline
+
+    # A real dense retriever, which rebinds without connecting: the stub the
+    # fixture builds has no corpus to bind.
+    base = reference._PIPELINES["naive"]
+    monkeypatch.setitem(reference._PIPELINES, "naive", NaivePipeline(
+        retriever=QdrantRetriever(host="127.0.0.1", port=1), embedder=base._embedder,
+        generator=base._generator, pipeline_id="naive"))
+    monkeypatch.setattr(reference, "_bound_cache", {})
 
     default_pipeline = _resolve_pipeline("naive", "default")
     other_pipeline = _resolve_pipeline("naive", "handbook")
@@ -91,14 +123,14 @@ def test_corpus_id_rebinds_to_a_distinct_retriever():
     assert _resolve_pipeline("naive", "handbook") is other_pipeline
 
 
-def test_query_with_explicit_corpus_id_does_not_error():
+def test_query_with_explicit_corpus_id_does_not_error(app):
     client = TestClient(app)
     resp = client.post("/", json={"query": "a test question", "top_k": 3, "corpus_id": "handbook"})
     assert resp.status_code == 200
     assert "answer" in resp.json()
 
 
-def test_rerankers_endpoint_lists_at_least_the_stub():
+def test_rerankers_endpoint_lists_at_least_the_stub(app):
     """The reranker is optional and degrades honestly — only
     cross_encoder_stub/cross_encoder are guaranteed; cross_encoder_local
     depends on the optional [reranker] extra being installed."""
@@ -109,7 +141,7 @@ def test_rerankers_endpoint_lists_at_least_the_stub():
     assert {"cross_encoder_stub", "cross_encoder"} <= set(ids)
 
 
-def test_reranker_id_rebinds_to_a_pipeline_with_that_reranker():
+def test_reranker_id_rebinds_to_a_pipeline_with_that_reranker(app):
     """A reranker_id must produce a pipeline whose
     _reranker is the matching component, not silently ignored the way it
     was before this server ever passed reranker= to NaivePipeline."""
@@ -125,14 +157,14 @@ def test_reranker_id_rebinds_to_a_pipeline_with_that_reranker():
     assert _resolve_pipeline("naive", "default", "cross_encoder_stub") is reranked
 
 
-def test_unknown_reranker_id_degrades_to_no_reranker_not_an_error():
+def test_unknown_reranker_id_degrades_to_no_reranker_not_an_error(app):
     from services.reference_rag_server.main import _resolve_pipeline
 
     pipeline = _resolve_pipeline("naive", "default", "no_such_reranker")
     assert pipeline._reranker is None
 
 
-def test_query_with_explicit_reranker_id_does_not_error():
+def test_query_with_explicit_reranker_id_does_not_error(app):
     client = TestClient(app)
     resp = client.post(
         "/", json={"query": "a test question", "top_k": 3, "reranker_id": "cross_encoder_stub"},
@@ -141,7 +173,7 @@ def test_query_with_explicit_reranker_id_does_not_error():
     assert "answer" in resp.json()
 
 
-def test_reranked_response_returns_pre_rerank_source_refs():
+def test_reranked_response_returns_pre_rerank_source_refs(app):
     """When a reranker ran, the contract response carries
     the pre-rerank list under trace, so the platform's funnel.py can attribute
     a rerank-failure vs a retrieval-failure for this external RAG."""
@@ -155,7 +187,7 @@ def test_reranked_response_returns_pre_rerank_source_refs():
     assert isinstance(trace["pre_rerank_source_refs"], list)
 
 
-def test_no_reranker_omits_pre_rerank_source_refs():
+def test_no_reranker_omits_pre_rerank_source_refs(app):
     client = TestClient(app)
     resp = client.post("/", json={"query": "a test question", "top_k": 3})
     assert resp.status_code == 200

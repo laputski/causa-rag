@@ -62,7 +62,13 @@ beforeEach(() => {
 })
 
 const show = () => renderWithRealm(<RealmResourcesPage />, '/settings/resources', 'acme')
-const tile = (name: string) => screen.getByText(name).closest('.res-tile') as HTMLElement
+// A tile by its name, and only a tile: the button that adds a resource of the
+// same type carries the same name, and stands on the page for the moment
+// before the Realm's resources arrive (found when CI met that moment).
+const tile = (name: string) =>
+  screen.getByText(name, { selector: '.resource-card-name' }).closest('.res-tile') as HTMLElement
+// Every test waits for the tiles once before it reads them.
+const tilesShown = () => screen.findByText('Qdrant', { selector: '.resource-card-name' })
 
 describe('RealmResourcesPage — services elsewhere', () => {
   it('says once that data leaves this machine, and where to', async () => {
@@ -82,6 +88,7 @@ describe('RealmResourcesPage — services elsewhere', () => {
   it('marks each resource by where the server placed it', async () => {
     show()
     await screen.findByTestId('leaves-this-machine')
+    await tilesShown()
     expect(within(tile('Model over the OpenAI-compatible API')).getByText('external')).toBeInTheDocument()
     expect(within(tile('Qdrant')).getByText('local')).toBeInTheDocument()
   })
@@ -89,6 +96,7 @@ describe('RealmResourcesPage — services elsewhere', () => {
   it('leaves the empty fields of a resource out of its tile', async () => {
     show()
     await screen.findByTestId('leaves-this-machine')
+    await tilesShown()
     const params = tile('Qdrant').querySelector('.resource-params') as HTMLElement
     expect(within(params).getByText('host')).toBeInTheDocument()
     expect(within(params).queryByText('url')).toBeNull()
@@ -98,6 +106,7 @@ describe('RealmResourcesPage — services elsewhere', () => {
   it('changes a resource in place and keeps the secret nobody touched', async () => {
     show()
     await screen.findByTestId('leaves-this-machine')
+    await tilesShown()
     fireEvent.click(within(tile('Model over the OpenAI-compatible API')).getByTitle('Change the resource'))
 
     const form = await screen.findByTestId('resource-form')
@@ -122,6 +131,7 @@ describe('RealmResourcesPage — services elsewhere', () => {
     // operations was printed as "[object Object]", empty or not.
     show()
     await screen.findByTestId('leaves-this-machine')
+    await tilesShown()
     fireEvent.click(within(tile('Qdrant')).getByText('Test'))
     await waitFor(() => expect(tile('Qdrant').querySelector('.conn-status')).toBeTruthy())
     expect(tile('Qdrant')).not.toHaveTextContent('[object Object]')
@@ -138,6 +148,7 @@ describe('RealmResourcesPage — services elsewhere', () => {
     show()
     const judge = await screen.findByTestId('judge-setting')
     const server = within(judge).getByLabelText('Server') as HTMLSelectElement
-    expect([...server.options].map(o => o.value)).toEqual(['', 'openai_compatible'])
+    // The list follows the resources, which may arrive after the block.
+    await waitFor(() => expect([...server.options].map(o => o.value)).toEqual(['', 'openai_compatible']))
   })
 })
