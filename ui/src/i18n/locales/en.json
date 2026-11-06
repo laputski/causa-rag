@@ -514,7 +514,8 @@
       "embedder": "Embedder",
       "embedderLocal": "Local (BGE-M3)",
       "embedderRealm": "The Realm's server: {{model}}",
-      "embedderLeaves": "The corpus texts will be sent to the Realm's server."
+      "embedderLeaves": "The corpus texts will be sent to the Realm's server.",
+      "lexicalNotWritten": "The lexical index (BM25) was not created; only the vector half was loaded. Hybrid retrieval over this corpus will behave as vector search. Reason: {{reason}}"
     },
     "management": {
       "backends": "Backends",

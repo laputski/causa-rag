@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import shutil
 import tempfile
 import uuid
@@ -16,6 +17,10 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, WebSocket,
 from pydantic import BaseModel
 
 log = structlog.get_logger()
+
+# A terminal's colour codes, which a loader's log carries when it was asked
+# for colour by its environment.
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 router = APIRouter(prefix="/corpus", tags=["corpus"])
 
@@ -336,6 +341,10 @@ async def _run_ingestion(
 
         use_real = os.getenv("USE_REAL_BGE_M3", "true").lower() in ("1", "true", "yes")
         env = {**os.environ, "USE_REAL_BGE_M3": "true" if use_real else "false"}
+        # Plain lines, because they are read below. A gateway started with
+        # FORCE_COLOR passed it on, and the counts sat behind colour codes.
+        env.pop("FORCE_COLOR", None)
+        env["NO_COLOR"] = "1"
 
         cmd = [
             "python3", "-m", "services.ingestion.cli", "ingest", str(tmp_dir),
@@ -366,12 +375,19 @@ async def _run_ingestion(
 
         n_chunks = 0
         hit_ratio = 0.0
+        # Whether the lexical store refused the load. The loader goes on with
+        # the semantic half and says so, and the record below must not then
+        # name an index nobody wrote.
+        lexical_missing = False
         assert proc.stdout
         async for line in proc.stdout:
-            text = line.decode(errors="replace").strip()
-            if "ingest.file_done" in text:
+            text = _ANSI.sub("", line.decode(errors="replace")).strip()
+            if "ingest.opensearch_unavailable" in text:
+                lexical_missing = True
+                _emit({"type": "warning", "code": "lexical_index_not_written",
+                       "message": text.split("error=", 1)[-1].strip()})
+            elif "ingest.file_done" in text:
                 try:
-                    import re
                     m = re.search(r"chunks=(\d+)", text)
                     if m:
                         n_chunks += int(m.group(1))
@@ -380,7 +396,6 @@ async def _run_ingestion(
                 _emit({"type": "progress", "message": text, "n_chunks": n_chunks})
             elif "ingest.done" in text:
                 try:
-                    import re
                     m = re.search(r"hit_ratio=([\d.]+)", text)
                     if m:
                         hit_ratio = float(m.group(1))
@@ -420,15 +435,13 @@ async def _run_ingestion(
                 # only ever produces a dense Qdrant one, BGE-M3.
                 "qdrant": {"collection": _collection_name(strategy, embedder_id, corpus_id, realm_id),
                            "embedder_id": embedder_id},
-                # /corpus/ingest never passes --no-opensearch, so the sparse
-                # index always gets created alongside the dense one (see
-                # ingest()'s use_opensearch default in services/ingestion/cli.py).
-                "opensearch": {"index": _index_name(strategy, corpus_id, realm_id)},
             }
+            if not lexical_missing:
+                backends["opensearch"] = {"index": _index_name(strategy, corpus_id, realm_id)}
             await _register_corpus(
                 realm_id=realm_id,
                 corpus_id=corpus_id,
-                storage_type="dense_sparse",
+                storage_type="dense_only" if lexical_missing else "dense_sparse",
                 backends=backends,
                 owner="platform",
             )

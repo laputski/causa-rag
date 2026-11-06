@@ -28,7 +28,9 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8081'
 const WS_BASE = API_BASE.replace(/^http/, 'ws')
 
 interface ProgressEvent {
-  type: 'start' | 'progress' | 'done' | 'error'
+  // `warning`: the load went on with part of what was asked; `code` says which.
+  type: 'start' | 'progress' | 'done' | 'error' | 'warning'
+  code?: string
   message?: string
   n_chunks?: number
   hit_ratio?: number
@@ -449,6 +451,8 @@ export default function CorpusPage() {
                   {ev.type === 'done'
                     ? `✅ ${t('corpusPage.upload.logDone', { chunks: ev.n_chunks, hitRatio: ((ev.hit_ratio ?? 0) * 100).toFixed(0) })}`
                     : ev.type === 'error' ? `❌ ${ev.message}`
+                    : ev.type === 'warning' && ev.code === 'lexical_index_not_written'
+                      ? `⚠ ${t('corpusPage.upload.lexicalNotWritten', { reason: ev.message })}`
                     : ev.message?.includes('ingest.file_done') ? `· ${ev.message.split('file=')[1]?.split(' ')[0] ?? ''} (${ev.n_chunks} chunks total)`
                     : ev.message}
                 </div>

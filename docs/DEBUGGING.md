@@ -963,3 +963,37 @@ embedder. A hosted server that cannot be asked now offers no model, where it
 used to offer the local default's name. **Guard:**
 `ui/src/test/NewExperimentPage.generator.test.tsx` and
 `tests/unit/test_the_models_listed_are_the_realm_s_server_s.py`.
+
+## 48. A load from the upload page counted nothing, and named an index nobody wrote
+
+**Symptom:** four documents loaded from the upload page ended with "Done: 0
+chunks", and the registry recorded nought, while the vector index held
+twelve. In the same load the lexical store refused to create an index, and
+the corpus was registered as having both halves.
+
+**Found by:** loading a corpus with the Realm's own embedder from the page,
+a path checked until then only through the API. **Root cause:** two. The
+gateway was started with `FORCE_COLOR=1`, the loader inherits the
+environment, and its log lines then carry colour codes between `chunks=` and
+the number, so neither count matched. And the route derived the lexical
+index's name instead of reading the loader's report, which had said
+`ingest.opensearch_unavailable` and gone on with the semantic half. **Fix:**
+the loader is started without colour and the codes are stripped from what is
+read; a refused lexical half is shown on the page as a warning with the
+store's reason, and the corpus is registered as dense only. **Guard:**
+`tests/unit/test_a_load_reports_what_the_loader_said.py` and
+`ui/src/test/CorpusPage.embedder.test.tsx`.
+
+The store refused because the disk under it was 96 % full, at which point
+OpenSearch sets `cluster.blocks.create_index` by itself. That is the
+installation's state and not a defect here; the defect was not saying so.
+
+## 49. A Realm's graph password was written in the clear by its provisioning
+
+**Symptom:** none visible. **Found by:** reading, after secrets were sealed.
+**Root cause:** `tools/generate_realm_neo4j_compose.py` wrote the graph's
+password into the Realm's resource itself, past the sealing every other write
+of a resource goes through. **Fix:** the resource names no password, so a
+connection takes the environment's, and the generated service starts with
+that same one (`NEO4J_PASSWORD`, default as before). **Guard:**
+`tests/unit/test_generate_realm_neo4j_compose.py`.

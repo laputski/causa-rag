@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, waitFor, fireEvent } from '@testing-library/react'
+import { act, screen, waitFor, fireEvent } from '@testing-library/react'
 import CorpusPage from '../pages/CorpusPage'
 import { renderWithRealm } from './realmTestUtils'
 
@@ -21,12 +21,22 @@ vi.mock('../api/client', () => ({
 }))
 
 let resources: Record<string, unknown>[]
+// The progress sockets the page opened, so a test can speak for the loader.
+const sockets: { onmessage: ((e: { data: string }) => void) | null }[] = []
 const posted: FormData[] = []
 
 beforeEach(() => {
   posted.length = 0
   resources = [{ type: 'openai_compatible', base_url: 'https://models.example/v1', model: 'answers', embedding_model: 'embeds-3' }]
-  vi.stubGlobal('WebSocket', class { close() {} })
+  sockets.length = 0
+  // jsdom lays nothing out, so an element has no scrollTo; the log scrolls itself.
+  Element.prototype.scrollTo = () => {}
+  vi.stubGlobal('WebSocket', class {
+    onmessage: ((e: { data: string }) => void) | null = null
+    onerror: (() => void) | null = null
+    constructor() { sockets.push(this) }
+    close() {}
+  })
   vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
     if (init?.method === 'POST') { posted.push(init.body as FormData); return { ok: true, json: async () => ({ job_id: 'j1' }) } }
     return { ok: true, json: async () => [{ id: 'acme', name: 'acme', resources, created_at: '2026-01-01' }] }
@@ -79,5 +89,21 @@ describe('CorpusPage — the embedder of a load', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Start|Upload|Ingest|Load/i }))
     await waitFor(() => expect(posted).toHaveLength(1))
     expect(posted[0].get('embedder')).toBe('bge_m3')
+  })
+
+  it('says when the lexical index was not written, and why', async () => {
+    // Found live: the store refused to create an index, the loader went on
+    // with the vector half, and the page said only "Done".
+    show()
+    await screen.findByLabelText('Embedder')
+    pickFile()
+    fireEvent.click(await screen.findByRole('button', { name: /Start|Upload|Ingest|Load/i }))
+    await waitFor(() => expect(sockets).toHaveLength(1))
+    const say = (event: unknown) => act(() => { sockets[0].onmessage?.({ data: JSON.stringify(event) }) })
+    say({ type: 'warning', code: 'lexical_index_not_written', message: 'index_create_block_exception' })
+    say({ type: 'done', n_chunks: 12, hit_ratio: 0 })
+    const line = await screen.findByText(/The lexical index \(BM25\) was not created/)
+    expect(line).toHaveTextContent('Reason: index_create_block_exception')
+    expect(line).toHaveClass('log-warning')
   })
 })
