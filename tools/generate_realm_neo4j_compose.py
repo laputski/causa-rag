@@ -62,7 +62,7 @@ def _service_block(realm_id: str, http_port: int, bolt_port: int) -> str:
     volumes:
       - neo4j_{safe_name.replace('-', '_')}_data:/data
     environment:
-      NEO4J_AUTH: neo4j/ragplatform
+      NEO4J_AUTH: neo4j/${{NEO4J_PASSWORD:-ragplatform}}
       NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
       NEO4J_server_memory_heap_initial__size: "2G"
       NEO4J_server_memory_heap_max__size: "2G"
@@ -169,7 +169,10 @@ async def generate_neo4j_overlay() -> dict[str, Any]:
 
         new_uri = f"bolt://localhost:{bolt_port}"
         resources: list[dict[str, Any]] = [r for r in realm.get("resources", []) if r["type"] != "neo4j"]
-        resources.append({"type": "neo4j", "uri": new_uri, "user": "neo4j", "password": "ragplatform"})
+        # No password: one written here would be stored in the clear, past the
+        # sealing every other write of a resource goes through. A connection
+        # takes the environment's, which is what the service above starts with.
+        resources.append({"type": "neo4j", "uri": new_uri, "user": "neo4j"})
         await mdb.update_one("realms", {"id": realm_id}, {"$set": {"resources": resources}})
         result[realm_id] = {
             "status": "provisioned", "uri": new_uri, "service_name": f"neo4j-{safe_name}",

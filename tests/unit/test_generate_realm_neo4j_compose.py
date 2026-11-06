@@ -146,3 +146,33 @@ async def test_a_realm_whose_graph_is_in_the_default_store_is_not_repointed(tmp_
 
     assert result["acme"]["status"] == "graph_data_in_default_store"
     assert [call.args[1] for call in mock_update.call_args_list] == [{"id": "acme-2"}]
+
+
+@pytest.mark.asyncio
+async def test_a_provisioned_realm_s_resource_carries_no_password(tmp_path, monkeypatch) -> None:
+    """The tool wrote the graph's password into the Realm's resource in the
+    clear, past the sealing every other write of a resource goes through
+    (core/secrets.py). Found by reading, after sealing was added. The
+    resource now names no password, so a connection takes the one the
+    environment gives, and the container is started with that same one."""
+    import tools.generate_realm_neo4j_compose as mod
+    monkeypatch.setattr(mod, "_OUTPUT_PATH", tmp_path / "out.yml")
+    monkeypatch.setattr(mod, "_port_is_free", lambda port: True)
+
+    realms = [_realm("acme", "2026-01-01"), _realm("acme-2", "2026-01-02")]
+    with patch("adapters.mongodb.find_many", AsyncMock(return_value=realms)), \
+         patch("adapters.mongodb.update_one", AsyncMock(return_value=1)) as mock_update:
+        await main()
+
+    neo4j_res = next(r for r in mock_update.call_args[0][2]["$set"]["resources"] if r["type"] == "neo4j")
+    assert "password" not in neo4j_res
+    content = (tmp_path / "out.yml").read_text()
+    assert "NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-ragplatform}" in content
+    assert "neo4j/ragplatform\n" not in content
+
+
+def test_a_resource_without_a_password_connects_with_the_environment_s(monkeypatch) -> None:
+    from adapters.connections import Neo4jTarget
+    monkeypatch.setenv("NEO4J_PASSWORD", "from-the-environment")
+    target = Neo4jTarget.of({"type": "neo4j", "uri": "bolt://localhost:7690", "user": "neo4j"})
+    assert (target.uri, target.password) == ("bolt://localhost:7690", "from-the-environment")
