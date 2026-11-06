@@ -16,7 +16,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from jsonpath_ng import parse as _parse_jsonpath
+# From the module that defines it: the package root re-exports `parse`
+# without declaring it, which a typed release (1.16) reports as an error.
+from jsonpath_ng.parser import parse as _parse_jsonpath
 
 _PLACEHOLDERS = ("{{query}}", "{{top_k}}", "{{filters}}", "{{trace_id}}", "{{corpus_id}}", "{{pipeline_id}}")
 

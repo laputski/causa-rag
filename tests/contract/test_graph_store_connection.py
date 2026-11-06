@@ -62,10 +62,17 @@ class _Driver:
 
 @pytest.fixture
 def driver(monkeypatch) -> _Driver:
-    import neo4j
+    """The driver package stood in for, and not patched: it is an optional
+    extra (`.[graph]`), and a fresh clone with `.[dev]` alone has no module
+    to patch. Found when the first push after this file was written failed
+    the fresh-clone job on every test here, with no neo4j to import."""
+    import sys
+    import types
 
     fake = _Driver(["apoc.periodic.iterate", "gds.graph.project", "gds.leiden.write"])
-    monkeypatch.setattr(neo4j.GraphDatabase, "driver", lambda uri, **kwargs: fake)
+    module = types.ModuleType("neo4j")
+    module.GraphDatabase = types.SimpleNamespace(driver=lambda uri, **kwargs: fake)  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "neo4j", module)
     return fake
 
 
