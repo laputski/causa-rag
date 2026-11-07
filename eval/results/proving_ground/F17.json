@@ -1,6 +1,6 @@
 {
   "failure_id": "F17",
-  "recorded_at": "2026-10-03T20:11:12.279640+00:00",
+  "recorded_at": "2026-11-07T10:53:34.069957+00:00",
   "reproduced": true,
   "claim": "a document of the corpus's own frequent words enters the keyword half's window and not the semantic half's, and nothing reads which half raised it",
   "measured": {

@@ -1,12 +1,12 @@
 {
   "failure_id": "F26",
-  "recorded_at": "2026-10-03T19:54:56.276159+00:00",
+  "recorded_at": "2026-11-07T10:17:02.965224+00:00",
   "reproduced": true,
   "claim": "near duplicates are found through the embeddings the load already computed",
   "measured": {
     "chunks_clean": 200,
     "pairs_clean": 1,
     "chunks_broken": 200,
-    "pairs_broken": 151
+    "pairs_broken": 165
   }
 }

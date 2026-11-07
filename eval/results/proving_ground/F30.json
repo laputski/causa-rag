@@ -1,6 +1,6 @@
 {
   "failure_id": "F30",
-  "recorded_at": "2026-10-03T19:58:59.635476+00:00",
+  "recorded_at": "2026-11-07T10:27:13.865744+00:00",
   "reproduced": true,
   "claim": "a context filled past what was asked for, answered from its edges",
   "measured": {

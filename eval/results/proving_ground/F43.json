@@ -1,6 +1,6 @@
 {
   "failure_id": "F43",
-  "recorded_at": "2026-10-03T19:55:17.581661+00:00",
+  "recorded_at": "2026-11-07T10:17:24.126146+00:00",
   "reproduced": true,
   "claim": "an index holding nothing is named as empty and not as a bad retriever",
   "measured": {

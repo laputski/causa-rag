@@ -1,6 +1,6 @@
 {
   "failure_id": "F36",
-  "recorded_at": "2026-10-03T20:10:53.992060+00:00",
+  "recorded_at": "2026-11-07T10:53:12.356683+00:00",
   "reproduced": true,
   "claim": "a difference smaller than the scatter of the questions, and none at all",
   "measured": {

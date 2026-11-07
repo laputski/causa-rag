@@ -1,6 +1,6 @@
 {
   "failure_id": "F21",
-  "recorded_at": "2026-10-03T19:52:33.751651+00:00",
+  "recorded_at": "2026-11-07T10:14:30.168741+00:00",
   "reproduced": true,
   "claim": "with the whole weight on one half it supplies three quarters of the context on its own and the other supplies nothing of its own, and the named signal stays under its threshold",
   "measured": {
@@ -8,8 +8,8 @@
     "questions": 40,
     "window": 5,
     "even_weighting": {
-      "semantic only": 0.3,
-      "keyword only": 0.14,
+      "semantic only": 0.295,
+      "keyword only": 0.145,
       "both": 0.56
     },
     "whole_weight_on_the_semantic_half": {

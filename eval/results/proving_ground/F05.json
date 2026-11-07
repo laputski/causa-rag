@@ -1,6 +1,6 @@
 {
   "failure_id": "F05",
-  "recorded_at": "2026-10-03T19:58:30.926982+00:00",
+  "recorded_at": "2026-11-07T10:26:23.687929+00:00",
   "reproduced": true,
   "claim": "fragments cut at a fixed width, and no signal names the cut",
   "measured": {

@@ -1,6 +1,6 @@
 {
   "failure_id": "F31",
-  "recorded_at": "2026-10-03T19:58:00.322468+00:00",
+  "recorded_at": "2026-11-07T10:23:40.055150+00:00",
   "reproduced": true,
   "claim": "an external system that answers from its own knowledge, sources unused",
   "measured": {

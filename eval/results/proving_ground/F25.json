@@ -1,6 +1,6 @@
 {
   "failure_id": "F25",
-  "recorded_at": "2026-10-03T19:52:45.950181+00:00",
+  "recorded_at": "2026-11-07T10:14:42.840471+00:00",
   "reproduced": true,
   "claim": "the candidate window closed to the selection, and no signal speaks",
   "measured": {
